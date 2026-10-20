@@ -1,0 +1,176 @@
+<!-- Coded by Langgo Bramandityo. Please guys, jangan diutak-atik coding-nya ya. Thanks! -->
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bejo Stiker POS</title>
+    <meta name="description" content="Sistem Point of Sales & Inventory Produk untuk Bejo Stiker." />
+    <meta property="og:title" content="Bejo Stiker POS" />
+    <meta property="og:description" content="Sistem Point of Sales & Inventory Produk untuk Bejo Stiker." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.cdnfonts.com/css/google-sans" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+      // Gracefully suppress benign Vite HMR websocket disconnection / reconnection warnings in dev mode
+      (function() {
+        var origWarn = console.warn;
+        var origError = console.error;
+        
+        function isViteWsError(arg) {
+          if (!arg) return false;
+          var str = '';
+          if (typeof arg === 'string') {
+            str = arg;
+          } else if (arg instanceof Error) {
+            str = arg.message + ' ' + (arg.stack || '');
+          } else if (typeof arg === 'object') {
+            try {
+              str = JSON.stringify(arg) + ' ' + (arg.message || '');
+            } catch(e) {
+              str = String(arg);
+            }
+          }
+          return (
+            str.indexOf('WebSocket closed without opened') !== -1 ||
+            str.indexOf('[vite] failed to connect to websocket') !== -1 ||
+            str.indexOf('[vite] connecting...') !== -1 ||
+            str.indexOf('failed to connect to websocket') !== -1
+          );
+        }
+
+        console.warn = function() {
+          for (var i = 0; i < arguments.length; i++) {
+            if (isViteWsError(arguments[i])) return;
+          }
+          return origWarn.apply(console, arguments);
+        };
+
+        console.error = function() {
+          for (var i = 0; i < arguments.length; i++) {
+            if (isViteWsError(arguments[i])) return;
+          }
+          return origError.apply(console, arguments);
+        };
+
+        window.addEventListener('unhandledrejection', function(event) {
+          var reason = event && (event.reason || event);
+          if (isViteWsError(reason)) {
+            event.preventDefault();
+            if (typeof event.stopImmediatePropagation === 'function') {
+              event.stopImmediatePropagation();
+            }
+          }
+        }, true);
+
+        window.addEventListener('error', function(event) {
+          var target = event && (event.error || event.message || event);
+          if (isViteWsError(target)) {
+            event.preventDefault();
+            if (typeof event.stopImmediatePropagation === 'function') {
+              event.stopImmediatePropagation();
+            }
+          }
+        }, true);
+      })();
+    </script>
+  </head>
+  <body class="bg-slate-100 text-slate-900 font-sans antialiased select-none">
+    <div id="root"></div>
+
+    <!-- Google Apps Script (GAS) & Google Sheets Asynchronous Bridge -->
+    <script>
+      (function() {
+        // Fallback simulation for local development / Vite dev environment
+        if (typeof google === 'undefined' || !google.script || !google.script.run) {
+          window.google = window.google || {};
+          window.google.script = window.google.script || {};
+          window.google.script.run = {
+            _successHandler: null,
+            _failureHandler: null,
+            withSuccessHandler: function(callback) {
+              this._successHandler = callback;
+              return this;
+            },
+            withFailureHandler: function(callback) {
+              this._failureHandler = callback;
+              return this;
+            },
+            // Simulated backend Google Apps Script functions
+            syncTransactionToSheet: function(transactionData) {
+              console.info('[GAS Bridge - Dev Mode] syncTransactionToSheet called with data:', transactionData);
+              setTimeout(() => {
+                if (typeof this._successHandler === 'function') {
+                  this._successHandler({ status: 'success', message: 'Transaksi berhasil disinkronkan ke Spreadsheet (Simulasi Dev)', data: transactionData });
+                }
+              }, 400);
+            },
+            syncProductToSheet: function(productData) {
+              console.info('[GAS Bridge - Dev Mode] syncProductToSheet called with data:', productData);
+              setTimeout(() => {
+                if (typeof this._successHandler === 'function') {
+                  this._successHandler({ status: 'success', message: 'Data produk berhasil diperbarui di Spreadsheet (Simulasi Dev)', data: productData });
+                }
+              }, 300);
+            },
+            syncInventoryStockToSheet: function(stockData) {
+              console.info('[GAS Bridge - Dev Mode] syncInventoryStockToSheet called:', stockData);
+              setTimeout(() => {
+                if (typeof this._successHandler === 'function') {
+                  this._successHandler({ status: 'success', message: 'Stok inventaris terupdate di Spreadsheet (Simulasi Dev)' });
+                }
+              }, 300);
+            },
+            fetchSheetDatabase: function(sheetName) {
+              console.info('[GAS Bridge - Dev Mode] fetchSheetDatabase called for:', sheetName);
+              setTimeout(() => {
+                if (typeof this._successHandler === 'function') {
+                  this._successHandler({ status: 'success', sheet: sheetName, rows: [] });
+                }
+              }, 300);
+            }
+          };
+        }
+
+        /**
+         * Global helper to invoke Google Apps Script backend functions asynchronously
+         * using google.script.run.withSuccessHandler() & withFailureHandler()
+         *
+         * @param {string} functionName - Function defined in Code.gs (e.g. 'syncTransactionToSheet')
+         * @param {*} payload - Data to send to Google Apps Script
+         * @param {Function} [onSuccess] - Callback on successful execution
+         * @param {Function} [onFailure] - Callback on error
+         */
+        window.callGoogleScript = function(functionName, payload, onSuccess, onFailure) {
+          if (window.google && window.google.script && window.google.script.run) {
+            var runner = window.google.script.run
+              .withSuccessHandler(function(result) {
+                console.log('[GAS Bridge Success] ' + functionName + ' response:', result);
+                if (typeof onSuccess === 'function') onSuccess(result);
+              })
+              .withFailureHandler(function(error) {
+                console.error('[GAS Bridge Error] ' + functionName + ' failed:', error);
+                if (typeof onFailure === 'function') onFailure(error);
+              });
+
+            if (typeof runner[functionName] === 'function') {
+              runner[functionName](payload);
+            } else {
+              console.warn('[GAS Bridge] Server function ' + functionName + ' is not defined on google.script.run.');
+              if (typeof onFailure === 'function') onFailure(new Error('Function ' + functionName + ' not found in GAS backend'));
+            }
+          } else {
+            console.error('[GAS Bridge] google.script.run is not available in current environment.');
+            if (typeof onFailure === 'function') onFailure(new Error('google.script.run unavailable'));
+          }
+        };
+      })();
+    </script>
+
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

@@ -1,0 +1,798 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Google Sans', 'Google Sans Text', 'Product Sans', 'Open Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+@layer base {
+  body {
+    font-family: 'Google Sans', 'Google Sans Text', 'Product Sans', 'Open Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+  }
+}
+
+/* =========================================================================
+   AUTHENTIC WINDOWS 11 FLUENT DARK THEME SYSTEM
+   Mica Base Canvas: #202020
+   Mica Alt / Card Surface: #2c2c2c
+   Elevated / Modal / Flyout: #323232
+   Control / Input Fill: #1e1e1e / #242424
+   Strokes & Dividers: #383838 / #323232
+   Fluent Accent: Windows Cyan/Blue (#60cdff / #0078d4)
+   Fluent Status: Success (#6ccb5f), Warning (#ffd83b), Danger (#ff99a8), Purple (#c29bf5)
+   ========================================================================= */
+
+html.dark,
+.dark {
+  color-scheme: dark;
+}
+
+html.dark body,
+body.dark {
+  background-color: #202020 !important;
+  color: #ffffff !important;
+}
+
+/* Base Surfaces & Containers in Windows 11 Dark Mode */
+.dark .bg-white,
+.dark .bg-slate-50,
+.dark .bg-slate-50\/40,
+.dark .bg-slate-50\/50,
+.dark .bg-slate-50\/60,
+.dark .bg-slate-50\/70,
+.dark .bg-slate-50\/80,
+.dark .bg-slate-100,
+.dark .bg-slate-100\/80,
+.dark .bg-slate-200,
+.dark .bg-slate-200\/60,
+.dark .bg-slate-200\/70,
+.dark .bg-slate-200\/80 {
+  background-color: #2c2c2c !important;
+  color: #ffffff !important;
+}
+
+/* POS Module & Screen Containers - Windows 11 Uniform Mica Alt Surface */
+.dark #pos-main-container,
+.dark #pos-main-container > div,
+.dark #pos-main-container .bg-white,
+.dark #pos-main-container .bg-slate-50,
+.dark #pos-main-container .bg-slate-100 {
+  background-color: #2c2c2c !important;
+}
+
+.dark #pos-main-container input,
+.dark #pos-main-container select,
+.dark #pos-main-container textarea,
+.dark #pos-main-container .bg-slate-50\/40,
+.dark #pos-main-container .bg-slate-50\/50,
+.dark #pos-main-container .bg-slate-50\/60,
+.dark #pos-main-container .bg-slate-50\/70,
+.dark #pos-main-container .bg-slate-50\/80 {
+  background-color: #1e1e1e !important;
+}
+
+/* Windows 11 Header, Navbars, Elevated Cards, Dropdowns & Modals */
+.dark header,
+.dark nav,
+.dark .shadow-xl,
+.dark .shadow-2xl,
+.dark .shadow-md,
+.dark .shadow-lg {
+  background-color: #2c2c2c !important;
+}
+
+/* Windows 11 Acrylic Flyouts & Modals Elevation */
+.dark .bg-white.shadow-2xl,
+.dark .bg-white.shadow-xl,
+.dark [role="dialog"],
+.dark .modal-content {
+  background-color: #323232 !important;
+  border-color: #404040 !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* Windows 11 Subtle Surface Strokes & Borders */
+.dark .border,
+.dark .border-slate-100,
+.dark .border-slate-200,
+.dark .border-slate-200\/60,
+.dark .border-slate-200\/70,
+.dark .border-slate-200\/80,
+.dark .border-slate-200\/90,
+.dark .border-slate-300,
+.dark .border-slate-300\/60,
+.dark .border-slate-300\/70,
+.dark .border-slate-400 {
+  border-color: #383838 !important;
+}
+
+/* Windows 11 Dark Typography Hierarchy */
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-[#1e295d],
+.dark .text-[#1e293b],
+.dark .text-[#0f172a],
+.dark .text-[#0F172A],
+.dark .text-[#0f172b],
+.dark .text-[#0F172B],
+.dark .text-[#0f172b\],
+.dark .text-[#0F172B\],
+.dark .text-[#020617],
+.dark .text-black,
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4 {
+  color: #ffffff !important;
+}
+
+.dark .text-slate-700,
+.dark .text-slate-600 {
+  color: #d1d1d1 !important;
+}
+
+.dark .text-slate-500,
+.dark .text-slate-400 {
+  color: #9d9d9d !important;
+}
+
+/* Windows 11 Fluent Accent Colors (Blue / Cyan) */
+.dark .text-blue-600,
+.dark .text-blue-700,
+.dark .text-blue-800,
+.dark .text-blue-900,
+.dark .text-sky-600,
+.dark .text-sky-700,
+.dark .text-indigo-600,
+.dark .text-indigo-700,
+.dark .text-\[\#0ea5e9\] {
+  color: #60cdff !important;
+}
+
+.dark svg.text-blue-600,
+.dark svg.text-blue-700,
+.dark svg.text-blue-800,
+.dark svg.text-sky-600,
+.dark svg.text-indigo-600,
+.dark svg.text-\[\#0ea5e9\] {
+  color: #60cdff !important;
+  stroke: #60cdff !important;
+}
+
+.dark .bg-blue-50,
+.dark .bg-blue-100,
+.dark .bg-sky-50,
+.dark .bg-sky-100 {
+  background-color: #112e4d !important;
+  color: #60cdff !important;
+  border-color: #1d4e7f !important;
+}
+
+/* Windows 11 Fluent Critical / Danger (Red / Coral) */
+.dark .text-red-600,
+.dark .text-red-700,
+.dark .text-red-800,
+.dark .text-rose-600,
+.dark .text-rose-700 {
+  color: #ff99a8 !important;
+}
+
+.dark svg.text-red-600,
+.dark svg.text-red-700,
+.dark svg.text-rose-600 {
+  color: #ff99a8 !important;
+  stroke: #ff99a8 !important;
+}
+
+.dark .bg-red-50,
+.dark .bg-red-100,
+.dark .bg-rose-50,
+.dark .bg-rose-100 {
+  background-color: #3f1b20 !important;
+  color: #ff99a8 !important;
+  border-color: #6b2730 !important;
+}
+
+/* Windows 11 Fluent Warning (Amber / Yellow) */
+.dark .text-amber-600,
+.dark .text-amber-700,
+.dark .text-amber-800,
+.dark .text-yellow-600,
+.dark .text-yellow-700 {
+  color: #ffd83b !important;
+}
+
+.dark svg.text-amber-600,
+.dark svg.text-amber-700,
+.dark svg.text-yellow-600 {
+  color: #ffd83b !important;
+  stroke: #ffd83b !important;
+}
+
+.dark .bg-amber-50,
+.dark .bg-amber-100,
+.dark .bg-yellow-50,
+.dark .bg-yellow-100 {
+  background-color: #3b3108 !important;
+  color: #ffd83b !important;
+  border-color: #66550f !important;
+}
+
+/* Windows 11 Fluent Success (Green) */
+.dark .text-emerald-800,
+.dark .text-emerald-900,
+.dark .text-green-800,
+.dark .text-green-900,
+.dark .text-emerald-700,
+.dark .text-emerald-600,
+.dark .text-green-600 {
+  color: #6ccb5f !important;
+}
+
+.dark svg.text-emerald-800,
+.dark svg.text-emerald-900,
+.dark svg.text-green-800,
+.dark svg.text-green-900,
+.dark svg.text-emerald-600,
+.dark svg.text-green-600 {
+  color: #6ccb5f !important;
+  stroke: #6ccb5f !important;
+}
+
+.dark .bg-emerald-50,
+.dark .bg-emerald-100,
+.dark .bg-green-50,
+.dark .bg-green-100 {
+  background-color: #14351d !important;
+  color: #6ccb5f !important;
+  border-color: #255b33 !important;
+}
+
+/* Windows 11 Fluent Purple / Developer Accent */
+.dark .text-purple-600,
+.dark .text-purple-700,
+.dark .text-purple-800,
+.dark .text-violet-600 {
+  color: #c29bf5 !important;
+}
+
+.dark svg.text-purple-600,
+.dark svg.text-purple-700,
+.dark svg.text-violet-600 {
+  color: #c29bf5 !important;
+  stroke: #c29bf5 !important;
+}
+
+.dark .bg-purple-50,
+.dark .bg-purple-100,
+.dark .bg-violet-50 {
+  background-color: #2c1b3f !important;
+  color: #c29bf5 !important;
+  border-color: #4a2c6d !important;
+}
+
+/* Windows 11 Fluent Form Controls (Inputs, Selects, Textareas) */
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark select,
+.dark textarea {
+  background-color: #1e1e1e !important;
+  color: #ffffff !important;
+  border-color: #3c3c3c !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.dark input:not([type="checkbox"]):not([type="radio"]):focus,
+.dark select:focus,
+.dark textarea:focus {
+  border-color: #60cdff !important;
+  box-shadow: 0 0 0 2px rgba(96, 205, 255, 0.25) !important;
+  background-color: #242424 !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #8a8a8a !important;
+}
+
+/* Windows 11 Tables & Lists */
+.dark thead,
+.dark thead tr,
+.dark thead th {
+  background-color: #242424 !important;
+  color: #d1d1d1 !important;
+  border-color: #383838 !important;
+}
+
+.dark tbody tr {
+  border-color: #333333 !important;
+}
+
+.dark tbody tr:hover {
+  background-color: #353535 !important;
+}
+
+/* Windows 11 Dividers & Hover States */
+.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-slate-300 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #383838 !important;
+}
+
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-slate-100:hover,
+.dark .hover\:bg-slate-100\/80:hover {
+  background-color: #363636 !important;
+}
+
+.dark .hover\:bg-slate-200:hover {
+  background-color: #3f3f3f !important;
+}
+
+.dark .hover\:bg-white\/50:hover,
+.dark .hover\:bg-white\/40:hover,
+.dark .hover\:bg-white\/20:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Windows 11 Fluent Sleek Rounded Scrollbars */
+.dark ::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+.dark ::-webkit-scrollbar-track {
+  background: #202020;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #444444;
+  border-radius: 9999px;
+  border: 1px solid #202020;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #5c5c5c;
+}
+
+/* =========================================================================
+   80MM THERMAL RECEIPT & SURAT JALAN PRINT CONFIGURATION (PREVIEW & PRINT BOLD)
+   ========================================================================= */
+
+/* On-screen Print Preview container and children ALWAYS display BOLD (No changes to the rest of the application) */
+#thermal-receipt,
+#thermal-receipt *,
+.thermal-receipt-container,
+.thermal-receipt-container * {
+  font-weight: 900 !important; /* Force bold font in the print preview screen modal */
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}
+
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  /* 1. Completely collapse the height and margins of html, body, and #root to prevent empty whitespace sheets */
+  html, body {
+    width: 80mm !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11px !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    overflow: hidden !important;
+  }
+
+  #root {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 80mm !important;
+    max-height: 100vh !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* 2. Hide all non-printing layout elements from the print page flow so they take up EXACTLY 0 space */
+  body:not(:has(#tax-official-print-container)):not(:has(.tax-official-print-root)):not(.printing-djp-tax-doc):not(:has(#invoice-print-clean)) main,
+  nav,
+  header,
+  footer,
+  aside,
+  .no-print,
+  .BackendErrorBanner,
+  .ai-assistant-widget,
+  .modal-backdrop,
+  body:not(:has(#tax-official-print-container)):not(:has(.tax-official-print-root)):not(.printing-djp-tax-doc):not(:has(#invoice-print-clean)) #root > div > *:not(.fixed) {
+    display: none !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide the modal overlay header & actions outside of the #thermal-receipt preview itself */
+  #modal-cetak-struk > div:not(.overflow-y-auto),
+  #modal-cetak-struk > div.p-4.bg-slate-50,
+  div.fixed.inset-0.z-50.flex > div > div.bg-slate-100,
+  div.fixed.inset-0.z-50.flex > div > div.p-4.bg-slate-50,
+  button,
+  .bg-slate-50.border-t.border-slate-200 {
+    display: none !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  /* 3. Strip down any modal overlays and dialog containers so they act as simple transparent wrappers with zero height impact */
+  div.fixed.inset-0.z-50.flex {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 80mm !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: none !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  div.fixed.inset-0.z-50.flex > div {
+    width: 80mm !important;
+    max-width: 80mm !important;
+    height: auto !important;
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  /* Scrollable Receipt Preview wrapper */
+  div.fixed.inset-0.z-50.flex .overflow-y-auto {
+    overflow: visible !important;
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    display: block !important;
+  }
+
+  /* Hide everything on screen except the thermal receipt area */
+  body * {
+    visibility: hidden !important;
+  }
+
+  #thermal-receipt,
+  #thermal-receipt *,
+  .thermal-receipt-container,
+  .thermal-receipt-container * {
+    visibility: visible !important;
+    font-weight: 900 !important; /* Force maximum thermal print bold clarity */
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    background-color: transparent !important;
+  }
+
+  #thermal-receipt,
+  .thermal-receipt-container {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 76mm !important;
+    max-width: 78mm !important;
+    height: auto !important;
+    max-height: none !important; /* Allow natural single receipt height */
+    margin: 0 auto !important;
+    padding: 3mm 2.5mm !important;
+    box-sizing: border-box !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-family: 'Courier New', Courier, 'Lucida Console', Monaco, Consolas, monospace !important;
+    font-weight: 900 !important;
+    font-size: 11.5px !important;
+    line-height: 1.3 !important;
+    letter-spacing: -0.15px !important;
+    text-rendering: geometricPrecision !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+    overflow: hidden !important;
+  }
+
+  /* Additional override to guarantee absolutely no thin/normal fonts survive the print output */
+  #thermal-receipt .font-normal,
+  #thermal-receipt .font-light,
+  #thermal-receipt .font-thin,
+  #thermal-receipt .text-slate-500,
+  #thermal-receipt .text-slate-600,
+  #thermal-receipt .text-slate-400,
+  .thermal-receipt-container .font-normal,
+  .thermal-receipt-container .font-light,
+  .thermal-receipt-container .font-thin,
+  .thermal-receipt-container .text-slate-500,
+  .thermal-receipt-container .text-slate-600,
+  .thermal-receipt-container .text-slate-400 {
+    font-weight: 900 !important;
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+  }
+
+  /* Sembunyikan seluruh border garis putus-putus dan border di sekeliling transaksi pada mode cetak thermal */
+  #thermal-receipt,
+  .thermal-receipt-container,
+  #thermal-receipt *,
+  .thermal-receipt-container * {
+    box-shadow: none !important;
+    -webkit-box-shadow: none !important;
+    outline: none !important;
+  }
+
+  /* Thermal QR and image contrast */
+  #thermal-receipt img,
+  .thermal-receipt-container img {
+    filter: contrast(200%) grayscale(100%) !important;
+    image-rendering: pixelated !important;
+    max-width: 100% !important;
+  }
+
+  /* =========================================================================
+     INVOICE & PROFORMA INVOICE CLEAN A4 PRINT STYLES
+     ========================================================================= */
+  #invoice-print-clean,
+  #invoice-print-clean * {
+    visibility: visible !important;
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    font-family: 'Google Sans', 'Google Sans Text', system-ui, sans-serif !important;
+  }
+
+  body:has(#invoice-print-clean) {
+    width: 100% !important;
+    height: auto !important;
+    font-size: 12px !important;
+    overflow: visible !important;
+  }
+
+  body:has(#invoice-print-clean) html {
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  body:has(#invoice-print-clean) #root {
+    position: static !important;
+    width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  body:has(#invoice-print-clean) div.fixed.inset-0.z-50.flex,
+  body:has(#invoice-print-clean) div.fixed.inset-0.z-50.flex > div {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: transparent !important;
+  }
+
+  #invoice-print-clean {
+    position: relative !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    background: #ffffff !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  #invoice-print-clean table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  #invoice-print-clean tr,
+  #invoice-print-clean td,
+  #invoice-print-clean th {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  #invoice-print-clean .border-b-2 {
+    border-bottom: 2px solid #0f172a !important;
+  }
+
+  #invoice-print-clean .border-b {
+    border-bottom: 1px solid #cbd5e1 !important;
+  }
+
+  #invoice-print-clean .border-t-2 {
+    border-top: 2px solid #0f172a !important;
+  }
+
+  #invoice-print-clean .border-t {
+    border-top: 1px solid #cbd5e1 !important;
+  }
+
+  #invoice-print-clean .border {
+    border: 1px solid #cbd5e1 !important;
+  }
+
+  #invoice-print-clean .bg-slate-50,
+  #invoice-print-clean .bg-slate-50\/60,
+  #invoice-print-clean .bg-amber-50,
+  #invoice-print-clean .bg-amber-50\/80 {
+    background-color: #f8fafc !important;
+  }
+
+  /* =========================================================================
+     STANDAR RESMI DJP RI: FORMULIR 1770 & LAMPIRAN I-IV CLEAN A4 PRINT STYLES
+     ========================================================================= */
+  body:has(#tax-official-print-container),
+  body:has(.tax-official-print-root),
+  body.printing-djp-tax-doc {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    font-size: 11px !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body:has(#tax-official-print-container) html,
+  body:has(.tax-official-print-root) html,
+  body.printing-djp-tax-doc html {
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+  }
+
+  body:has(#tax-official-print-container) #root,
+  body:has(.tax-official-print-root) #root,
+  body.printing-djp-tax-doc #root {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body:has(#tax-official-print-container) main,
+  body:has(.tax-official-print-root) main,
+  body.printing-djp-tax-doc main {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body:has(#tax-official-print-container) #tax-official-print-container,
+  body:has(#tax-official-print-container) #tax-official-print-container *,
+  body:has(.tax-official-print-root) .tax-official-print-root,
+  body:has(.tax-official-print-root) .tax-official-print-root *,
+  body.printing-djp-tax-doc #tax-official-print-container,
+  body.printing-djp-tax-doc #tax-official-print-container *,
+  body.printing-djp-tax-doc .tax-official-print-root,
+  body.printing-djp-tax-doc .tax-official-print-root * {
+    visibility: visible !important;
+  }
+
+  body:has(#tax-official-print-container) nav,
+  body:has(#tax-official-print-container) header,
+  body:has(#tax-official-print-container) aside,
+  body:has(#tax-official-print-container) footer,
+  body:has(#tax-official-print-container) .no-print,
+  body:has(#tax-official-print-container) .BackendErrorBanner,
+  body:has(#tax-official-print-container) .ai-assistant-widget,
+  body:has(.tax-official-print-root) nav,
+  body:has(.tax-official-print-root) header,
+  body:has(.tax-official-print-root) aside,
+  body:has(.tax-official-print-root) footer,
+  body:has(.tax-official-print-root) .no-print,
+  body:has(.tax-official-print-root) .BackendErrorBanner,
+  body:has(.tax-official-print-root) .ai-assistant-widget,
+  body.printing-djp-tax-doc nav,
+  body.printing-djp-tax-doc header,
+  body.printing-djp-tax-doc aside,
+  body.printing-djp-tax-doc footer,
+  body.printing-djp-tax-doc .no-print,
+  body.printing-djp-tax-doc .BackendErrorBanner,
+  body.printing-djp-tax-doc .ai-assistant-widget {
+    display: none !important;
+    height: 0 !important;
+    width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+  }
+
+  #tax-official-print-container,
+  .tax-official-print-root {
+    position: relative !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    background: #ffffff !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  #tax-official-print-container .print-sheet,
+  .tax-official-print-root .print-sheet {
+    display: block !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    box-shadow: none !important;
+    border: 2px solid #000000 !important;
+    border-radius: 0 !important;
+    margin: 0 0 10mm 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 8mm 10mm !important;
+    box-sizing: border-box !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  #tax-official-print-container .print-sheet:last-child,
+  .tax-official-print-root .print-sheet:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+    margin-bottom: 0 !important;
+  }
+
+  #tax-official-print-container table,
+  .tax-official-print-root table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  #tax-official-print-container tr,
+  #tax-official-print-container td,
+  #tax-official-print-container th,
+  .tax-official-print-root tr,
+  .tax-official-print-root td,
+  .tax-official-print-root th {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}
+

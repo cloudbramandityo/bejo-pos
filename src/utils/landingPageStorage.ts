@@ -38,7 +38,10 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
   brand: {
     name: 'bejo stiker',
     tagline: 'percetakan online indonesia',
-    logoUrl: undefined
+    logoUrl: undefined,
+    faviconUrl: undefined,
+    metaDescription:
+      'BEJO STIKER & DIGITAL PRINTING: percetakan online kemasan custom, kartu nama, media promosi, banner, kalender, dan souvenir bisnis kirim seluruh Indonesia.'
   },
 
   slides: [

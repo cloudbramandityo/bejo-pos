@@ -91,8 +91,15 @@ const moveItem = <T,>(arr: T[], from: number, to: number): T[] => {
 /* -------------------------------------------------------------------------- */
 /*  Kompresi gambar di browser (canvas → JPEG)                                */
 /* -------------------------------------------------------------------------- */
-const compressImage = (file: File, maxW: number, maxH: number, quality = 0.82): Promise<string> =>
+const compressImage = (
+  file: File,
+  maxW: number,
+  maxH: number,
+  quality = 0.82,
+  output: 'jpeg' | 'png' | string = 'jpeg'
+): Promise<string> =>
   new Promise((resolve, reject) => {
+    const format = output === 'png' ? 'png' : 'jpeg';
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Gagal membaca berkas'));
     reader.onload = () => {
@@ -107,10 +114,12 @@ const compressImage = (file: File, maxW: number, maxH: number, quality = 0.82): 
         canvas.height = h;
         const ctx = canvas.getContext('2d');
         if (!ctx) return reject(new Error('Canvas tidak tersedia'));
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, w, h);
+        if (format === 'jpeg') {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, w, h);
+        }
         ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', quality));
+        resolve(canvas.toDataURL(format === 'png' ? 'image/png' : 'image/jpeg', quality));
       };
       img.src = String(reader.result);
     };
@@ -163,7 +172,9 @@ const ImageField: React.FC<{
   maxH: number;
   label?: string;
   aspect?: string;
-}> = ({ value, onChange, recommended, maxW, maxH, label, aspect = '16 / 9' }) => {
+  output?: 'jpeg' | 'png';
+  hint?: string;
+}> = ({ value, onChange, recommended, maxW, maxH, label, aspect = '16 / 9', output = 'jpeg', hint }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -173,7 +184,7 @@ const ImageField: React.FC<{
     setErr(null);
     setBusy(true);
     try {
-      onChange(await compressImage(file, maxW, maxH));
+      onChange(await compressImage(file, maxW, maxH, 0.82, output));
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Gagal memproses gambar');
     } finally {
@@ -219,7 +230,13 @@ const ImageField: React.FC<{
           </button>
         )}
       </div>
-      {value && <p className="mt-1 text-[10px] font-medium text-slate-400">Rekomendasi {recommended} · gambar dikompres otomatis</p>}
+      {value && (
+        <p className="mt-1 text-[10px] font-medium text-slate-400">
+          Rekomendasi {recommended} · gambar dikompres otomatis
+          {output === 'png' ? ' (PNG, transparansi dipertahankan)' : ''}
+        </p>
+      )}
+      {hint && <p className="mt-1 text-[10px] font-medium text-slate-500">{hint}</p>}
       {err && <p className="mt-1 text-[10px] font-semibold text-rose-500">{err}</p>}
       <input
         ref={inputRef}
@@ -448,6 +465,9 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
 
   const isDirty = useMemo(() => JSON.stringify(config) !== savedJson, [config, savedJson]);
 
+  /* panjang deskripsi website (meta description) */
+  const descLength = (config.brand?.metaDescription || '').trim().length;
+
   /* simpan config terbaru agar klik "Simpan" tidak menyimpan state basi */
   const configRef = useRef<LandingPageConfig>(config);
   useEffect(() => {
@@ -637,7 +657,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
         <div className="min-w-0 space-y-4">
           {/* ============================ IDENTITAS ============================ */}
           {active === 'brand' && (
-            <SectionCard title="Identitas & Logo" description="Logo dan tagline yang tampil pada header serta footer.">
+            <SectionCard title="Identitas & Logo" description="Logo, favicon, dan deskripsi website yang tampil pada header, tab browser, dan mesin pencari.">
               <div className="grid gap-5 md:grid-cols-2">
                 <ImageField
                   label="Logo (PNG transparan)"
@@ -649,12 +669,78 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                   aspect="8 / 3"
                 />
                 <div className="space-y-4">
+                  <div className="max-w-[220px]">
+                    <ImageField
+                      label="Favicon (Ikon Tab Browser)"
+                      value={config.brand.faviconUrl}
+                      onChange={(v) => patchSub('brand', { faviconUrl: v })}
+                      recommended="64 × 64 px"
+                      maxW={256}
+                      maxH={256}
+                      aspect="1 / 1"
+                      output="png"
+                      hint="PNG transparan agar ikon tetap rapi di tab browser."
+                    />
+                  </div>
+                  {/* Pratinjau favicon */}
+                  <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pratinjau</span>
+                    <span className="flex items-center gap-2 rounded-t-lg border border-b-0 border-slate-200 bg-white px-2.5 py-1.5">
+                      {config.brand.faviconUrl ? (
+                        <img src={config.brand.faviconUrl} alt="Favicon" className="h-4 w-4 object-contain" />
+                      ) : (
+                        <span className="h-4 w-4 rounded bg-slate-200" />
+                      )}
+                      <span className="text-[11px] font-semibold text-slate-700">
+                        {config.brand.name || 'bejo stiker'}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-5 md:grid-cols-2">
+                <div className="space-y-4">
                   <Field label="Nama Merek" hint="Dipakai bila logo belum diunggah.">
                     <input value={config.brand.name} onChange={(e) => patchSub('brand', { name: e.target.value })} className={inputCls} />
                   </Field>
                   <Field label="Tagline" hint="Tampil kecil di bawah logo.">
                     <input value={config.brand.tagline} onChange={(e) => patchSub('brand', { tagline: e.target.value })} className={inputCls} />
                   </Field>
+                </div>
+
+                <div>
+                  <Field
+                    label="Deskripsi Website (Meta Description)"
+                    hint="Tampil di hasil pencarian Google & ketika tautan dibagikan di WhatsApp/media sosial."
+                  >
+                    <textarea
+                      rows={4}
+                      maxLength={320}
+                      value={config.brand.metaDescription || ''}
+                      onChange={(e) => patchSub('brand', { metaDescription: e.target.value })}
+                      className={areaCls}
+                      placeholder="Contoh: BEJO STIKER & DIGITAL PRINTING adalah percetakan online untuk cetak kemasan custom, kartu nama, banner, dan souvenir bisnis dengan kirim ke seluruh Indonesia."
+                    />
+                  </Field>
+                  <div className="mt-1.5 flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-medium text-slate-500">
+                      Ideal 150–160 karakter. Terlalu pendek kurang informatif, terlalu panjang akan terpotong di Google.
+                    </p>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        descLength === 0
+                          ? 'bg-slate-100 text-slate-400'
+                          : descLength < 70
+                            ? 'bg-amber-50 text-amber-600'
+                            : descLength <= 160
+                              ? 'bg-emerald-50 text-emerald-600'
+                              : 'bg-rose-50 text-rose-600'
+                      }`}
+                    >
+                      {descLength} karakter
+                    </span>
+                  </div>
                 </div>
               </div>
             </SectionCard>

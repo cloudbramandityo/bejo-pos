@@ -1739,6 +1739,50 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     document.head.appendChild(link);
   }, []);
 
+  /* Favicon + deskripsi website (meta description).
+     Hanya berlaku untuk halaman publik sungguhan — pratinjau CMS (embedded)
+     memakai portal sehingga document.head-nya sama dengan dokumen utama. */
+  useEffect(() => {
+    if (embedded) return;
+    const head = document.head;
+    const favicon = config.brand?.faviconUrl;
+    const description = (config.brand?.metaDescription || '').trim();
+
+    /* --- favicon --- */
+    let icon = document.getElementById('bejo-landing-favicon') as HTMLLinkElement | null;
+    const hadIcon = !!icon;
+    if (!icon) {
+      icon = document.createElement('link');
+      icon.id = 'bejo-landing-favicon';
+      icon.rel = 'icon';
+      head.appendChild(icon);
+    }
+    if (favicon) {
+      icon.type = 'image/png';
+      icon.href = favicon;
+    } else if (!hadIcon) {
+      icon.remove();
+    }
+
+    /* --- meta description --- */
+    const meta = head.querySelector('meta[name="description"]') as HTMLMetaElement | null;
+    const og = head.querySelector('meta[property="og:description"]') as HTMLMetaElement | null;
+    const previousMeta = meta?.content;
+    const previousOg = og?.content;
+
+    if (description) {
+      if (meta) meta.content = description;
+      if (og) og.content = description;
+    }
+
+    return () => {
+      /* kembalikan seperti semula saat meninggalkan halaman publik */
+      if (!hadIcon && icon) icon.remove();
+      if (meta && previousMeta !== undefined) meta.content = previousMeta;
+      if (og && previousOg !== undefined) og.content = previousOg;
+    };
+  }, [embedded, config.brand?.faviconUrl, config.brand?.metaDescription]);
+
   /* Kembali ke atas saat pindah halaman */
   useEffect(() => {
     if (embedded) return;

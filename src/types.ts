@@ -919,6 +919,8 @@ export interface LandingBrandingConfig {
   name: string; // teks logo jika gambar belum diunggah, mis. "bejo stiker"
   tagline: string; // mis. "percetakan online indonesia"
   logoUrl?: string; // rekomendasi 400 x 150 px (PNG transparan)
+  faviconUrl?: string; // ikon tab browser, rekomendasi 64 x 64 px (PNG transparan)
+  metaDescription?: string; // deskripsi website (meta description), ideal 150-160 karakter
 }
 
 export interface LandingPageConfig {

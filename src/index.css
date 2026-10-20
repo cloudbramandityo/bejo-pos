@@ -10,6 +10,22 @@
     font-family: 'Google Sans', 'Google Sans Text', 'Product Sans', 'Open Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
   }
+
+  /* Landing page publik memakai border utility Tailwind; tanpa preflight,
+     border-style default-nya "none" sehingga garis tidak pernah tampil.
+     Dibatasi ke .bejo-landing agar tidak mengubah tampilan tab lain. */
+  .bejo-landing *,
+  .bejo-landing ::before,
+  .bejo-landing ::after {
+    border-width: 0;
+    border-style: solid;
+  }
+
+  /* Utility `border` Tailwind memakai var(--tw-border-style); tanpa registrasi
+     @property nilainya invalid sehingga border-style jatuh ke "none". */
+  .bejo-landing {
+    --tw-border-style: solid;
+  }
 }
 
 /* =========================================================================

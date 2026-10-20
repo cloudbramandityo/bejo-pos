@@ -1,340 +1,447 @@
 /**
  * BEJO STIKER POS & DIGITAL PRINTING
  * Landing Page Configuration Storage & Defaults (Dynamic & Adaptive CMS)
+ * Struktur konten mengikuti referensi uprint.id.
  * Coded by Langgo Bramandityo.
  */
 import { LandingPageConfig } from '../types';
 
 export const LANDING_PAGE_STORAGE_KEY = 'bejo_pos_landing_page_config_v1';
 
+/* -------------------------------------------------------------------------- */
+/*  Helper pembuat id sederhana untuk konten default                          */
+/* -------------------------------------------------------------------------- */
+const cid = (prefix: string, i: number) => `${prefix}_${i}`;
+
+const categoryCard = (prefix: string, label: string, i: number) => ({
+  id: cid(prefix, i),
+  label,
+  imageUrl: undefined as string | undefined,
+  isActive: true
+});
+
 export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
-  isPublished: true, // Default: PUBLISHED as initial landing screen
+  isPublished: true,
   lastModifiedAt: Date.now(),
   lastModifiedBy: 'Master Developer (Langgo)',
+
   hero: {
-    badgeText: 'Pusat Grosir & Eceran Stiker Vinyl Terlengkap',
-    headline: 'Distributor Resmi Stiker Vinyl Roll & Meteran, Digital Printing & Laser Cutting Presisi',
-    subheadline: 'Menyediakan merk terbaik dunia: Decofix, Oracal, Derek, 3M, Car Diary, Duratac, dll. Kualitas premium langsung tangan pertama untuk variasi otomotif, advertising signage, dan industri kreatif.',
-    primaryCtaText: 'Konsultasi & Order via WhatsApp',
-    secondaryCtaText: 'Katalog Merk & Estimasi Harga',
-    bannerAnnouncement: '🔥 PROMO KHUSUS MINGGU INI: Diskon khusus pembelian Stiker Vinyl per Roll & Gratis Potong Presisi!'
+    badgeText: 'Percetakan Online Indonesia',
+    headline: 'PERCETAKAN ONLINE INDONESIA - BEJO STIKER',
+    subheadline:
+      'Layanan percetakan offset dan digital printing terpadu untuk cetak kemasan custom, kartu nama, brosur, flyer, buku, katalog, stiker, kalender, banner, hingga souvenir bisnis dengan pengiriman ke seluruh Indonesia.',
+    primaryCtaText: 'Konsultasi Gratis',
+    secondaryCtaText: 'Download Katalog',
+    bannerAnnouncement: ''
   },
+
+  brand: {
+    name: 'bejo stiker',
+    tagline: 'percetakan online indonesia',
+    logoUrl: undefined
+  },
+
   slides: [
     {
-      id: 'slide_promo',
-      title: 'Promo Grosir Stiker Vinyl Minggu Ini',
-      subtitle: 'Diskon khusus pembelian roll utuh untuk bengkel, toko stiker, dan agen. Gratis potong presisi sesuai kebutuhan Anda.',
-      ctaText: 'Lihat Produk & Harga',
+      id: 'slide_1',
+      eyebrow: 'TEMPLATE DESIGN',
+      title: 'Kemasan Custom Full Color\nuntuk Brand Anda',
+      subtitle: 'Template kemasan siap pakai, tinggal ganti logo dan warna.',
+      ctaText: 'Klik Di Sini',
       imageUrl: undefined,
       isActive: true
     },
     {
-      id: 'slide_layanan',
-      title: 'Digital Printing & Laser Cutting Presisi',
-      subtitle: 'Mesin cetak hi-res dan laser CNC milik sendiri. Hasil tajam, finishing rapi, dan pengerjaan cepat.',
-      ctaText: 'Konsultasi Gratis',
+      id: 'slide_2',
+      eyebrow: 'DIGITAL PRINTING',
+      title: 'Cetak Stiker & Label\nPresisi Tinggi',
+      subtitle: 'Hasil cetak tajam, laminasi rapi, siap kirim seluruh Indonesia.',
+      ctaText: 'Klik Di Sini',
       imageUrl: undefined,
       isActive: true
     },
     {
-      id: 'slide_merk',
-      title: '11 Merk Stiker Dunia Tangan Pertama',
-      subtitle: 'Decofix, Oracal, Derek, 3M, Saicholite, Duratac — siap eceran maupun grosir di gudang kami.',
-      ctaText: 'Lihat Katalog Merk',
+      id: 'slide_3',
+      eyebrow: 'SOUVENIR BISNIS',
+      title: 'Souvenir Custom\nuntuk Klien & Tim',
+      subtitle: 'Tumbler, tas canvas, plakat akrilik, hingga merchandise event.',
+      ctaText: 'Klik Di Sini',
       imageUrl: undefined,
       isActive: true
     }
   ],
-  brands: [
+
+  menu: [
     {
-      id: 'brand_decofix',
-      name: 'DECOFIX',
-      tagline: 'Premium Glossy & Super Matte Automotive Wrap',
-      category: 'wrapping',
-      description: 'Pilihan utama modifikator otomotif dengan daya rekat stabil, bubble-free adhesive, serta kilau warna tajam tahan cuaca ekstrem.',
-      badge: 'Best Seller',
-      badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-      isPopular: true,
+      id: 'menu_cetak_custom',
+      label: 'CETAK CUSTOM',
+      type: 'mega',
       isActive: true,
-      features: ['Glossy / Matte / Satin', 'Lentur mudah ditarik', 'Anti gelembung udara', 'Lem tidak merusak cat'],
-      imageUrl: undefined
+      columns: [
+        {
+          id: 'col_kemasan',
+          heading: 'Kemasan',
+          links: [
+            { id: 'lnk_k1', label: 'Stiker Label Produk', categoryKey: 'kemasan' },
+            { id: 'lnk_k2', label: 'Box Kemasan Custom', categoryKey: 'kemasan' },
+            { id: 'lnk_k3', label: 'Paper Bag', categoryKey: 'kemasan' },
+            { id: 'lnk_k4', label: 'Standing Pouch', categoryKey: 'kemasan' },
+            { id: 'lnk_k5', label: 'Sleeve & Belt', categoryKey: 'kemasan' },
+            { id: 'lnk_k6', label: 'Wrapping Paper', categoryKey: 'kemasan' }
+          ]
+        },
+        {
+          id: 'col_stationery',
+          heading: 'Stationery',
+          links: [
+            { id: 'lnk_s1', label: 'Kartu Nama', categoryKey: 'stationery' },
+            { id: 'lnk_s2', label: 'Kop Surat', categoryKey: 'stationery' },
+            { id: 'lnk_s3', label: 'Amplop Custom', categoryKey: 'stationery' },
+            { id: 'lnk_s4', label: 'Notepad', categoryKey: 'stationery' },
+            { id: 'lnk_s5', label: 'Agenda Custom', categoryKey: 'stationery' },
+            { id: 'lnk_s6', label: 'Company Profile', categoryKey: 'stationery' }
+          ]
+        },
+        {
+          id: 'col_promosi',
+          heading: 'Promosi',
+          links: [
+            { id: 'lnk_p1', label: 'Brosur', categoryKey: 'promosi' },
+            { id: 'lnk_p2', label: 'Flyer', categoryKey: 'promosi' },
+            { id: 'lnk_p3', label: 'Booklet', categoryKey: 'promosi' },
+            { id: 'lnk_p4', label: 'Kalender', categoryKey: 'promosi' },
+            { id: 'lnk_p5', label: 'Banner Spanduk', categoryKey: 'promosi' },
+            { id: 'lnk_p6', label: 'X-Banner', categoryKey: 'promosi' }
+          ]
+        },
+        {
+          id: 'col_souvenir',
+          heading: 'Souvenir',
+          links: [
+            { id: 'lnk_o1', label: 'Tumbler Custom', categoryKey: 'souvenir' },
+            { id: 'lnk_o2', label: 'T-Shirt Sablon', categoryKey: 'souvenir' },
+            { id: 'lnk_o3', label: 'Tas Canvas', categoryKey: 'souvenir' },
+            { id: 'lnk_o4', label: 'Gantungan Kunci', categoryKey: 'souvenir' },
+            { id: 'lnk_o5', label: 'Plakat Akrilik', categoryKey: 'souvenir' },
+            { id: 'lnk_o6', label: 'Mug Custom', categoryKey: 'souvenir' }
+          ]
+        }
+      ]
     },
     {
-      id: 'brand_oracal',
-      name: 'ORACAL',
-      tagline: 'German Quality Intermediate Vinyl Series (651 / 8500 / 970)',
-      category: 'cutting',
-      description: 'Standar emas dunia untuk stiker cutting, signage huruf timbul, dan striping outdoor dengan ketahanan warna hingga 5 tahun.',
-      badge: 'Grade Jerman',
-      badgeColor: 'bg-blue-100 text-blue-800 border-blue-300',
-      isPopular: true,
+      id: 'menu_template',
+      label: 'TEMPLATE DESIGN',
+      type: 'mega',
       isActive: true,
-      features: ['Seri 651 / 8500 Translucent', 'Akurasi cutting mikro', 'Tahan UV sinar matahari', 'Pilihan 60+ warna solid']
+      columns: [
+        {
+          id: 'col_tpl_kemasan',
+          heading: 'Kemasan',
+          links: [
+            { id: 'lnk_tk1', label: 'Box Siap Pakai', categoryKey: 'kemasan' },
+            { id: 'lnk_tk2', label: 'Label Siap Pakai', categoryKey: 'kemasan' },
+            { id: 'lnk_tk3', label: 'Paper Bag Siap Pakai', categoryKey: 'kemasan' }
+          ]
+        },
+        {
+          id: 'col_tpl_stationery',
+          heading: 'Stationery',
+          links: [
+            { id: 'lnk_ts1', label: 'Kartu Nama', categoryKey: 'stationery' },
+            { id: 'lnk_ts2', label: 'Agenda', categoryKey: 'stationery' },
+            { id: 'lnk_ts3', label: 'Notepad', categoryKey: 'stationery' }
+          ]
+        },
+        {
+          id: 'col_tpl_promosi',
+          heading: 'Promosi',
+          links: [
+            { id: 'lnk_tp1', label: 'Kalender', categoryKey: 'promosi' },
+            { id: 'lnk_tp2', label: 'Brosur', categoryKey: 'promosi' },
+            { id: 'lnk_tp3', label: 'Banner', categoryKey: 'promosi' }
+          ]
+        },
+        {
+          id: 'col_tpl_souvenir',
+          heading: 'Souvenir',
+          links: [
+            { id: 'lnk_to1', label: 'T-Shirt', categoryKey: 'souvenir' },
+            { id: 'lnk_to2', label: 'Tumbler', categoryKey: 'souvenir' },
+            { id: 'lnk_to3', label: 'Tas Canvas', categoryKey: 'souvenir' }
+          ]
+        }
+      ]
     },
     {
-      id: 'brand_derek',
-      name: 'DEREK',
-      tagline: 'Ultra Metallic Gloss & Candy Chrome Wrapping',
-      category: 'wrapping',
-      description: 'Film pembungkus mobil & motor dengan kilau efek metalik, gliter kristal, dan bunglon yang mewah serta berkelas.',
-      badge: 'Luxury Finish',
-      badgeColor: 'bg-purple-100 text-purple-800 border-purple-300',
-      isPopular: true,
+      id: 'menu_events',
+      label: 'EVENTS',
+      type: 'mega',
       isActive: true,
-      features: ['Super Gloss Metallic', 'Efek Candy & Bunglon', 'Lapisan pelindung PET', 'High Gloss Mirror Clear']
+      columns: [
+        {
+          id: 'col_events',
+          heading: 'Momen Spesial',
+          links: [
+            { id: 'lnk_ev1', label: 'Imlek', categoryKey: 'kemasan' },
+            { id: 'lnk_ev2', label: 'Lebaran', categoryKey: 'kemasan' },
+            { id: 'lnk_ev3', label: 'Natal', categoryKey: 'kemasan' },
+            { id: 'lnk_ev4', label: 'Tahun Baru', categoryKey: 'promosi' }
+          ]
+        }
+      ]
     },
+    { id: 'menu_inspirasi', label: 'INSPIRASI CETAK', type: 'link', page: 'blog', isActive: true },
+    { id: 'menu_portfolio', label: 'PORTFOLIO', type: 'link', page: 'clients', isActive: true },
     {
-      id: 'brand_cardiary',
-      name: 'CAR DIARY',
-      tagline: 'High Durability Automotive Styling & Decals',
-      category: 'wrapping',
-      description: 'Stiker vinyl otomotif berteknologi perekat inovatif, sangat cocok untuk striping motor, wrapping bodi, dan interior.',
-      badge: 'Favorit Bengkel',
-      badgeColor: 'bg-amber-100 text-amber-800 border-amber-300',
-      isPopular: true,
+      id: 'menu_tentang',
+      label: 'TENTANG KAMI',
+      type: 'mega',
       isActive: true,
-      features: ['Mudah dipasang', 'Ketebalan pas & presisi', 'Banyak pilihan warna tren', 'Harga ekonomis']
-    },
-    {
-      id: 'brand_wtpremium',
-      name: 'WT PREMIUM',
-      tagline: 'Superior Wrapping & Color Film Formula',
-      category: 'wrapping',
-      description: 'Material premium bertekstur halus dan elastisitas tinggi untuk lekukan rumit bodi kendaraan tanpa gelembung.',
-      badge: 'High Elasticity',
-      badgeColor: 'bg-cyan-100 text-cyan-800 border-cyan-300',
-      isPopular: false,
-      isActive: true,
-      features: ['Elastis saat dipanaskan', 'Lem bening ramah cat', 'Finishing super mulus', 'Cocok bodi cembung']
-    },
-    {
-      id: 'brand_saicholite',
-      name: 'SAICHOLITE',
-      tagline: 'Micro-Prismatic Reflective & Scotchlite Safety',
-      category: 'reflective',
-      description: 'Stiker scotlite pemantul cahaya kualitas tinggi untuk rambu keselamatan, marka jalan, armada logistik, dan variasi velg.',
-      badge: 'Reflective Tinggi',
-      badgeColor: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-      isPopular: true,
-      isActive: true,
-      features: ['Menyala saat disorot lampu', 'Tahan air & cuaca malam', 'Warna fluoresen terang', 'Daya rekat kuat']
-    },
-    {
-      id: 'brand_duratac',
-      name: 'DURATAC',
-      tagline: 'Heavy Duty Digital Printing Vinyl & Laminating',
-      category: 'printing',
-      description: 'Bahan cetak stiker digital printing solvent & eco-solvent dengan penyerapan tinta maksimal dan ketajaman warna spektakuler.',
-      badge: 'Hasil Cetak Tajam',
-      badgeColor: 'bg-rose-100 text-rose-800 border-rose-300',
-      isPopular: true,
-      isActive: true,
-      features: ['Serap tinta maksimal', 'Tidak mudah robek', 'Laminasi doff & glossy', 'Ketahanan outdoor prima']
-    },
-    {
-      id: 'brand_brite',
-      name: 'BRITE',
-      tagline: 'Commercial Advertising & Signage Vinyl Media',
-      category: 'cutting',
-      description: 'Pilihan tepat untuk display promosi toko, cutting stiker kaca etalase, branding booth pameran, dan neon box.',
-      badge: 'Value Pack',
-      badgeColor: 'bg-slate-100 text-slate-800 border-slate-300',
-      isPopular: false,
-      isActive: true,
-      features: ['Daya rekat instan', 'Warna tajam merata', 'Mudah di-peeling', 'Sangat ekonomis untuk proyek besar']
-    },
-    {
-      id: 'brand_3m',
-      name: '3M',
-      tagline: 'World Class Scotchcal & Diamond Grade Reflective',
-      category: 'reflective',
-      description: 'Merk legendaris dunia bersertifikasi internasional untuk stiker reflektif keselamatan jalan, industrial striping, dan perekat spesialis.',
-      badge: 'Standar Industri',
-      badgeColor: 'bg-red-100 text-red-800 border-red-300',
-      isPopular: true,
-      isActive: true,
-      features: ['Sertifikasi uji resmi', 'Pantulan jarak jauh', 'Daya tahan 7-10 tahun', 'Lem ekstra kuat']
-    },
-    {
-      id: 'brand_nanogard',
-      name: 'NANO GARD',
-      tagline: 'Paint Protection Film (PPF) Self-Healing Coating',
-      category: 'protection',
-      description: 'Pelindung cat mobil & motor transparan berbahan TPU/TPH optik jernih dengan fitur pemulihan goresan otomatis (self-healing).',
-      badge: 'Self-Healing PPF',
-      badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-300',
-      isPopular: true,
-      isActive: true,
-      features: ['Anti gores kerikil & benturan', 'Self-healing kena panas', 'Hydrophobic efek daun talas', 'Tidak menguning (Anti-yellowing)']
-    },
-    {
-      id: 'brand_blackprotector',
-      name: 'BLACK PROTECTOR',
-      tagline: 'Headlamp Smoke Tint & Carbon Protective Film',
-      category: 'protection',
-      description: 'Film pelindung khusus lampu mobil/motor (smoke / hybrid black) serta carbon protector untuk cover bodi dan knalpot.',
-      badge: 'Pelindung Lampu',
-      badgeColor: 'bg-zinc-100 text-zinc-800 border-zinc-300',
-      isPopular: false,
-      isActive: true,
-      features: ['Transmisi cahaya lampu aman', 'Anti retak kaca mika', 'Tekstur carbon 5D timbul', 'Tahan panas lampu']
+      columns: [
+        {
+          id: 'col_tentang',
+          heading: 'Perusahaan',
+          links: [
+            { id: 'lnk_ab1', label: 'Tentang Kami', page: 'about' },
+            { id: 'lnk_ab2', label: 'Kontak', page: 'contact' },
+            { id: 'lnk_ab3', label: 'Klien Kami', page: 'clients' },
+            { id: 'lnk_ab4', label: 'FAQ', page: 'contact' }
+          ]
+        }
+      ]
     }
   ],
-  services: [
+
+  categories: [
     {
-      id: 'serv_vinyl',
-      title: 'Stiker Vinyl Roll & Meteran',
-      subtitle: 'Grosir Roll Utuh & Eceran Meteran',
-      description: 'Menyediakan ribuan pilihan warna dan tekstur stiker vinyl berkualitas tinggi (Glossy, Matte, Satin, Metallic, Carbon, Scotlite, Transparan, Smoke). Tersedia eceran per meter maupun grosir roll utuh (panjang 15m - 50m) dengan harga tangan pertama.',
-      iconName: 'package',
-      highlights: [
-        'Eceran mulai 1 meter hingga roll utuh',
-        'Stok ready di toko tanpa perlu inden',
-        'Lebar standar 45cm, 120cm, hingga 152cm',
-        'Bisa konsultasi kebutuhan bahan langsung'
-      ],
-      ctaLabel: 'Tanya Stok & Harga Vinyl',
-      isActive: true
+      id: 'cat_kemasan',
+      key: 'kemasan',
+      title: 'KEMASAN',
+      heading: 'Cetak Custom Kemasan Berkualitas untuk Brand dan Bisnis Anda',
+      description:
+        'Dari hard box, paper bag, hingga stiker kemasan, semua diproduksi presisi dengan bahan pilihan agar produk Anda tampil profesional dan menarik pembeli.',
+      isActive: true,
+      cards: [
+        categoryCard('card_kemasan', 'Stiker Label Produk', 1),
+        categoryCard('card_kemasan', 'Box Kemasan Custom', 2),
+        categoryCard('card_kemasan', 'Paper Bag', 3),
+        categoryCard('card_kemasan', 'Standing Pouch', 4),
+        categoryCard('card_kemasan', 'Sleeve & Belt', 5),
+        categoryCard('card_kemasan', 'Wrapping Paper', 6),
+        categoryCard('card_kemasan', 'Spunbond Bag', 7),
+        categoryCard('card_kemasan', 'Corrugated Box', 8)
+      ]
     },
     {
-      id: 'serv_digital_print',
-      title: 'Digital Printing Indoor & Outdoor',
-      subtitle: 'Cetak Hi-Resolution Tinta Tahan Cuaca',
-      description: 'Layanan percetakan digital profesional menggunakan mesin cetak beresolusi tinggi. Melayani cetak stiker vinyl, stiker one way vision, banner spanduk flexi, stiker label kemasan, kanvas, poster, dan laminasi dingin (glossy/doff) tahan air dan tahan panas.',
-      iconName: 'printer',
-      highlights: [
-        'Mesin cetak sendiri di workshop kami',
-        'Tinta solvent & eco-solvent anti pudar',
-        'Bisa sekaligus potong stiker (Print & Cut)',
-        'Pengerjaan cepat (Same Day Service tersedia)'
-      ],
-      ctaLabel: 'Order Cetak Digital Print',
-      isActive: true
+      id: 'cat_stationery',
+      key: 'stationery',
+      title: 'STATIONERY',
+      heading: 'Cetak Custom Stationery untuk Identitas Bisnis yang Rapi',
+      description:
+        'Kartu nama, kop surat, amplop, hingga company profile dengan kertas pilihan dan finishing elegan untuk kebutuhan administrasi bisnis Anda.',
+      isActive: true,
+      cards: [
+        categoryCard('card_stationery', 'Kartu Nama', 1),
+        categoryCard('card_stationery', 'Kop Surat', 2),
+        categoryCard('card_stationery', 'Amplop Custom', 3),
+        categoryCard('card_stationery', 'Notepad', 4),
+        categoryCard('card_stationery', 'Agenda Custom', 5),
+        categoryCard('card_stationery', 'Company Profile', 6),
+        categoryCard('card_stationery', 'Katalog Produk', 7),
+        categoryCard('card_stationery', 'Map Folder', 8)
+      ]
     },
     {
-      id: 'serv_laser_cut',
-      title: 'Laser Cutting & Engraving Presisi',
-      subtitle: 'Pemotongan Akrilik, Kayu & Merchandise',
-      description: 'Teknologi potong dan grafir sinar laser CNC dengan akurasi mikro. Siap memproduksi huruf timbul neon box, plakat akrilik, gantungan kunci, nomor rumah custom, dekorasi dinding, merchandise, serta part custom berbahan akrilik hingga ketebalan 10mm.',
-      iconName: 'scissors',
-      highlights: [
-        'Potongan halus tanpa bekas serabut',
-        'Presisi sesuai file vektor (Corel / AI / CAD)',
-        'Akrilik bening, warna, mirror gold/silver',
-        'Bisa satuan maupun partai ribuan pcs'
-      ],
-      ctaLabel: 'Konsultasi Laser Cutting',
-      isActive: true
+      id: 'cat_promosi',
+      key: 'promosi',
+      title: 'PROMOSI',
+      heading: 'Cetak Custom Media Promosi untuk Kampanye yang Menjual',
+      description:
+        'Brosur, flyer, booklet, kalender, hingga banner dengan warna tajam dan bahan tahan cuaca agar pesan promosi Anda tersampaikan maksimal.',
+      isActive: true,
+      cards: [
+        categoryCard('card_promosi', 'Brosur', 1),
+        categoryCard('card_promosi', 'Flyer', 2),
+        categoryCard('card_promosi', 'Booklet', 3),
+        categoryCard('card_promosi', 'Kalender', 4),
+        categoryCard('card_promosi', 'Banner Spanduk', 5),
+        categoryCard('card_promosi', 'X-Banner', 6),
+        categoryCard('card_promosi', 'Stiker Promo', 7),
+        categoryCard('card_promosi', 'Voucher', 8)
+      ]
+    },
+    {
+      id: 'cat_souvenir',
+      key: 'souvenir',
+      title: 'SOUVENIR',
+      heading: 'Cetak Custom Souvenir untuk Klien, Relasi, dan Tim Anda',
+      description:
+        'Tumbler, tas canvas, plakat akrilik, hingga merchandise event yang bisa dicetak sesuai logo dan identitas brand Anda.',
+      isActive: true,
+      cards: [
+        categoryCard('card_souvenir', 'Tumbler Custom', 1),
+        categoryCard('card_souvenir', 'T-Shirt Sablon', 2),
+        categoryCard('card_souvenir', 'Tas Canvas', 3),
+        categoryCard('card_souvenir', 'Gantungan Kunci', 4),
+        categoryCard('card_souvenir', 'Plakat Akrilik', 5),
+        categoryCard('card_souvenir', 'Mug Custom', 6)
+      ]
     }
   ],
-  featuredProducts: [
+
+  templatePromos: [
     {
-      id: 'prod_feat_1',
-      name: 'Stiker Decofix Super Gloss Series (Eceran Meteran)',
-      brand: 'DECOFIX',
-      category: 'meteran',
-      unit: 'per meter (Lebar 45cm)',
-      priceEstimated: 'Rp 22.000 / meter',
-      specs: 'Lebar 45cm, Ketebalan 100 micron, Bubble-free adhesive',
-      description: 'Pilihan favorit untuk variasi striping dan bodi motor. Lentur dan lem aman bagi cat orisinil.',
-      badge: 'Terlaris',
+      id: 'tpl_1',
+      eyebrow: 'TEMPLATE DESIGN',
+      title: 'Stiker Label Kemasan Siap Pakai',
+      ctaText: 'Klik Di Sini',
+      imageUrl: undefined,
       isActive: true
     },
     {
-      id: 'prod_feat_2',
-      name: 'Stiker Decofix Glossy / Matte 1 Roll Utuh (Panjang 15 Meter)',
-      brand: 'DECOFIX',
-      category: 'roll',
-      unit: 'per roll (Lebar 45cm x 15m)',
-      priceEstimated: 'Rp 255.000 / roll',
-      specs: '1 Roll isi 15 meter, Segel pabrik original',
-      description: 'Harga spesial grosir khusus bengkel, toko stiker, dan agen.',
-      badge: 'Harga Grosir',
-      isActive: true
-    },
-    {
-      id: 'prod_feat_3',
-      name: 'Stiker Oracal 651 Intermediate Cal (Meteran Lebar 126cm)',
-      brand: 'ORACAL',
-      category: 'meteran',
-      unit: 'per meter (Lebar 126cm)',
-      priceEstimated: 'Rp 85.000 / meter',
-      specs: 'Made in Germany, Outdoor durability 4-5 tahun',
-      description: 'Standar baku signage etalase toko, huruf timbul, dan striping premium.',
-      badge: 'Grade Jerman',
-      isActive: true
-    },
-    {
-      id: 'prod_feat_4',
-      name: 'Cetak Stiker Vinyl Ritrama / Duratac + Cutting Presisi',
-      brand: 'DURATAC',
-      category: 'print',
-      unit: 'per m² (meter persegi)',
-      priceEstimated: 'Rp 75.000 / m²',
-      specs: 'Tinta Eco-Solvent Hi-Res + Free Laminasi Doff/Glossy',
-      description: 'Cetak stiker branding mobil operasional, stiker komunitas, dan etalase kaca.',
-      badge: 'Print & Cut',
-      isActive: true
-    },
-    {
-      id: 'prod_feat_5',
-      name: 'Jasa Laser Cutting Akrilik Presisi Tebal 2mm - 5mm',
-      brand: 'BEJO LASER',
-      category: 'laser',
-      unit: 'per cm² / custom project',
-      priceEstimated: 'Mulai Rp 35 / cm²',
-      specs: 'Toleransi presisi ±0.1mm, Polished edge hasil potong',
-      description: 'Pembuatan plakat, gantungan kunci, huruf timbul, dan display toko.',
-      badge: 'Presisi CNC',
-      isActive: true
-    },
-    {
-      id: 'prod_feat_6',
-      name: 'Stiker Scotlite Saicholite Pemantul Cahaya (Lebar 60cm)',
-      brand: 'SAICHOLITE',
-      category: 'meteran',
-      unit: 'per meter (Lebar 60cm)',
-      priceEstimated: 'Rp 45.000 / meter',
-      specs: 'Prismatic reflector, High visibility at night',
-      description: 'Menyala terang saat disorot lampu di kegelapan. Sangat diminati untuk safety & armada angkutan.',
-      badge: 'Scotlite Glow',
+      id: 'tpl_2',
+      eyebrow: 'TEMPLATE DESIGN',
+      title: 'Box Kemasan Full Color Siap Pakai',
+      ctaText: 'Klik Di Sini',
+      imageUrl: undefined,
       isActive: true
     }
   ],
+
+  problem: {
+    title: 'PROBLEM CUSTOMER',
+    imageUrl: undefined,
+    points: [
+      { id: 'pp_1', text: 'MOQ (Minimum Order Quantity) terlalu besar', side: 'left' },
+      { id: 'pp_2', text: 'Tidak mengerti teknik kemasan sehingga budget membengkak', side: 'left' },
+      { id: 'pp_3', text: 'Tidak mengerti membuat layout kemasan yang diinginkan', side: 'left' },
+      { id: 'pp_4', text: 'Vendor slow respon dalam melayani customer', side: 'right' },
+      { id: 'pp_5', text: 'Hasil produksi tidak sesuai spesifikasi pesanan', side: 'right' },
+      { id: 'pp_6', text: 'Produksi tidak sesuai deadline', side: 'right' }
+    ],
+    primaryCtaText: 'Konsultasi Gratis',
+    secondaryCtaText: 'Download Katalog'
+  },
+
+  stats: [
+    {
+      id: 'stat_1',
+      value: '8th',
+      label: 'Tahun Pengalaman',
+      description: 'Melayani kebutuhan cetak kemasan, stationery, promosi, dan souvenir sejak 2018.',
+      iconUrl: undefined,
+      isActive: true
+    },
+    {
+      id: 'stat_2',
+      value: '15rb',
+      label: 'Customer telah Dilayani',
+      description: 'Dari UMKM, brand lokal, hingga perusahaan yang rutin mencetak bersama kami.',
+      iconUrl: undefined,
+      isActive: true
+    },
+    {
+      id: 'stat_3',
+      value: '40rb',
+      label: 'Produk Cetak telah Dihasilkan',
+      description: 'Diproduksi dengan mesin sendiri dan kontrol kualitas di setiap tahap.',
+      iconUrl: undefined,
+      isActive: true
+    }
+  ],
+
+  facilities: [
+    { id: 'fac_1', title: 'Mesin Digital Printing', imageUrl: undefined, isActive: true },
+    { id: 'fac_2', title: 'Mesin Laser Cutting', imageUrl: undefined, isActive: true },
+    { id: 'fac_3', title: 'Mesin Laminasi & Finishing', imageUrl: undefined, isActive: true },
+    { id: 'fac_4', title: 'Cutting Plotter Presisi', imageUrl: undefined, isActive: true }
+  ],
+
+  blogPosts: [
+    {
+      id: 'blog_1',
+      title: 'Panduan Memilih Bahan Stiker Label untuk Produk UMKM',
+      imageUrl: undefined,
+      url: '',
+      isActive: true
+    },
+    {
+      id: 'blog_2',
+      title: 'Ukuran Paper Bag Standar yang Cocok untuk Toko Anda',
+      imageUrl: undefined,
+      url: '',
+      isActive: true
+    },
+    {
+      id: 'blog_3',
+      title: 'Tips Menyiapkan File Cetak Agar Hasil Tidak Melowong',
+      imageUrl: undefined,
+      url: '',
+      isActive: true
+    }
+  ],
+
+  faqs: [
+    {
+      id: 'faq_1',
+      question: 'Berapa minimum order untuk cetak custom?',
+      answer:
+        'Minimum order menyesuaikan jenis produk. Untuk stiker label mulai 100 pcs, stationery mulai 1 rim, dan souvenir mulai 12 pcs. Silakan konsultasikan kebutuhan Anda untuk rekomendasi terbaik.',
+      isActive: true
+    },
+    {
+      id: 'faq_2',
+      question: 'Berapa lama proses produksi?',
+      answer:
+        'Rata-rata 3–7 hari kerja setelah desain dan pembayaran dikonfirmasi. Untuk kebutuhan mendesak, tersedia layanan ekspres dengan penyesuaian biaya.',
+      isActive: true
+    },
+    {
+      id: 'faq_3',
+      question: 'Apakah bisa kirim ke seluruh Indonesia?',
+      answer:
+        'Bisa. Kami bekerja sama dengan ekspedisi terpercaya dan mengirim ke seluruh Indonesia. Ongkos kirim dihitung berdasarkan berat dan tujuan.',
+      isActive: true
+    },
+    {
+      id: 'faq_4',
+      question: 'Apakah menerima desain dari customer?',
+      answer:
+        'Tentu. Anda dapat mengirim file desain siap cetak (PDF, AI, CDR, atau PNG resolusi tinggi). Jika belum punya desain, tim kami siap membantu pembuatan layout.',
+      isActive: true
+    },
+    {
+      id: 'faq_5',
+      question: 'Bagaimana cara pembayarannya?',
+      answer:
+        'Pembayaran dapat dilakukan melalui transfer bank atau QRIS. Untuk pesanan bernilai besar berlaku DP 50% sebelum produksi dan pelunasan sebelum pengiriman.',
+      isActive: true
+    },
+    {
+      id: 'faq_6',
+      question: 'Apakah ada garansi jika hasil tidak sesuai?',
+      answer:
+        'Ya. Jika terdapat kesalahan produksi dari pihak kami, pesanan akan dicetak ulang tanpa biaya tambahan. Klaim dapat diajukan maksimal 3 hari setelah barang diterima.',
+      isActive: true
+    }
+  ],
+
   contact: {
     whatsappNumber: '6281234567890',
     whatsappMessageTemplate: 'Halo Bejo Stiker! Saya ingin order / tanya info produk dan layanan berikut:',
     storeAddress: 'Jl. Raya Utama No. 88 (Dekat Polsek), Indonesia',
     phoneDisplay: '0812-3456-7890',
     operatingHours: 'Senin - Sabtu: 08.00 - 20.00 WIB | Minggu: 09.00 - 17.00 WIB',
-    googleMapsUrl: 'https://maps.google.com'
+    googleMapsUrl: 'https://maps.google.com',
+    emailDisplay: 'order@bejostiker.id',
+    factoryAddress: 'Jl. Industri Kecil No. 12, Workshop Produksi, Indonesia'
   },
-  benefits: [
-    {
-      title: 'Stok Terlengkap & Selalu Siap',
-      description: 'Ratusan roll stiker vinyl aneka merk dunia selalu ready stock di rak workshop tanpa perlu menunggu barang inden.',
-      icon: 'package'
-    },
-    {
-      title: 'Mesin Produksi Milik Sendiri',
-      description: 'Digital printing hi-res dan mesin laser cutting kami kerjakan langsung di tempat, menjamin waktu selesai lebih cepat.',
-      icon: 'printer'
-    },
-    {
-      title: 'Harga Grosir Tangan Pertama',
-      description: 'Mendapatkan harga kulak langsung pabrik untuk pembelian roll utuh, paket bengkel variasi, dan agen resmi.',
-      icon: 'sparkles'
-    },
-    {
-      title: 'Bisa Eceran & Konsultasi Gratis',
-      description: 'Melayani pembelian mulai dari eceran 1 meter dengan potongan presisi dan bantuan konsultasi pemilihan bahan yang tepat.',
-      icon: 'scissors'
-    }
-  ],
+
   about: {
     eyebrow: 'Tentang Kami',
     title: 'Berkembang Bersama Dedikasi & Inovasi',
-    intro: 'Seperti benih yang tumbuh menjadi pohon besar, BEJO STIKER memulai perjalanan dengan dasar yang kuat: stok lengkap, harga tangan pertama, dan kerja keras setiap hari untuk memenuhi kebutuhan cetak pelanggan.',
+    intro:
+      'Seperti benih yang tumbuh menjadi pohon besar, BEJO STIKER memulai perjalanan dengan dasar yang kuat: stok lengkap, harga tangan pertama, dan kerja keras setiap hari untuk memenuhi kebutuhan cetak pelanggan.',
     paragraphs: [
       'BEJO STIKER & DIGITAL PRINTING berdiri sebagai toko stiker dan workshop digital printing yang melayani variasi otomotif, bengkel, toko stiker, agen, hingga industri kreatif. Kami menyediakan material stiker terbaik dunia — Decofix, Oracal, Derek, 3M, Saicholite, Duratac, dan banyak lagi — siap eceran maupun grosir.',
       'Produksi kami dikerjakan sendiri di workshop: mulai dari digital printing resolusi tinggi, laminasi, hingga laser cutting akrilik presisi mikro. Dengan mesin milik sendiri, kualitas dan waktu pengerjaan sepenuhnya terkendali.',
@@ -350,12 +457,38 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
     ],
     ctaText: 'Konsultasi Kebutuhan Cetak Anda'
   },
+
   gallery: [
-    { id: 'gal_1', title: 'Rak Gudang Stiker Vinyl', description: 'Ratusan roll merk dunia selalu ready stock.', imageUrl: undefined, isActive: true },
-    { id: 'gal_2', title: 'Mesin Digital Printing', description: 'Cetak hi-res tinta eco-solvent tahan lama.', imageUrl: undefined, isActive: true },
-    { id: 'gal_3', title: 'Mesin Laser Cutting CNC', description: 'Potongan halus presisi ±0.1mm.', imageUrl: undefined, isActive: true },
-    { id: 'gal_4', title: 'Proses Wrapping Mobil', description: 'Pemasangan dikerjakan teknisi berpengalaman.', imageUrl: undefined, isActive: true }
+    {
+      id: 'gal_1',
+      title: 'Rak Gudang Stiker Vinyl',
+      description: 'Ratusan roll merk dunia selalu ready stock.',
+      imageUrl: undefined,
+      isActive: true
+    },
+    {
+      id: 'gal_2',
+      title: 'Mesin Digital Printing',
+      description: 'Cetak hi-res tinta eco-solvent tahan lama.',
+      imageUrl: undefined,
+      isActive: true
+    },
+    {
+      id: 'gal_3',
+      title: 'Mesin Laser Cutting CNC',
+      description: 'Potongan halus presisi ±0.1mm.',
+      imageUrl: undefined,
+      isActive: true
+    },
+    {
+      id: 'gal_4',
+      title: 'Proses Wrapping Mobil',
+      description: 'Pemasangan dikerjakan teknisi berpengalaman.',
+      imageUrl: undefined,
+      isActive: true
+    }
   ],
+
   testimonials: [
     {
       id: 'testi_1',
@@ -380,19 +513,32 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
       quote: 'Laser cutting akriliknya presisi, tepi polos tanpa bekas serabut. Pasti langganan untuk merch tulisan timbul.',
       author: 'Dimas',
       role: 'Owner Souvenir Shop',
-      company: 'Kreasi gifts',
+      company: 'Kreasi Gifts',
+      logoUrl: undefined,
+      isActive: true
+    },
+    {
+      id: 'testi_4',
+      quote: 'Pesanan kemasan produk kami selalu rapi dan konsisten. Timnya responsif saat ada revisi desain.',
+      author: 'Sarah',
+      role: 'Founder Skincare Lokal',
+      company: 'Glowlab',
       logoUrl: undefined,
       isActive: true
     }
   ],
+
   clients: [
     { id: 'cli_1', name: 'Bengkel Ajaib', logoUrl: undefined, websiteUrl: undefined, isActive: true },
     { id: 'cli_2', name: 'Toko Kiraya', logoUrl: undefined, websiteUrl: undefined, isActive: true },
     { id: 'cli_3', name: 'Flinker Trimshop', logoUrl: undefined, websiteUrl: undefined, isActive: true },
     { id: 'cli_4', name: 'Event Plan Co.', logoUrl: undefined, websiteUrl: undefined, isActive: true },
     { id: 'cli_5', name: 'AVA Carbody', logoUrl: undefined, websiteUrl: undefined, isActive: true },
-    { id: 'cli_6', name: 'Kreasi Gifts', logoUrl: undefined, websiteUrl: undefined, isActive: true }
+    { id: 'cli_6', name: 'Kreasi Gifts', logoUrl: undefined, websiteUrl: undefined, isActive: true },
+    { id: 'cli_7', name: 'Glowlab', logoUrl: undefined, websiteUrl: undefined, isActive: true },
+    { id: 'cli_8', name: 'Kopi Senja', logoUrl: undefined, websiteUrl: undefined, isActive: true }
   ],
+
   offices: [
     {
       id: 'office_main',
@@ -402,12 +548,202 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
       isActive: true
     }
   ],
+
   socials: [
     { id: 'soc_ig', label: 'Instagram', url: 'https://instagram.com/bejostiker', isActive: true },
     { id: 'soc_tiktok', label: 'TikTok', url: 'https://tiktok.com/@bejostiker', isActive: true },
-    { id: 'soc_fb', label: 'Facebook', url: 'https://facebook.com/bejostiker', isActive: true }
-  ]
+    { id: 'soc_tokopedia', label: 'Tokopedia', url: 'https://tokopedia.com/bejostiker', isActive: true }
+  ],
+
+  footerColumns: [
+    {
+      id: 'fc_1',
+      heading: 'CETAK CUSTOM',
+      blocks: [
+        {
+          id: 'fcb_1',
+          title: 'Kemasan',
+          links: [
+            { id: 'fcl_1', label: 'Stiker Label Produk', categoryKey: 'kemasan' },
+            { id: 'fcl_2', label: 'Box Kemasan Custom', categoryKey: 'kemasan' },
+            { id: 'fcl_3', label: 'Paper Bag', categoryKey: 'kemasan' },
+            { id: 'fcl_4', label: 'Standing Pouch', categoryKey: 'kemasan' },
+            { id: 'fcl_5', label: 'Sleeve & Belt', categoryKey: 'kemasan' },
+            { id: 'fcl_6', label: 'Wrapping Paper', categoryKey: 'kemasan' }
+          ]
+        }
+      ]
+    },
+    {
+      id: 'fc_2',
+      heading: 'CETAK CUSTOM',
+      blocks: [
+        {
+          id: 'fcb_2',
+          title: 'Stationery',
+          links: [
+            { id: 'fcl_7', label: 'Kartu Nama', categoryKey: 'stationery' },
+            { id: 'fcl_8', label: 'Kop Surat', categoryKey: 'stationery' },
+            { id: 'fcl_9', label: 'Amplop Custom', categoryKey: 'stationery' },
+            { id: 'fcl_10', label: 'Notepad', categoryKey: 'stationery' },
+            { id: 'fcl_11', label: 'Agenda Custom', categoryKey: 'stationery' },
+            { id: 'fcl_12', label: 'Company Profile', categoryKey: 'stationery' },
+            { id: 'fcl_13', label: 'Katalog Produk', categoryKey: 'stationery' },
+            { id: 'fcl_14', label: 'Map Folder', categoryKey: 'stationery' }
+          ]
+        }
+      ]
+    },
+    {
+      id: 'fc_3',
+      heading: 'CETAK CUSTOM',
+      blocks: [
+        {
+          id: 'fcb_3',
+          title: 'Promosi',
+          links: [
+            { id: 'fcl_15', label: 'Brosur', categoryKey: 'promosi' },
+            { id: 'fcl_16', label: 'Flyer', categoryKey: 'promosi' },
+            { id: 'fcl_17', label: 'Booklet', categoryKey: 'promosi' },
+            { id: 'fcl_18', label: 'Kalender', categoryKey: 'promosi' },
+            { id: 'fcl_19', label: 'Banner Spanduk', categoryKey: 'promosi' },
+            { id: 'fcl_20', label: 'X-Banner', categoryKey: 'promosi' }
+          ]
+        },
+        {
+          id: 'fcb_4',
+          title: 'Souvenir',
+          links: [
+            { id: 'fcl_21', label: 'Tumbler Custom', categoryKey: 'souvenir' },
+            { id: 'fcl_22', label: 'T-Shirt Sablon', categoryKey: 'souvenir' },
+            { id: 'fcl_23', label: 'Tas Canvas', categoryKey: 'souvenir' },
+            { id: 'fcl_24', label: 'Gantungan Kunci', categoryKey: 'souvenir' },
+            { id: 'fcl_25', label: 'Plakat Akrilik', categoryKey: 'souvenir' }
+          ]
+        }
+      ]
+    },
+    {
+      id: 'fc_4',
+      heading: 'TEMPLATE DESIGN',
+      blocks: [
+        {
+          id: 'fcb_5',
+          title: 'Template',
+          links: [
+            { id: 'fcl_26', label: 'Box Siap Pakai', categoryKey: 'kemasan' },
+            { id: 'fcl_27', label: 'Kartu Nama', categoryKey: 'stationery' },
+            { id: 'fcl_28', label: 'Kalender', categoryKey: 'promosi' },
+            { id: 'fcl_29', label: 'T-Shirt', categoryKey: 'souvenir' }
+          ]
+        },
+        {
+          id: 'fcb_6',
+          title: 'Events',
+          links: [
+            { id: 'fcl_30', label: 'Imlek', categoryKey: 'kemasan' },
+            { id: 'fcl_31', label: 'Lebaran', categoryKey: 'kemasan' },
+            { id: 'fcl_32', label: 'Natal', categoryKey: 'kemasan' },
+            { id: 'fcl_33', label: 'Tahun Baru', categoryKey: 'promosi' }
+          ]
+        }
+      ]
+    },
+    {
+      id: 'fc_5',
+      heading: 'TENTANG KAMI',
+      blocks: [
+        {
+          id: 'fcb_7',
+          links: [
+            { id: 'fcl_34', label: 'Tentang Kami', page: 'about' },
+            { id: 'fcl_35', label: 'Kontak', page: 'contact' },
+            { id: 'fcl_36', label: 'Klien Kami', page: 'clients' },
+            { id: 'fcl_37', label: 'Inspirasi Cetak', page: 'blog' },
+            { id: 'fcl_38', label: 'Portfolio', page: 'clients' },
+            { id: 'fcl_39', label: 'FAQ', page: 'contact' },
+            { id: 'fcl_40', label: 'Konsultasi Gratis', page: 'contact' }
+          ]
+        }
+      ]
+    }
+  ],
+
+  footerNote: 'Percetakan online untuk kemasan, stationery, promosi, dan souvenir bisnis Anda.'
 };
+
+/**
+ * Melengkapi data lama (format subur.co.id) agar tetap kompatibel
+ * dengan struktur baru (format uprint.id).
+ */
+function migrateConfig(parsed: unknown): LandingPageConfig {
+  const raw = (parsed ?? {}) as Record<string, any>;
+  const defaults = DEFAULT_LANDING_CONFIG;
+
+  /* buang field format lama (subur.co.id) agar tidak menumpuk di localStorage */
+  const {
+    brands: _legacyBrands,
+    services: _legacyServices,
+    featuredProducts: _legacyProducts,
+    benefits: _legacyBenefits,
+    ...clean
+  } = raw;
+
+  const hero = { ...defaults.hero, ...(clean.hero || {}) };
+  const contact = { ...defaults.contact, ...(clean.contact || {}) };
+
+  // Slide lama belum punya `eyebrow`
+  const slides = Array.isArray(clean.slides) && clean.slides.length > 0
+    ? (clean.slides as any[]).map((s, i) => ({
+        id: s?.id || `slide_${i + 1}`,
+        eyebrow: typeof s?.eyebrow === 'string' ? s.eyebrow : defaults.slides[0]?.eyebrow || '',
+        title: s?.title || '',
+        subtitle: s?.subtitle || '',
+        ctaText: s?.ctaText || '',
+        imageUrl: s?.imageUrl,
+        isActive: s?.isActive !== false
+      }))
+    : defaults.slides;
+
+  const categories = Array.isArray(clean.categories) && clean.categories.length > 0
+    ? (clean.categories as any[]).map((c) => ({
+        ...c,
+        cards: Array.isArray(c?.cards) ? c.cards : []
+      }))
+    : defaults.categories;
+
+  return {
+    ...defaults,
+    ...clean,
+    isPublished: clean.isPublished !== false,
+    hero,
+    brand: { ...defaults.brand, ...(clean.brand || {}) },
+    contact,
+    slides,
+    categories,
+    menu: Array.isArray(clean.menu) && clean.menu.length > 0 ? clean.menu : defaults.menu,
+    templatePromos: Array.isArray(clean.templatePromos) && clean.templatePromos.length > 0
+      ? clean.templatePromos
+      : defaults.templatePromos,
+    problem: { ...defaults.problem, ...(clean.problem || {}) },
+    stats: Array.isArray(clean.stats) && clean.stats.length > 0 ? clean.stats : defaults.stats,
+    facilities: Array.isArray(clean.facilities) && clean.facilities.length > 0 ? clean.facilities : defaults.facilities,
+    blogPosts: Array.isArray(clean.blogPosts) && clean.blogPosts.length > 0 ? clean.blogPosts : defaults.blogPosts,
+    faqs: Array.isArray(clean.faqs) && clean.faqs.length > 0 ? clean.faqs : defaults.faqs,
+    about: { ...defaults.about, ...(clean.about || {}) },
+    gallery: Array.isArray(clean.gallery) && clean.gallery.length > 0 ? clean.gallery : defaults.gallery,
+    testimonials: Array.isArray(clean.testimonials) && clean.testimonials.length > 0
+      ? clean.testimonials
+      : defaults.testimonials,
+    clients: Array.isArray(clean.clients) && clean.clients.length > 0 ? clean.clients : defaults.clients,
+    offices: Array.isArray(clean.offices) && clean.offices.length > 0 ? clean.offices : defaults.offices,
+    socials: Array.isArray(clean.socials) && clean.socials.length > 0 ? clean.socials : defaults.socials,
+    footerColumns: Array.isArray(clean.footerColumns) && clean.footerColumns.length > 0
+      ? clean.footerColumns
+      : defaults.footerColumns,
+    footerNote: typeof clean.footerNote === 'string' ? clean.footerNote : defaults.footerNote
+  };
+}
 
 /**
  * Retrieves the current Landing Page configuration from LocalStorage
@@ -420,24 +756,7 @@ export function getStoredLandingConfig(): LandingPageConfig {
       localStorage.setItem(LANDING_PAGE_STORAGE_KEY, JSON.stringify(DEFAULT_LANDING_CONFIG));
       return DEFAULT_LANDING_CONFIG;
     }
-    const parsed = JSON.parse(raw);
-    return {
-      ...DEFAULT_LANDING_CONFIG,
-      ...parsed,
-      hero: { ...DEFAULT_LANDING_CONFIG.hero, ...(parsed.hero || {}) },
-      contact: { ...DEFAULT_LANDING_CONFIG.contact, ...(parsed.contact || {}) },
-      brands: Array.isArray(parsed.brands) && parsed.brands.length > 0 ? parsed.brands : DEFAULT_LANDING_CONFIG.brands,
-      services: Array.isArray(parsed.services) && parsed.services.length > 0 ? parsed.services : DEFAULT_LANDING_CONFIG.services,
-      featuredProducts: Array.isArray(parsed.featuredProducts) && parsed.featuredProducts.length > 0 ? parsed.featuredProducts : DEFAULT_LANDING_CONFIG.featuredProducts,
-      benefits: Array.isArray(parsed.benefits) && parsed.benefits.length > 0 ? parsed.benefits : DEFAULT_LANDING_CONFIG.benefits,
-      slides: Array.isArray(parsed.slides) && parsed.slides.length > 0 ? parsed.slides : DEFAULT_LANDING_CONFIG.slides,
-      about: { ...DEFAULT_LANDING_CONFIG.about, ...(parsed.about || {}) },
-      gallery: Array.isArray(parsed.gallery) && parsed.gallery.length > 0 ? parsed.gallery : DEFAULT_LANDING_CONFIG.gallery,
-      testimonials: Array.isArray(parsed.testimonials) && parsed.testimonials.length > 0 ? parsed.testimonials : DEFAULT_LANDING_CONFIG.testimonials,
-      clients: Array.isArray(parsed.clients) && parsed.clients.length > 0 ? parsed.clients : DEFAULT_LANDING_CONFIG.clients,
-      offices: Array.isArray(parsed.offices) && parsed.offices.length > 0 ? parsed.offices : DEFAULT_LANDING_CONFIG.offices,
-      socials: Array.isArray(parsed.socials) && parsed.socials.length > 0 ? parsed.socials : DEFAULT_LANDING_CONFIG.socials
-    };
+    return migrateConfig(JSON.parse(raw));
   } catch (err) {
     console.error('Failed to parse landing config, falling back to defaults:', err);
     return DEFAULT_LANDING_CONFIG;

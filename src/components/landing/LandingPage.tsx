@@ -1,58 +1,72 @@
 /**
  * BEJO STIKER POS & DIGITAL PRINTING
- * Public Landing Page — Multi-page corporate site style
- * Referen layout: subur.co.id (Home / About Us / Product / Clients / Contact Us)
- * Fitur: Hero slider gambar, accordion solusi, slider testimoni,
- *        galeri klien, galeri workshop, dan lightbox detail gambar.
+ * Public Landing Page — tampilan mengikuti referensi uprint.id
+ *
+ * Struktur: header (topbar + mega menu), hero slider gambar, judul H1,
+ * tab kategori + slider kartu 9:16, template design, problem customer,
+ * mengapa kami, fasilitas produksi, klien, testimoni, blog, FAQ, footer.
+ *
  * Coded by Langgo Bramandityo.
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Layers,
-  Scissors,
-  Printer,
-  Phone,
-  PhoneCall,
-  MapPin,
-  Clock,
   ArrowRight,
-  ArrowLeft,
-  Calculator,
-  LogIn,
-  CheckCircle2,
-  Search,
-  MessageCircle,
-  Package,
-  RectangleHorizontal,
+  ArrowUp,
+  Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
-  X,
-  Image as ImageIcon,
-  Send,
-  Menu,
-  Wrench,
-  Sparkles,
-  Eye,
-  Award,
+  Clock,
+  Download,
   ExternalLink,
+  Facebook,
+  Factory,
+  Image as ImageIcon,
+  Instagram,
   Mail,
-  Globe,
+  MapPin,
+  Menu,
+  MessageCircle,
+  Minus,
+  Music2,
+  Phone,
+  Play,
+  Plus,
   Quote,
-  Building2,
+  Search,
+  ShoppingBag,
+  Sparkles,
+  Star,
+  Store,
   User,
+  X,
 } from 'lucide-react';
-import {
-  LandingPageConfig,
-  LandingSlide,
-  LandingTestimonial,
-  LandingGalleryItem,
-  LandingBrandItem,
-  LandingProductItem,
+import type {
   AppUser,
+  LandingBlogPost,
+  LandingCategoryCard,
+  LandingCategoryGroup,
+  LandingFaqItem,
+  LandingMenuItem,
+  LandingPageConfig,
+  LandingPageKey,
+  LandingRoute,
+  LandingSlide,
 } from '../../types';
-import { StoreLogo } from '../StoreLogo';
 
+/* -------------------------------------------------------------------------- */
+/*  Token desain                                                              */
+/* -------------------------------------------------------------------------- */
+const FONT_STACK = "'Quicksand', 'Segoe UI', system-ui, -apple-system, sans-serif";
+const YELLOW = '#FFC20D';
+const AMBER = '#F0B300';
+const CREAM = '#F5F2ED';
+
+const cx = (...parts: Array<string | false | null | undefined>) => parts.filter(Boolean).join(' ');
+
+/* -------------------------------------------------------------------------- */
+/*  Props                                                                     */
+/* -------------------------------------------------------------------------- */
 interface LandingPageProps {
   config: LandingPageConfig;
   storeName?: string;
@@ -61,1840 +75,1752 @@ interface LandingPageProps {
   onOpenLogin: () => void;
   onEnterApp?: () => void;
   onOpenDeveloperCms?: () => void;
+  /** true saat dirender di dalam pratinjau CMS (menonaktifkan aksi mengambang & auto-scroll) */
+  embedded?: boolean;
 }
 
-type PageId = 'home' | 'about' | 'products' | 'clients' | 'contact';
-
-interface LightboxImage {
+interface LightboxItem {
   src: string;
   title: string;
-  caption?: string;
 }
 
-const PAGE_MENUS: { id: PageId; label: string }[] = [
-  { id: 'home', label: 'Beranda' },
-  { id: 'about', label: 'Tentang Kami' },
-  { id: 'products', label: 'Produk & Layanan' },
-  { id: 'clients', label: 'Klien & Testimoni' },
-  { id: 'contact', label: 'Kontak' },
-];
-
-/* ============================================================
-   Komponen utilitas kecil
-   ============================================================ */
-
-const SectionHeading: React.FC<{
-  eyebrow: string;
-  title: string;
-  desc?: string;
+/* -------------------------------------------------------------------------- */
+/*  Gambar dengan placeholder                                                 */
+/* -------------------------------------------------------------------------- */
+const Frame: React.FC<{
+  src?: string;
+  alt: string;
+  label?: string;
+  className?: string;
+  imgClassName?: string;
   dark?: boolean;
-  center?: boolean;
-}> = ({ eyebrow, title, desc, dark, center }) => (
-  <div className={`space-y-2 ${center ? 'text-center max-w-2xl mx-auto' : 'max-w-2xl'}`}>
-    <span className={`text-xs font-extrabold uppercase tracking-widest ${dark ? 'text-indigo-300' : 'text-indigo-600'}`}>
-      {eyebrow}
-    </span>
-    <h2 className={`text-2xl sm:text-3xl md:text-4xl font-black tracking-tight ${dark ? 'text-white' : 'text-slate-900'}`}>
-      {title}
-    </h2>
-    {desc && (
-      <p className={`text-xs sm:text-sm font-medium ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{desc}</p>
+  bare?: boolean;
+}> = ({ src, alt, label, className, imgClassName, dark, bare }) => (
+  <div className={cx('relative h-full w-full overflow-hidden', dark ? 'bg-slate-800' : 'bg-[#F5F2ED]', className)}>
+    {src ? (
+      <img src={src} alt={alt} className={cx('h-full w-full object-cover', imgClassName)} loading="lazy" />
+    ) : (
+      <div
+        className={cx(
+          'absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center',
+          dark
+            ? 'bg-[linear-gradient(135deg,#0f172a_0%,#1f2937_55%,#7c5c10_100%)] text-white/55'
+            : 'text-slate-400'
+        )}
+      >
+        <ImageIcon size={26} />
+        {!bare && <span className="text-[11px] font-semibold uppercase tracking-[0.14em]">{label || alt}</span>}
+      </div>
     )}
   </div>
 );
 
-/** Gambar cerdas: tampilkan placeholder rapi bila foto belum diunggah / gagal load */
-const SmartImage: React.FC<{
-  src?: string;
-  alt: string;
-  className?: string;
-  onClick?: () => void;
-  hoverZoom?: boolean;
-}> = ({ src, alt, className = '', onClick, hoverZoom }) => {
-  const [failed, setFailed] = useState(false);
-  const imgRef = useRef<HTMLImageElement | null>(null);
-  // simpan callback terbaru agar listener tidak perlu dipasang ulang
-  const cbRef = useRef(onClick);
-  cbRef.current = onClick;
+/* -------------------------------------------------------------------------- */
+/*  Tombol gulir horizontal                                                   */
+/* -------------------------------------------------------------------------- */
+const ScrollArrows: React.FC<{ onPrev: () => void; onNext: () => void; light?: boolean }> = ({
+  onPrev,
+  onNext,
+  light,
+}) => (
+  <>
+    <button
+      type="button"
+      onClick={onPrev}
+      aria-label="Sebelumnya"
+      className={cx(
+        'absolute left-0 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border transition-colors md:flex',
+        light
+          ? 'border-white/70 text-white hover:bg-white hover:text-[#111]'
+          : 'border-slate-300 bg-white text-slate-600 hover:border-[#F0B300] hover:text-[#F0B300]'
+      )}
+      style={{ left: -20 }}
+    >
+      <ChevronLeft size={18} />
+    </button>
+    <button
+      type="button"
+      onClick={onNext}
+      aria-label="Berikutnya"
+      className={cx(
+        'absolute right-0 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border transition-colors md:flex',
+        light
+          ? 'border-white/70 text-white hover:bg-white hover:text-[#111]'
+          : 'border-slate-300 bg-white text-slate-600 hover:border-[#F0B300] hover:text-[#F0B300]'
+      )}
+      style={{ right: -20 }}
+    >
+      <ChevronRight size={18} />
+    </button>
+  </>
+);
+
+const useScroller = () => {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const scrollBy = (dir: 1 | -1) => {
+    const el = ref.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * Math.max(el.clientWidth * 0.8, 240), behavior: 'smooth' });
+  };
+  return { ref, prev: () => scrollBy(-1), next: () => scrollBy(1) };
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Hero slider                                                               */
+/* -------------------------------------------------------------------------- */
+const HeroSlider: React.FC<{ slides: LandingSlide[]; onCta: () => void }> = ({ slides, onCta }) => {
+  const [index, setIndex] = useState(0);
+  const total = slides.length;
 
   useEffect(() => {
-    setFailed(false);
-    const el = imgRef.current;
-    if (!el || !src) return;
-    const handler = (e: Event) => {
-      e.stopPropagation();
-      cbRef.current?.();
-    };
-    el.addEventListener('click', handler);
-    return () => el.removeEventListener('click', handler);
-  }, [src]);
+    if (total <= 1) return;
+    const timer = window.setInterval(() => setIndex((i) => (i + 1) % total), 6500);
+    return () => window.clearInterval(timer);
+  }, [total]);
 
-  if (!src || failed) {
+  useEffect(() => {
+    if (index > total - 1) setIndex(0);
+  }, [index, total]);
+
+  if (total === 0) {
     return (
-      <div
-        onClick={onClick}
-        className={`bg-gradient-to-br from-slate-100 via-indigo-50 to-slate-200 flex flex-col items-center justify-center gap-1.5 text-slate-400 ${
-          onClick ? 'cursor-zoom-in' : ''
-        } ${className}`}
-      >
-        <ImageIcon className="w-6 h-6" />
-        <span className="text-[10px] font-bold uppercase tracking-wider">Foto belum diunggah</span>
-        <span className="text-[9px] text-slate-400/80 truncate max-w-[90%] px-2 text-center">{alt}</span>
+      <div className="relative flex aspect-[4/5] w-full items-center justify-center overflow-hidden rounded-2xl bg-[#F5F2ED] sm:aspect-[16/9]">
+        <div className="flex flex-col items-center gap-2 text-slate-400">
+          <ImageIcon size={32} />
+          <span className="text-[12px] font-semibold uppercase tracking-[0.2em]">Banner belum diunggah</span>
+        </div>
       </div>
     );
   }
 
-  return (
-    <img
-      ref={imgRef}
-      src={src}
-      alt={alt}
-      loading="lazy"
-      onError={() => setFailed(true)}
-      className={`object-cover ${onClick ? 'cursor-zoom-in' : ''} ${
-        onClick && hoverZoom !== false ? 'transition-transform duration-300 group-hover:scale-[1.04]' : ''
-      } ${className}`}
-    />
-  );
-};
-
-/* ============================================================
-   Slider Banner Utama (Hero Slider)
-   ============================================================ */
-const HeroSlider: React.FC<{
-  slides: LandingSlide[];
-}> = ({ slides }) => {
-  const activeSlides = useMemo(() => slides.filter((s) => s.isActive), [slides]);
-  const [index, setIndex] = useState(0);
-  const [paused, setPaused] = useState(false);
-
-  useEffect(() => {
-    if (index >= activeSlides.length) setIndex(0);
-  }, [activeSlides.length, index]);
-
-  useEffect(() => {
-    if (paused || activeSlides.length <= 1) return;
-    const timer = window.setInterval(() => {
-      setIndex((i) => (i + 1) % activeSlides.length);
-    }, 5500);
-    return () => window.clearInterval(timer);
-  }, [paused, activeSlides.length, index]);
-
-  if (activeSlides.length === 0) return null;
-  const slide = activeSlides[Math.min(index, activeSlides.length - 1)];
+  const slide = slides[index];
 
   return (
-    <div
-      className="relative w-full overflow-hidden bg-slate-950"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-    >
-      <div className="relative h-[300px] sm:h-[380px] lg:h-[460px]">
-        {activeSlides.map((s, i) => (
-          <div
-            key={s.id}
-            className={`absolute inset-0 transition-opacity duration-700 ease-out ${
-              i === index ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
-          >
-            {s.imageUrl ? (
-              <img src={s.imageUrl} alt={s.title} className="absolute inset-0 w-full h-full object-cover" />
-            ) : (
-              <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-950">
-                <div className="absolute inset-0 opacity-20 [background-image:radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.45),transparent_45%),radial-gradient(circle_at_80%_70%,rgba(16,185,129,0.35),transparent_40%)]" />
-              </div>
-            )}
-            {/* Overlay tipis agar tetap menyatu dengan navbar/footer */}
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/40 via-transparent to-slate-950/20" />
-          </div>
-        ))}
+    <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl bg-slate-900 sm:aspect-[16/9]">
+      {slides.map((s, i) => (
+        <div
+          key={s.id}
+          className={cx(
+            'absolute inset-0 transition-opacity duration-700',
+            i === index ? 'opacity-100' : 'pointer-events-none opacity-0'
+          )}
+        >
+          {s.imageUrl ? (
+            <img src={s.imageUrl} alt={s.title || `Banner ${i + 1}`} className="h-full w-full object-cover" />
+          ) : (
+            <div
+              className="h-full w-full"
+              style={{ background: `linear-gradient(120deg, #1f2937 0%, #374151 45%, ${AMBER} 140%)` }}
+            />
+          )}
+        </div>
+      ))}
 
-        {/* Panah navigasi */}
-        {activeSlides.length > 1 && (
-          <>
-            <button
-              type="button"
-              onClick={() => setIndex((i) => (i - 1 + activeSlides.length) % activeSlides.length)}
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/35 hover:bg-black/60 backdrop-blur text-white flex items-center justify-center transition-all cursor-pointer"
-              aria-label="Slide sebelumnya"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setIndex((i) => (i + 1) % activeSlides.length)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/35 hover:bg-black/60 backdrop-blur text-white flex items-center justify-center transition-all cursor-pointer"
-              aria-label="Slide berikutnya"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </>
+      <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/30 to-transparent" />
+
+      <div className="absolute inset-0 flex flex-col justify-center px-6 py-8 sm:px-10 md:px-16">
+        {slide.eyebrow && (
+          <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.32em] text-white/90 md:text-[12px]">
+            {slide.eyebrow}
+          </p>
         )}
+        {slide.title && (
+          <h2 className="max-w-[720px] whitespace-pre-line text-2xl font-semibold leading-[1.15] text-white sm:text-3xl md:text-[42px]">
+            {slide.title}
+          </h2>
+        )}
+        {slide.ctaText && (
+          <button
+            type="button"
+            onClick={onCta}
+            className="mt-6 w-fit rounded-full border border-white/90 px-7 py-2 text-[12px] font-semibold text-white transition-colors hover:bg-white hover:text-[#111] md:text-[13px]"
+          >
+            {slide.ctaText}
+          </button>
+        )}
+      </div>
 
-        {/* Dots */}
-        {activeSlides.length > 1 && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2">
-            {activeSlides.map((s, i) => (
+      {total > 1 && (
+        <>
+          <div className="absolute bottom-5 left-6 flex items-center gap-2 md:left-10">
+            <button
+              type="button"
+              onClick={() => setIndex((i) => (i - 1 + total) % total)}
+              aria-label="Banner sebelumnya"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 text-white transition-colors hover:bg-white hover:text-[#111]"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIndex((i) => (i + 1) % total)}
+              aria-label="Banner berikutnya"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 text-white transition-colors hover:bg-white hover:text-[#111]"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+          <div className="absolute bottom-6 right-6 flex items-center gap-1.5 md:right-10">
+            {slides.map((s, i) => (
               <button
                 key={s.id}
                 type="button"
+                aria-label={`Banner ${i + 1}`}
                 onClick={() => setIndex(i)}
-                aria-label={`Ke slide ${i + 1}`}
-                className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                  i === index ? 'w-8 bg-emerald-400' : 'w-2.5 bg-white/50 hover:bg-white/80'
-                }`}
+                className={cx(
+                  'h-1.5 rounded-full transition-all',
+                  i === index ? 'w-6 bg-white' : 'w-1.5 bg-white/50 hover:bg-white/80'
+                )}
               />
             ))}
           </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-/* ============================================================
-   Slider Testimoni
-   ============================================================ */
-const TestimonialSlider: React.FC<{ items: LandingTestimonial[] }> = ({ items }) => {
-  const [index, setIndex] = useState(0);
-  useEffect(() => {
-    if (index >= items.length) setIndex(0);
-  }, [items.length, index]);
-
-  if (items.length === 0) {
-    return <p className="text-xs text-slate-400 italic text-center py-6">Belum ada testimoni.</p>;
-  }
-  const current = items[Math.min(index, items.length - 1)];
-
-  return (
-    <div className="relative">
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-lg max-w-3xl mx-auto space-y-5">
-        <div className="flex items-start justify-between gap-4">
-          <Quote className="w-8 h-8 text-indigo-100 shrink-0" />
-          {current.logoUrl ? (
-            <SmartImage
-              src={current.logoUrl}
-              alt={current.company}
-              hoverZoom={false}
-              className="w-14 h-14 rounded-full border border-slate-200"
-            />
-          ) : (
-            <div className="w-14 h-14 rounded-full bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-700 text-sm font-black">
-              {current.company.slice(0, 2).toUpperCase()}
-            </div>
-          )}
-        </div>
-        <p className="text-sm sm:text-base text-slate-700 leading-relaxed font-medium">“{current.quote}”</p>
-        <div className="border-t border-slate-100 pt-4 flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <div className="text-sm font-black text-slate-900">{current.author}</div>
-            <div className="text-[11px] text-slate-500 font-semibold">{current.role}</div>
-            <div className="text-xs font-black text-indigo-700">{current.company}</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIndex((i) => (i - 1 + items.length) % items.length)}
-              className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 transition-all cursor-pointer"
-              aria-label="Testimoni sebelumnya"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setIndex((i) => (i + 1) % items.length)}
-              className="w-9 h-9 rounded-full bg-slate-900 hover:bg-indigo-700 flex items-center justify-center text-white transition-all cursor-pointer"
-              aria-label="Testimoni berikutnya"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-center gap-2 mt-4">
-        {items.map((t, i) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setIndex(i)}
-            aria-label={`Testimoni ${i + 1}`}
-            className={`h-1.5 rounded-full transition-all cursor-pointer ${
-              i === index ? 'w-7 bg-indigo-600' : 'w-2.5 bg-slate-300 hover:bg-slate-400'
-            }`}
-          />
-        ))}
-      </div>
-    </div>
-  );
-};
-
-/* ============================================================
-   Lightbox — popup detail gambar produk / galeri
-   ============================================================ */
-const Lightbox: React.FC<{
-  images: LightboxImage[];
-  index: number;
-  onClose: () => void;
-  onChangeIndex: (index: number) => void;
-}> = ({ images, index, onClose, onChangeIndex }) => {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowRight' && images.length > 1) onChangeIndex((index + 1) % images.length);
-      if (e.key === 'ArrowLeft' && images.length > 1) onChangeIndex((index - 1 + images.length) % images.length);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [images.length, index, onClose, onChangeIndex]);
-
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, []);
-
-  if (index >= images.length) return null;
-  const current = images[index];
-  const hasMany = images.length > 1;
-
-  return (
-    <div
-      className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6"
-      onClick={onClose}
-    >
-      {/* Tombol tutup */}
-      <button
-        type="button"
-        onClick={onClose}
-        className="absolute top-3 right-3 sm:top-5 sm:right-5 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer z-10"
-        aria-label="Tutup pratinjau"
-      >
-        <X className="w-5 h-5" />
-      </button>
-
-      {/* Navigasi */}
-      {hasMany && (
-        <>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onChangeIndex((index - 1 + images.length) % images.length);
-            }}
-            className="absolute left-2 sm:left-5 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center transition-all cursor-pointer z-10"
-            aria-label="Gambar sebelumnya"
-          >
-            <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onChangeIndex((index + 1) % images.length);
-            }}
-            className="absolute right-2 sm:right-5 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center transition-all cursor-pointer z-10"
-            aria-label="Gambar berikutnya"
-          >
-            <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
-          </button>
         </>
       )}
+    </div>
+  );
+};
 
-      {/* Konten */}
-      <div
-        className="max-w-4xl w-full max-h-full flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="bg-white rounded-2xl overflow-hidden shadow-2xl max-h-[82vh] flex flex-col">
-          <div className="bg-slate-100 flex items-center justify-center min-h-[240px] max-h-[62vh] overflow-hidden">
-            <img src={current.src} alt={current.title} className="max-h-[62vh] w-auto max-w-full object-contain" />
+/* -------------------------------------------------------------------------- */
+/*  Header + mega menu                                                        */
+/* -------------------------------------------------------------------------- */
+const Header: React.FC<{
+  config: LandingPageConfig;
+  logo?: string;
+  currentUser?: AppUser | null;
+  onNavigate: (page: LandingPageKey, categoryKey?: string) => void;
+  onSearch: (q: string) => void;
+  onOpenLogin: () => void;
+  onEnterApp?: () => void;
+}> = ({ config, logo, currentUser, onNavigate, onSearch, onOpenLogin, onEnterApp }) => {
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+
+  const menu = config.menu.filter((m) => m.isActive);
+
+  const handleMegaLink = (link: { page?: LandingPageKey; categoryKey?: string }) => {
+    setOpenMenu(null);
+    setMobileOpen(false);
+    if (link.page) onNavigate(link.page);
+    else onNavigate('products', link.categoryKey);
+  };
+
+  const submitSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSearch(query.trim());
+    setQuery('');
+  };
+
+  return (
+    <div className="sticky top-0 z-40">
+      {/* Top bar */}
+      <div className="hidden border-b border-slate-100 bg-white md:block">
+        <div className="mx-auto flex h-9 max-w-[1200px] items-center justify-between px-4 text-[12px] text-slate-500">
+          <div className="flex items-center gap-5">
+            <a href={`tel:${config.contact.phoneDisplay}`} className="flex items-center gap-1.5 transition-colors hover:text-[#F0B300]">
+              <Phone size={12} /> {config.contact.phoneDisplay}
+            </a>
+            <a
+              href={`mailto:${config.contact.emailDisplay || ''}`}
+              className="flex items-center gap-1.5 transition-colors hover:text-[#F0B300]"
+            >
+              <Mail size={12} /> {config.contact.emailDisplay}
+            </a>
           </div>
-          <div className="px-4 sm:px-6 py-3.5 bg-white border-t border-slate-200 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-sm font-black text-slate-900 truncate">{current.title}</div>
-              {current.caption && (
-                <div className="text-[11px] text-slate-500 font-medium truncate">{current.caption}</div>
-              )}
-            </div>
-            {hasMany && (
-              <span className="text-[10px] font-mono font-bold text-slate-400 shrink-0">
-                {index + 1} / {images.length}
-              </span>
+          <div className="flex items-center gap-4">
+            <button type="button" onClick={onOpenLogin} className="flex items-center gap-1.5 transition-colors hover:text-[#F0B300]">
+              <User size={12} /> {currentUser ? 'Buka Aplikasi' : 'Masuk'}
+            </button>
+            {currentUser && onEnterApp && (
+              <button type="button" onClick={onEnterApp} className="font-semibold text-[#111] transition-colors hover:text-[#F0B300]">
+                Dashboard
+              </button>
             )}
           </div>
         </div>
+      </div>
 
-        {/* Thumbnail strip */}
-        {hasMany && (
-          <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1 justify-start sm:justify-center">
-            {images.map((img, i) => (
+      {/* Main header */}
+      <div className="border-b border-slate-100 bg-white shadow-[0_2px_14px_-10px_rgba(0,0,0,0.35)]">
+        <div className="mx-auto grid h-[72px] max-w-[1200px] grid-cols-[auto_1fr_auto] items-center gap-3 px-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+          {/* Kiri: nav desktop / hamburger mobile */}
+          <div className="flex items-center">
+            <button
+              type="button"
+              className="md:hidden"
+              aria-label="Buka menu"
+              onClick={() => setMobileOpen((v) => !v)}
+            >
+              {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
+
+            <nav className="hidden items-center gap-4 md:flex lg:gap-5">
+              {menu.slice(0, 3).map((item) => (
+                <div
+                  key={item.id}
+                  className="relative"
+                  onMouseEnter={() => item.type === 'mega' && setOpenMenu(item.id)}
+                  onMouseLeave={() => item.type === 'mega' && setOpenMenu(null)}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (item.type === 'mega') setOpenMenu((v) => (v === item.id ? null : item.id));
+                      else if (item.page) onNavigate(item.page);
+                    }}
+                    className={cx(
+                      'flex items-center gap-1 whitespace-nowrap py-6 text-[11px] font-semibold uppercase tracking-[0.04em] transition-colors lg:text-[12px]',
+                      openMenu === item.id ? 'text-[#F0B300]' : 'text-[#111] hover:text-[#F0B300]'
+                    )}
+                  >
+                    {item.label}
+                    {item.type === 'mega' && <ChevronDown size={12} />}
+                  </button>
+                </div>
+              ))}
+            </nav>
+          </div>
+
+          {/* Tengah: logo */}
+          <button type="button" onClick={() => onNavigate('home')} className="flex flex-col items-center leading-none">
+            {logo ? (
+              <img src={logo} alt={config.brand.name} className="h-11 w-auto object-contain" />
+            ) : (
+              <span className="text-[24px] font-bold tracking-tight text-[#111] md:text-[27px]">
+                {config.brand.name.split(' ')[0]}
+                <span className="text-[#F0B300]">{config.brand.name.split(' ').slice(1).join(' ')}</span>
+              </span>
+            )}
+            <span className="mt-1 text-[8px] font-medium uppercase tracking-[0.24em] text-slate-500 md:text-[9px]">
+              {config.brand.tagline}
+            </span>
+          </button>
+
+          {/* Kanan: nav + search */}
+          <div className="flex items-center justify-end gap-4">
+            <nav className="hidden items-center gap-3 md:flex lg:gap-4">
+              {menu.slice(3).map((item) => (
+                <div
+                  key={item.id}
+                  className="relative"
+                  onMouseEnter={() => item.type === 'mega' && setOpenMenu(item.id)}
+                  onMouseLeave={() => item.type === 'mega' && setOpenMenu(null)}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (item.type === 'mega') setOpenMenu((v) => (v === item.id ? null : item.id));
+                      else if (item.page) onNavigate(item.page);
+                    }}
+                    className={cx(
+                      'flex items-center gap-1 whitespace-nowrap py-6 text-[11px] font-semibold uppercase tracking-[0.04em] transition-colors lg:text-[12px]',
+                      openMenu === item.id ? 'text-[#F0B300]' : 'text-[#111] hover:text-[#F0B300]'
+                    )}
+                  >
+                    {item.label}
+                    {item.type === 'mega' && <ChevronDown size={12} />}
+                  </button>
+                </div>
+              ))}
+            </nav>
+
+            <form
+              onSubmit={submitSearch}
+              className="hidden h-9 items-center gap-2 rounded-full border border-[#FFC20D] px-3 lg:flex"
+            >
+              <Search size={14} className="text-[#F0B300]" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Cari Produk"
+                className="w-24 bg-transparent text-[12px] text-[#111] outline-none placeholder:text-slate-400"
+              />
+            </form>
+            <button type="button" className="lg:hidden" aria-label="Cari" onClick={() => onNavigate('products')}>
+              <Search size={20} />
+            </button>
+          </div>
+        </div>
+
+        {/* Mega menu panel */}
+        {menu
+          .filter((m) => m.type === 'mega' && m.columns && m.columns.length > 0)
+          .map((item) => (
+            <div
+              key={item.id}
+              className={cx(
+                'absolute left-0 right-0 top-full border-t border-slate-100 bg-white shadow-[0_24px_40px_-24px_rgba(0,0,0,0.4)] transition-all',
+                openMenu === item.id ? 'visible opacity-100' : 'invisible -translate-y-1 opacity-0'
+              )}
+              onMouseEnter={() => setOpenMenu(item.id)}
+              onMouseLeave={() => setOpenMenu(null)}
+            >
+              <div className="mx-auto grid max-w-[1200px] grid-cols-2 gap-8 px-4 py-8 md:grid-cols-4">
+                {item.columns!.map((col) => (
+                  <div key={col.id}>
+                    <p className="mb-3 text-[12px] font-bold uppercase tracking-wider text-[#111]">{col.heading}</p>
+                    <ul className="space-y-2">
+                      {col.links.map((link) => (
+                        <li key={link.id}>
+                          <button
+                            type="button"
+                            onClick={() => handleMegaLink(link)}
+                            className="text-left text-[13px] text-slate-600 transition-colors hover:text-[#F0B300]"
+                          >
+                            {link.label}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+      </div>
+
+      {/* Drawer mobile */}
+      {mobileOpen && (
+        <div className="border-b border-slate-200 bg-white md:hidden">
+          <div className="max-h-[70vh] overflow-y-auto px-4 py-2">
+            {menu.map((item) => (
+              <div key={item.id} className="border-b border-slate-100 py-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (item.type === 'mega') setMobileExpanded((v) => (v === item.id ? null : item.id));
+                    else if (item.page) {
+                      onNavigate(item.page);
+                      setMobileOpen(false);
+                    }
+                  }}
+                  className="flex w-full items-center justify-between py-3 text-[12px] font-semibold uppercase tracking-wide"
+                >
+                  {item.label}
+                  {item.type === 'mega' && (
+                    <ChevronDown
+                      size={14}
+                      className={cx('transition-transform', mobileExpanded === item.id && 'rotate-180')}
+                    />
+                  )}
+                </button>
+                {item.type === 'mega' && mobileExpanded === item.id && (
+                  <div className="pb-3">
+                    {item.columns?.map((col) => (
+                      <div key={col.id} className="mb-3">
+                        <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                          {col.heading}
+                        </p>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                          {col.links.map((link) => (
+                            <button
+                              key={link.id}
+                              type="button"
+                              onClick={() => handleMegaLink(link)}
+                              className="text-left text-[12px] text-slate-600"
+                            >
+                              {link.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                setMobileOpen(false);
+                onOpenLogin();
+              }}
+              className="my-3 w-full rounded-full bg-[#111] py-2.5 text-[12px] font-semibold text-white"
+            >
+              {currentUser ? 'Buka Aplikasi' : 'Masuk'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Header seksi                                                              */
+/* -------------------------------------------------------------------------- */
+const SectionTitle: React.FC<{ children: React.ReactNode; className?: string; subtitle?: string }> = ({
+  children,
+  className,
+  subtitle,
+}) => (
+  <div className={cx('text-center', className)}>
+    <h2 className="text-[18px] font-bold uppercase tracking-[0.02em] text-[#111] md:text-[22px]">{children}</h2>
+    {subtitle && <p className="mx-auto mt-2 max-w-[640px] text-[13px] leading-relaxed text-slate-500">{subtitle}</p>}
+  </div>
+);
+
+/* -------------------------------------------------------------------------- */
+/*  Seksi kategori                                                            */
+/* -------------------------------------------------------------------------- */
+const CategorySection: React.FC<{
+  categories: LandingCategoryGroup[];
+  onOpenCard: (card: LandingCategoryCard, group: LandingCategoryGroup) => void;
+}> = ({ categories, onOpenCard }) => {
+  const [activeKey, setActiveKey] = useState(categories[0]?.key || '');
+  const scroller = useScroller();
+
+  useEffect(() => {
+    if (!categories.some((c) => c.key === activeKey)) setActiveKey(categories[0]?.key || '');
+  }, [categories, activeKey]);
+
+  const group = categories.find((c) => c.key === activeKey) || categories[0];
+  if (!group) return null;
+
+  return (
+    <section className="mx-auto max-w-[1200px] px-4 pt-2">
+      <div className="flex justify-center gap-8 overflow-x-auto border-b border-slate-200 [scrollbar-width:none]">
+        {categories.map((cat) => (
+          <button
+            key={cat.id}
+            type="button"
+            onClick={() => setActiveKey(cat.key)}
+            className={cx(
+              'shrink-0 border-b-2 pb-3 pt-4 text-[15px] font-medium uppercase tracking-wide transition-colors',
+              cat.key === activeKey
+                ? 'border-[#F0B300] font-bold text-[#F0B300]'
+                : 'border-transparent text-slate-500 hover:text-[#111]'
+            )}
+          >
+            {cat.title}
+          </button>
+        ))}
+      </div>
+
+      <div className="py-8 text-center">
+        <h2 className="text-[15px] font-bold text-[#111] md:text-[17px]">{group.heading}</h2>
+        <p className="mx-auto mt-2 max-w-[680px] text-[12.5px] leading-relaxed text-slate-500">{group.description}</p>
+      </div>
+
+      <div className="relative pb-10">
+        <div
+          ref={scroller.ref}
+          className="flex snap-x snap-mandatory gap-5 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {group.cards
+            .filter((c) => c.isActive)
+            .map((card) => (
               <button
-                key={i}
+                key={card.id}
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onChangeIndex(i);
-                }}
-                className={`shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
-                  i === index ? 'border-emerald-400 ring-2 ring-emerald-400/30' : 'border-white/20 opacity-60 hover:opacity-100'
-                }`}
+                onClick={() => onOpenCard(card, group)}
+                className="group relative w-[68%] shrink-0 snap-start overflow-hidden rounded-lg bg-[#F5F2ED] sm:w-[42%] md:w-[calc((100%-40px)/3)]"
+                style={{ aspectRatio: '9 / 16' }}
               >
-                <img src={img.src} alt={img.title} className="w-full h-full object-cover" />
+                <Frame src={card.imageUrl} alt={card.label} label={card.label} imgClassName="transition-transform duration-500 group-hover:scale-[1.04]" />
+                <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-transparent" />
+                {card.imageUrl && (
+                  <span className="absolute right-3 top-3 text-right text-[13px] font-medium uppercase leading-tight text-white drop-shadow-md md:text-[14px]">
+                    {card.label}
+                  </span>
+                )}
+              </button>
+            ))}
+        </div>
+        <ScrollArrows onPrev={scroller.prev} onNext={scroller.next} />
+      </div>
+    </section>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Template design                                                           */
+/* -------------------------------------------------------------------------- */
+const TemplateSection: React.FC<{
+  config: LandingPageConfig;
+  onOpen: (index: number) => void;
+}> = ({ config, onOpen }) => {
+  const promos = config.templatePromos.filter((p) => p.isActive);
+  if (promos.length === 0) return null;
+
+  return (
+    <section className="mx-auto max-w-[1200px] px-4 py-6">
+      <SectionTitle className="mb-6">Produk Template Design</SectionTitle>
+      <div className="grid gap-5 md:grid-cols-2">
+        {promos.map((promo, i) => (
+          <button
+            key={promo.id}
+            type="button"
+            onClick={() => onOpen(i)}
+            className="group relative overflow-hidden rounded-xl bg-slate-900 text-left"
+            style={{ aspectRatio: '16 / 8' }}
+          >
+            <Frame src={promo.imageUrl} alt={promo.title} label={promo.title} dark bare imgClassName="transition-transform duration-500 group-hover:scale-[1.04]" />
+            <div className="absolute inset-0 bg-gradient-to-tr from-black/70 via-black/25 to-transparent" />
+            <div className="absolute inset-0 flex flex-col justify-center px-7 md:px-9">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/85">{promo.eyebrow}</p>
+              <p className="mt-2 max-w-[280px] whitespace-pre-line text-[19px] font-semibold leading-tight text-white md:text-[24px]">
+                {promo.title}
+              </p>
+              <span className="mt-4 flex w-fit items-center gap-2 rounded-full border border-white/80 px-5 py-1.5 text-[12px] font-semibold text-white transition-colors group-hover:bg-white group-hover:text-[#111]">
+                {promo.ctaText} <ArrowRight size={13} />
+              </span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Problem customer                                                          */
+/* -------------------------------------------------------------------------- */
+const ProblemSection: React.FC<{ config: LandingPageConfig; onConsult: () => void }> = ({ config, onConsult }) => {
+  const problem = config.problem;
+  const left = problem.points.filter((p) => p.side === 'left');
+  const right = problem.points.filter((p) => p.side === 'right');
+
+  const Point: React.FC<{ text: string; align: 'left' | 'right' }> = ({ text, align }) => (
+    <div className={cx('flex items-start gap-2', align === 'right' && 'md:flex-row-reverse md:text-right')}>
+      <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+      <p className="text-[12.5px] leading-snug text-slate-600">{text}</p>
+    </div>
+  );
+
+  return (
+    <section className="mx-auto max-w-[1200px] px-4 py-12">
+      <SectionTitle className="mb-8" subtitle="Kami memahami tantangan yang sering dihadapi saat mencetak kebutuhan brand Anda.">
+        {problem.title}
+      </SectionTitle>
+
+      <div className="grid items-center gap-8 md:grid-cols-[1fr_1.1fr_1fr]">
+        <div className="order-2 space-y-5 md:order-1">
+          {left.map((p) => (
+            <Point key={p.id} text={p.text} align="left" />
+          ))}
+        </div>
+
+        <div className="order-1 mx-auto w-full max-w-[420px] md:order-2">
+          <div className="relative aspect-square w-full overflow-hidden rounded-2xl" style={{ backgroundColor: CREAM }}>
+            <Frame src={problem.imageUrl} alt="Ilustrasi problem customer" label="Ilustrasi Problem Customer" />
+          </div>
+        </div>
+
+        <div className="order-3 space-y-5">
+          {right.map((p) => (
+            <Point key={p.id} text={p.text} align="right" />
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+        <button
+          type="button"
+          onClick={onConsult}
+          className="rounded-full bg-[#5CE65C] px-9 py-3 text-[14px] font-bold text-[#111] shadow-[0_4px_0_0_#111] transition-transform hover:-translate-y-0.5 active:translate-y-0 active:shadow-[0_2px_0_0_#111]"
+        >
+          {problem.primaryCtaText}
+        </button>
+        <button
+          type="button"
+          onClick={onConsult}
+          className="flex items-center gap-2 rounded-full bg-[#FFD84D] px-9 py-3 text-[14px] font-bold text-[#111] shadow-[0_4px_0_0_#111] transition-transform hover:-translate-y-0.5 active:translate-y-0 active:shadow-[0_2px_0_0_#111]"
+        >
+          <Download size={15} /> {problem.secondaryCtaText}
+        </button>
+      </div>
+    </section>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Mengapa kami (statistik)                                                  */
+/* -------------------------------------------------------------------------- */
+const StatsSection: React.FC<{ stats: LandingPageConfig['stats']; about: LandingPageConfig['about'] }> = ({ stats, about }) => {
+  const items = stats.filter((s) => s.isActive);
+  if (items.length === 0) return null;
+
+  return (
+    <section style={{ backgroundColor: CREAM }} className="py-14">
+      <div className="mx-auto max-w-[1200px] px-4">
+        <SectionTitle className="mb-10">Mengapa Bejo Stiker?</SectionTitle>
+        <div className="grid items-center gap-10 md:grid-cols-2">
+          <div className="relative overflow-hidden rounded-2xl bg-slate-900" style={{ aspectRatio: '16 / 9' }}>
+            {about.imageUrl ? (
+              <img src={about.imageUrl} alt={about.imageCaption || 'Profil perusahaan'} className="h-full w-full object-cover" />
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white/70">
+                <span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/40">
+                  <Play size={20} />
+                </span>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.22em]">Video Profil</span>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-7">
+            {items.map((stat) => (
+              <div key={stat.id} className="flex items-start gap-5">
+                <div className="flex h-[74px] w-[74px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-300 bg-white">
+                  {stat.iconUrl ? (
+                    <img src={stat.iconUrl} alt={stat.label} className="h-full w-full object-cover" />
+                  ) : (
+                    <Sparkles size={26} className="text-[#F0B300]" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-[28px] font-semibold leading-none text-[#111] md:text-[32px]">{stat.value}</p>
+                  <p className="mt-1 text-[13px] font-semibold text-[#111]">{stat.label}</p>
+                  <p className="mt-1 max-w-[420px] text-[12.5px] leading-relaxed text-slate-500">{stat.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Fasilitas produksi                                                        */
+/* -------------------------------------------------------------------------- */
+const FacilitiesSection: React.FC<{ facilities: LandingPageConfig['facilities'] }> = ({ facilities }) => {
+  const items = facilities.filter((f) => f.isActive);
+  if (items.length === 0) return null;
+
+  return (
+    <section className="mx-auto max-w-[1200px] px-4 py-14">
+      <SectionTitle className="mb-8" subtitle="Didukung mesin produksi sendiri untuk hasil presisi dan pengerjaan tepat waktu.">
+        Fasilitas Produksi Lengkap
+      </SectionTitle>
+      <div className={cx('grid gap-5 sm:grid-cols-2', items.length >= 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3')}>
+        {items.map((item) => (
+          <div key={item.id} className="overflow-hidden rounded-xl bg-[#F5F2ED]">
+            <div className="relative" style={{ aspectRatio: '4 / 3' }}>
+              <Frame src={item.imageUrl} alt={item.title} label={item.title} />
+            </div>
+            <p className="px-4 py-3 text-[13px] font-semibold text-[#111]">{item.title}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Klien kami                                                                */
+/* -------------------------------------------------------------------------- */
+const ClientsSection: React.FC<{ clients: LandingPageConfig['clients'] }> = ({ clients }) => {
+  const items = clients.filter((c) => c.isActive);
+  const scroller = useScroller();
+  if (items.length === 0) return null;
+
+  return (
+    <section style={{ backgroundColor: CREAM }} className="py-14">
+      <div className="mx-auto max-w-[1200px] px-4">
+        <SectionTitle className="mb-8">Klien Kami</SectionTitle>
+        <div className="relative">
+          <div ref={scroller.ref} className="flex gap-5 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {items.map((client) => (
+              <a
+                key={client.id}
+                href={client.websiteUrl || undefined}
+                target={client.websiteUrl ? '_blank' : undefined}
+                rel={client.websiteUrl ? 'noreferrer' : undefined}
+                className="flex h-[92px] w-[92px] shrink-0 items-center justify-center rounded-xl bg-white p-3 shadow-sm transition-transform hover:-translate-y-0.5"
+                title={client.name}
+              >
+                {client.logoUrl ? (
+                  <img src={client.logoUrl} alt={client.name} className="max-h-full max-w-full object-contain" />
+                ) : (
+                  <span className="text-center text-[10px] font-bold uppercase leading-tight text-slate-500">{client.name}</span>
+                )}
+              </a>
+            ))}
+          </div>
+          <ScrollArrows onPrev={scroller.prev} onNext={scroller.next} />
+        </div>
+      </div>
+    </section>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Testimoni                                                                 */
+/* -------------------------------------------------------------------------- */
+const TestimonialsSection: React.FC<{ testimonials: LandingPageConfig['testimonials'] }> = ({ testimonials }) => {
+  const items = testimonials.filter((t) => t.isActive);
+  if (items.length === 0) return null;
+
+  return (
+    <section className="mx-auto max-w-[1200px] px-4 py-14">
+      <SectionTitle className="mb-8">Apa Kata Mereka?</SectionTitle>
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {items.map((t) => (
+          <div key={t.id} className="flex h-full flex-col rounded-xl p-6" style={{ backgroundColor: CREAM }}>
+            <Quote size={26} className="text-[#F0B300]" />
+            <div className="mt-3 flex gap-0.5">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Star key={i} size={13} className="fill-[#FFC20D] text-[#FFC20D]" />
+              ))}
+            </div>
+            <p className="mt-3 flex-1 text-[12.5px] leading-relaxed text-slate-600">{t.quote}</p>
+            <div className="mt-5 flex items-center gap-3 border-t border-slate-200 pt-4">
+              <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-white">
+                {t.logoUrl ? (
+                  <img src={t.logoUrl} alt={t.company} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-[12px] font-bold text-[#F0B300]">{t.author.charAt(0)}</span>
+                )}
+              </div>
+              <div>
+                <p className="text-[12px] font-bold text-[#111]">{t.author}</p>
+                <p className="text-[11px] text-slate-500">
+                  {t.role}
+                  {t.company ? ` · ${t.company}` : ''}
+                </p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Blog                                                                      */
+/* -------------------------------------------------------------------------- */
+const BlogSection: React.FC<{ posts: LandingBlogPost[]; onOpen: (post: LandingBlogPost) => void }> = ({ posts, onOpen }) => {
+  const items = posts.filter((p) => p.isActive);
+  if (items.length === 0) return null;
+
+  return (
+    <section className="mx-auto max-w-[1200px] px-4 pb-14">
+      <SectionTitle className="mb-8" subtitle="Tips, panduan, dan inspirasi seputar dunia cetak untuk bisnis Anda.">
+        Blog
+      </SectionTitle>
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {items.map((post) => (
+          <button
+            key={post.id}
+            type="button"
+            onClick={() => onOpen(post)}
+            className="group relative overflow-hidden rounded-xl bg-slate-900 text-left"
+            style={{ aspectRatio: '16 / 11' }}
+          >
+            <Frame src={post.imageUrl} alt={post.title} label={post.title} dark bare imgClassName="transition-transform duration-500 group-hover:scale-[1.04]" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 p-5">
+              <p className="line-clamp-2 text-[16px] font-semibold leading-snug text-white md:text-[17px]">{post.title}</p>
+              <span className="mt-3 flex w-fit items-center gap-2 rounded-full border border-white/70 px-4 py-1.5 text-[11px] font-semibold text-white transition-colors group-hover:bg-white group-hover:text-[#111]">
+                Lihat Artikel <ArrowRight size={12} />
+              </span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*  FAQ                                                                       */
+/* -------------------------------------------------------------------------- */
+const FaqSection: React.FC<{ faqs: LandingFaqItem[] }> = ({ faqs }) => {
+  const items = faqs.filter((f) => f.isActive);
+  const [open, setOpen] = useState<string | null>(items[0]?.id ?? null);
+  if (items.length === 0) return null;
+
+  return (
+    <section className="mx-auto max-w-[1200px] px-4 py-14">
+      <SectionTitle className="mb-8">Frequently Asked Question (FAQ)</SectionTitle>
+      <div className="mx-auto max-w-[820px]">
+        {items.map((faq) => {
+          const isOpen = open === faq.id;
+          return (
+            <div key={faq.id} className="border-b border-slate-200">
+              <button
+                type="button"
+                onClick={() => setOpen(isOpen ? null : faq.id)}
+                className="flex w-full items-start justify-between gap-4 py-4 text-left"
+              >
+                <span className={cx('text-[13.5px] font-semibold', isOpen ? 'text-[#111]' : 'text-slate-700')}>
+                  {faq.question}
+                </span>
+                <span className="mt-0.5 shrink-0 text-[#F0B300]">
+                  {isOpen ? <Minus size={16} /> : <Plus size={16} />}
+                </span>
+              </button>
+              {isOpen && <p className="pb-4 pr-8 text-[12.5px] leading-relaxed text-slate-500">{faq.answer}</p>}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Footer                                                                    */
+/* -------------------------------------------------------------------------- */
+const Footer: React.FC<{
+  config: LandingPageConfig;
+  logo?: string;
+  onNavigate: (page: LandingPageKey, categoryKey?: string) => void;
+  onOpenSocial: (url: string) => void;
+}> = ({ config, logo, onNavigate, onOpenSocial }) => {
+  const socials = config.socials.filter((s) => s.isActive);
+  const wa = config.contact.whatsappNumber.replace(/[^0-9]/g, '');
+
+  const socialIcon = (label: string) => {
+    const l = label.toLowerCase();
+    if (l.includes('instagram')) return <Instagram size={16} />;
+    if (l.includes('tiktok')) return <Music2 size={16} />;
+    if (l.includes('facebook')) return <Facebook size={16} />;
+    if (l.includes('tokopedia')) return <Store size={16} />;
+    return <ShoppingBag size={16} />;
+  };
+
+  const blockLink = (link: { id: string; label: string; page?: LandingPageKey; categoryKey?: string }) => {
+    if (link.page) onNavigate(link.page);
+    else if (link.categoryKey) onNavigate('products', link.categoryKey);
+  };
+
+  return (
+    <footer className="border-t border-slate-200 bg-white pt-12">
+      <div className="mx-auto max-w-[1200px] px-4">
+        <div className="flex flex-col justify-between gap-6 md:flex-row md:items-center">
+          <div>
+            {logo ? (
+              <img src={logo} alt={config.brand.name} className="h-14 w-auto object-contain" />
+            ) : (
+              <p className="text-[26px] font-bold leading-none text-[#111]">
+                {config.brand.name.split(' ')[0]}
+                <span className="text-[#F0B300]">{config.brand.name.split(' ').slice(1).join(' ')}</span>
+              </p>
+            )}
+            <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.24em] text-slate-500">
+              {config.brand.tagline}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {socials.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => onOpenSocial(s.url)}
+                title={s.label}
+                aria-label={s.label}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-[#F5F2ED] text-[#111] transition-colors hover:bg-[#FFC20D]"
+              >
+                {socialIcon(s.label)}
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="mt-8 grid gap-5 border-y border-slate-200 py-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="flex items-start gap-3">
+            <Clock size={18} className="mt-0.5 shrink-0 text-[#F0B300]" />
+            <div>
+              <p className="text-[12px] font-bold text-[#111]">Jam Operasional</p>
+              <p className="mt-0.5 text-[11.5px] leading-snug text-slate-500">{config.contact.operatingHours}</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <MessageCircle size={18} className="mt-0.5 shrink-0 text-emerald-600" />
+            <div>
+              <p className="text-[12px] font-bold text-[#111]">WhatsApp</p>
+              <a
+                href={`https://wa.me/${wa}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-0.5 block text-[11.5px] text-slate-500 transition-colors hover:text-[#F0B300]"
+              >
+                {config.contact.phoneDisplay}
+              </a>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <MapPin size={18} className="mt-0.5 shrink-0 text-rose-500" />
+            <div>
+              <p className="text-[12px] font-bold text-[#111]">Kantor</p>
+              <p className="mt-0.5 text-[11.5px] leading-snug text-slate-500">{config.contact.storeAddress}</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <Factory size={18} className="mt-0.5 shrink-0 text-sky-600" />
+            <div>
+              <p className="text-[12px] font-bold text-[#111]">Pabrik</p>
+              <p className="mt-0.5 text-[11.5px] leading-snug text-slate-500">
+                {config.contact.factoryAddress || config.contact.storeAddress}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-8 py-10 sm:grid-cols-2 lg:grid-cols-5">
+          {config.footerColumns.map((col) => (
+            <div key={col.id}>
+              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">{col.heading}</p>
+              <div className="mt-3 space-y-4">
+                {col.blocks.map((block) => (
+                  <div key={block.id}>
+                    {block.title && <p className="mb-2 text-[12.5px] font-bold text-[#111]">{block.title}</p>}
+                    <ul className="space-y-1.5 border-l border-slate-200 pl-3">
+                      {block.links.map((link) => (
+                        <li key={link.id}>
+                          <button
+                            type="button"
+                            onClick={() => blockLink(link)}
+                            className="text-left text-[12px] text-slate-500 transition-colors hover:text-[#F0B300]"
+                          >
+                            {link.label}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t border-slate-200 py-5">
+        <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-2 px-4 text-[11px] text-slate-500 sm:flex-row">
+          <p>
+            © {new Date().getFullYear()} {config.brand.name}. {config.footerNote}
+          </p>
+          <p className="flex items-center gap-3">
+            <span>Syarat &amp; Ketentuan</span>
+            <span className="text-slate-300">|</span>
+            <span>Kebijakan Privasi</span>
+          </p>
+        </div>
+      </div>
+    </footer>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Page hero                                                                 */
+/* -------------------------------------------------------------------------- */
+const PageHero: React.FC<{ title: string; subtitle?: string; crumb: string; onHome: () => void }> = ({
+  title,
+  subtitle,
+  crumb,
+  onHome,
+}) => (
+  <section style={{ backgroundColor: CREAM }} className="border-b border-slate-200">
+    <div className="mx-auto max-w-[1200px] px-4 py-12 text-center md:py-16">
+      <div className="mb-3 flex items-center justify-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-500">
+        <button type="button" onClick={onHome} className="transition-colors hover:text-[#F0B300]">
+          Beranda
+        </button>
+        <span>/</span>
+        <span className="text-[#111]">{crumb}</span>
+      </div>
+      <h1 className="text-[24px] font-bold uppercase tracking-[0.02em] text-[#111] md:text-[32px]">{title}</h1>
+      {subtitle && <p className="mx-auto mt-3 max-w-[720px] text-[13px] leading-relaxed text-slate-500">{subtitle}</p>}
+    </div>
+  </section>
+);
+
+/* -------------------------------------------------------------------------- */
+/*  Lightbox                                                                  */
+/* -------------------------------------------------------------------------- */
+const Lightbox: React.FC<{
+  items: LightboxItem[];
+  index: number;
+  onClose: () => void;
+  onIndex: (i: number) => void;
+}> = ({ items, index, onClose, onIndex }) => {
+  const item = items[index];
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowRight') onIndex((index + 1) % items.length);
+      if (e.key === 'ArrowLeft') onIndex((index - 1 + items.length) % items.length);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [index, items.length, onClose, onIndex]);
+
+  if (!item) return null;
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4" onClick={onClose}>
+      <div className="relative w-full max-w-[860px]" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Tutup"
+          className="absolute -top-11 right-0 flex h-9 w-9 items-center justify-center rounded-full border border-white/40 text-white transition-colors hover:bg-white hover:text-[#111]"
+        >
+          <X size={18} />
+        </button>
+
+        <div className="overflow-hidden rounded-xl bg-white">
+          <div className="relative bg-slate-900" style={{ aspectRatio: '1 / 1' }}>
+            {item.src ? (
+              <img src={item.src} alt={item.title} className="h-full w-full object-contain" />
+            ) : (
+              <div className="flex h-full items-center justify-center text-white/60">
+                <ImageIcon size={40} />
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-4 px-5 py-4">
+            <p className="text-[14px] font-semibold text-[#111]">{item.title}</p>
+            <p className="text-[12px] text-slate-500">
+              {index + 1} / {items.length}
+            </p>
+          </div>
+        </div>
+
+        {items.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={() => onIndex((index - 1 + items.length) % items.length)}
+              aria-label="Sebelumnya"
+              className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-[#111] shadow-lg transition-colors hover:bg-white"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <button
+              type="button"
+              onClick={() => onIndex((index + 1) % items.length)}
+              aria-label="Berikutnya"
+              className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-[#111] shadow-lg transition-colors hover:bg-white"
+            >
+              <ChevronRight size={20} />
+            </button>
+          </>
         )}
       </div>
     </div>
   );
 };
 
-/* ============================================================
-   Halaman utama
-   ============================================================ */
+/* -------------------------------------------------------------------------- */
+/*  Halaman: Beranda                                                          */
+/* -------------------------------------------------------------------------- */
+const HomePage: React.FC<{
+  config: LandingPageConfig;
+  onNavigate: (page: LandingPageKey, categoryKey?: string) => void;
+  onOpenLightbox: (items: LightboxItem[], index: number) => void;
+}> = ({ config, onNavigate, onOpenLightbox }) => {
+  const categories = config.categories.filter((c) => c.isActive);
+  const wa = config.contact.whatsappNumber.replace(/[^0-9]/g, '');
+  const consult = () => window.open(`https://wa.me/${wa}`, '_blank');
+
+  const openCard = (card: LandingCategoryCard, group: LandingCategoryGroup) => {
+    const list = group.cards.filter((c) => c.isActive);
+    onOpenLightbox(
+      list.map((c) => ({ src: c.imageUrl || '', title: `${c.label} — ${group.title}` })),
+      Math.max(0, list.findIndex((c) => c.id === card.id))
+    );
+  };
+
+  return (
+    <>
+      <section className="mx-auto max-w-[1200px] px-4 pt-6">
+        <HeroSlider slides={config.slides.filter((s) => s.isActive)} onCta={() => onNavigate('products')} />
+      </section>
+
+      <section className="mx-auto max-w-[900px] px-4 py-9 text-center">
+        <h1 className="text-[17px] font-semibold uppercase leading-snug tracking-[0.01em] text-[#111] md:text-[24px]">
+          {config.hero.headline}
+        </h1>
+        <p className="mx-auto mt-3 max-w-[760px] text-[12.5px] leading-relaxed text-slate-500 md:text-[13.5px]">
+          {config.hero.subheadline}
+        </p>
+      </section>
+
+      <CategorySection categories={categories} onOpenCard={openCard} />
+
+      <TemplateSection
+        config={config}
+        onOpen={(i) => {
+          const promos = config.templatePromos.filter((p) => p.isActive);
+          onOpenLightbox(
+            promos.map((p) => ({ src: p.imageUrl || '', title: p.title })),
+            i
+          );
+        }}
+      />
+
+      <ProblemSection config={config} onConsult={consult} />
+      <StatsSection stats={config.stats} about={config.about} />
+      <FacilitiesSection facilities={config.facilities} />
+      <ClientsSection clients={config.clients} />
+      <TestimonialsSection testimonials={config.testimonials} />
+      <BlogSection posts={config.blogPosts} onOpen={(post) => onOpenLightbox([{ src: post.imageUrl || '', title: post.title }], 0)} />
+      <FaqSection faqs={config.faqs} />
+    </>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Halaman: Tentang Kami                                                     */
+/* -------------------------------------------------------------------------- */
+const AboutPage: React.FC<{
+  config: LandingPageConfig;
+  onNavigate: (page: LandingPageKey, categoryKey?: string) => void;
+  onOpenLightbox: (items: LightboxItem[], index: number) => void;
+}> = ({ config, onNavigate, onOpenLightbox }) => {
+  const about = config.about;
+  const gallery = config.gallery.filter((g) => g.isActive);
+
+  return (
+    <>
+      <PageHero title="Tentang Kami" subtitle={about.eyebrow} crumb="Tentang Kami" onHome={() => onNavigate('home')} />
+
+      <section className="mx-auto max-w-[1200px] px-4 py-14">
+        <div className="grid items-center gap-10 md:grid-cols-2">
+          <div className="relative overflow-hidden rounded-2xl" style={{ aspectRatio: '9 / 7' }}>
+            <Frame src={about.imageUrl} alt={about.imageCaption || 'Tentang kami'} label="Foto Workshop" />
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#F0B300]">{about.eyebrow}</p>
+            <h2 className="mt-2 text-[22px] font-bold leading-snug text-[#111] md:text-[28px]">{about.title}</h2>
+            <p className="mt-4 text-[13px] leading-relaxed text-slate-600">{about.intro}</p>
+            <div className="mt-5 space-y-3">
+              {about.paragraphs.map((p, i) => (
+                <p key={i} className="text-[12.5px] leading-relaxed text-slate-500">
+                  {p}
+                </p>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {about.stats.map((stat, i) => (
+            <div key={i} className="rounded-xl px-5 py-6 text-center" style={{ backgroundColor: CREAM }}>
+              <p className="text-[26px] font-semibold text-[#111]">{stat.value}</p>
+              <p className="mt-1 text-[12px] text-slate-500">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {gallery.length > 0 && (
+        <section style={{ backgroundColor: CREAM }} className="py-14">
+          <div className="mx-auto max-w-[1200px] px-4">
+            <SectionTitle className="mb-8">Dokumentasi Workshop</SectionTitle>
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              {gallery.map((item, i) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() =>
+                    onOpenLightbox(
+                      gallery.map((g) => ({ src: g.imageUrl || '', title: g.title })),
+                      i
+                    )
+                  }
+                  className="overflow-hidden rounded-xl bg-white text-left"
+                >
+                  <div className="relative" style={{ aspectRatio: '4 / 3' }}>
+                    <Frame src={item.imageUrl} alt={item.title} label={item.title} />
+                  </div>
+                  <div className="p-4">
+                    <p className="text-[12.5px] font-semibold text-[#111]">{item.title}</p>
+                    {item.description && <p className="mt-1 text-[11.5px] text-slate-500">{item.description}</p>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="mx-auto max-w-[1200px] px-4 py-14">
+        <div className="flex flex-col items-center justify-between gap-5 rounded-2xl bg-[#111] px-8 py-10 text-center md:flex-row md:text-left">
+          <div>
+            <p className="text-[18px] font-semibold text-white">{about.ctaText}</p>
+            <p className="mt-1 text-[12.5px] text-white/60">Tim kami siap membantu kebutuhan cetak Anda.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('contact')}
+            className="rounded-full bg-[#FFC20D] px-7 py-2.5 text-[13px] font-bold text-[#111] transition-transform hover:-translate-y-0.5"
+          >
+            Hubungi Kami
+          </button>
+        </div>
+      </section>
+    </>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Halaman: Produk                                                           */
+/* -------------------------------------------------------------------------- */
+const ProductsPage: React.FC<{
+  config: LandingPageConfig;
+  initialCategory?: string;
+  query: string;
+  onNavigate: (page: LandingPageKey, categoryKey?: string) => void;
+  onOpenLightbox: (items: LightboxItem[], index: number) => void;
+}> = ({ config, initialCategory, query, onNavigate, onOpenLightbox }) => {
+  const categories = config.categories.filter((c) => c.isActive);
+  const [active, setActive] = useState(initialCategory || 'all');
+
+  useEffect(() => {
+    setActive(initialCategory || 'all');
+  }, [initialCategory]);
+
+  const visibleGroups = categories.filter((c) => active === 'all' || c.key === active);
+  const q = query.trim().toLowerCase();
+
+  return (
+    <>
+      <PageHero
+        title={active === 'all' ? 'Produk Cetak Custom' : categories.find((c) => c.key === active)?.title || 'Produk'}
+        subtitle="Pilih kategori untuk melihat produk yang sesuai dengan kebutuhan bisnis Anda."
+        crumb="Produk"
+        onHome={() => onNavigate('home')}
+      />
+
+      <section className="mx-auto max-w-[1200px] px-4 py-10">
+        <div className="flex flex-wrap justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActive('all')}
+            className={cx(
+              'rounded-full border px-5 py-2 text-[12px] font-semibold uppercase tracking-wide transition-colors',
+              active === 'all'
+                ? 'border-[#F0B300] bg-[#FFC20D] text-[#111]'
+                : 'border-slate-200 text-slate-500 hover:border-[#F0B300]'
+            )}
+          >
+            Semua
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => setActive(cat.key)}
+              className={cx(
+                'rounded-full border px-5 py-2 text-[12px] font-semibold uppercase tracking-wide transition-colors',
+                active === cat.key
+                  ? 'border-[#F0B300] bg-[#FFC20D] text-[#111]'
+                  : 'border-slate-200 text-slate-500 hover:border-[#F0B300]'
+              )}
+            >
+              {cat.title}
+            </button>
+          ))}
+        </div>
+
+        {visibleGroups.map((group) => {
+          const cards = group.cards.filter((c) => c.isActive && (!q || c.label.toLowerCase().includes(q)));
+          if (cards.length === 0) return null;
+          return (
+            <div key={group.id} className="mt-12">
+              <div className="mb-5 text-center">
+                <h2 className="text-[15px] font-bold text-[#111] md:text-[17px]">{group.heading}</h2>
+                <p className="mx-auto mt-2 max-w-[680px] text-[12.5px] leading-relaxed text-slate-500">{group.description}</p>
+              </div>
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                {cards.map((card, i) => (
+                  <button
+                    key={card.id}
+                    type="button"
+                    onClick={() =>
+                      onOpenLightbox(
+                        cards.map((c) => ({ src: c.imageUrl || '', title: `${c.label} — ${group.title}` })),
+                        i
+                      )
+                    }
+                    className="group relative overflow-hidden rounded-lg bg-[#F5F2ED] text-left"
+                    style={{ aspectRatio: '9 / 16' }}
+                  >
+                    <Frame src={card.imageUrl} alt={card.label} label={card.label} imgClassName="transition-transform duration-500 group-hover:scale-[1.04]" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-transparent" />
+                    {card.imageUrl && (
+                      <span className="absolute right-3 top-3 text-right text-[13px] font-medium uppercase leading-tight text-white drop-shadow-md md:text-[14px]">
+                        {card.label}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+
+        {visibleGroups.every((g) => g.cards.filter((c) => c.isActive && (!q || c.label.toLowerCase().includes(q))).length === 0) && (
+          <p className="mt-16 text-center text-[13px] text-slate-500">Produk tidak ditemukan. Coba kata kunci lain.</p>
+        )}
+      </section>
+    </>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Halaman: Klien                                                            */
+/* -------------------------------------------------------------------------- */
+const ClientsPage: React.FC<{
+  config: LandingPageConfig;
+  onNavigate: (page: LandingPageKey, categoryKey?: string) => void;
+}> = ({ config, onNavigate }) => {
+  const clients = config.clients.filter((c) => c.isActive);
+
+  return (
+    <>
+      <PageHero
+        title="Klien Kami"
+        subtitle="Dipercaya oleh UMKM, brand lokal, hingga perusahaan yang rutin mencetak bersama kami."
+        crumb="Klien Kami"
+        onHome={() => onNavigate('home')}
+      />
+
+      <section className="mx-auto max-w-[1200px] px-4 py-14">
+        <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
+          {clients.map((client) => (
+            <div
+              key={client.id}
+              className="flex h-[130px] items-center justify-center rounded-xl border border-slate-100 bg-white p-5 shadow-sm"
+            >
+              {client.logoUrl ? (
+                <img src={client.logoUrl} alt={client.name} className="max-h-full max-w-full object-contain" />
+              ) : (
+                <span className="text-center text-[12px] font-bold uppercase tracking-wide text-slate-500">{client.name}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <TestimonialsSection testimonials={config.testimonials} />
+
+      <section className="mx-auto max-w-[1200px] px-4 pb-16">
+        <div className="flex flex-col items-center justify-between gap-5 rounded-2xl px-8 py-10 text-center md:flex-row md:text-left" style={{ backgroundColor: CREAM }}>
+          <div>
+            <p className="text-[18px] font-semibold text-[#111]">Ingin menjadi klien berikutnya?</p>
+            <p className="mt-1 text-[12.5px] text-slate-500">Konsultasikan kebutuhan cetak Anda hari ini.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('contact')}
+            className="rounded-full bg-[#111] px-7 py-2.5 text-[13px] font-bold text-white transition-transform hover:-translate-y-0.5"
+          >
+            Konsultasi Gratis
+          </button>
+        </div>
+      </section>
+    </>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Halaman: Kontak                                                           */
+/* -------------------------------------------------------------------------- */
+const ContactPage: React.FC<{
+  config: LandingPageConfig;
+  onNavigate: (page: LandingPageKey, categoryKey?: string) => void;
+}> = ({ config, onNavigate }) => {
+  const offices = config.offices.filter((o) => o.isActive);
+  const contact = config.contact;
+  const wa = contact.whatsappNumber.replace(/[^0-9]/g, '');
+
+  return (
+    <>
+      <PageHero
+        title="Kontak"
+        subtitle="Hubungi tim kami untuk konsultasi, penawaran, atau pertanyaan seputar layanan cetak."
+        crumb="Kontak"
+        onHome={() => onNavigate('home')}
+      />
+
+      <section className="mx-auto max-w-[1200px] px-4 py-14">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { icon: <MessageCircle size={20} />, title: 'WhatsApp', value: contact.phoneDisplay, href: `https://wa.me/${wa}` },
+            { icon: <Mail size={20} />, title: 'Email', value: contact.emailDisplay || '-', href: `mailto:${contact.emailDisplay || ''}` },
+            { icon: <MapPin size={20} />, title: 'Kantor', value: contact.storeAddress },
+            { icon: <Clock size={20} />, title: 'Jam Operasional', value: contact.operatingHours },
+          ].map((item, i) => (
+            <div key={i} className="rounded-xl border border-slate-100 p-5 shadow-sm">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full" style={{ backgroundColor: CREAM }}>
+                <span className="text-[#F0B300]">{item.icon}</span>
+              </span>
+              <p className="mt-3 text-[12px] font-bold uppercase tracking-wide text-slate-400">{item.title}</p>
+              {item.href ? (
+                <a href={item.href} target="_blank" rel="noreferrer" className="mt-1 block text-[13px] font-semibold text-[#111] hover:text-[#F0B300]">
+                  {item.value}
+                </a>
+              ) : (
+                <p className="mt-1 text-[13px] leading-snug text-[#111]">{item.value}</p>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-10 grid gap-8 md:grid-cols-2">
+          <div>
+            <h2 className="text-[16px] font-bold text-[#111]">Kantor &amp; Workshop</h2>
+            <div className="mt-4 space-y-3">
+              {offices.map((office) => (
+                <div key={office.id} className="rounded-xl border border-slate-100 p-4">
+                  <p className="text-[13px] font-bold text-[#111]">{office.name}</p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-slate-500">{office.address}</p>
+                  <p className="mt-1 text-[12px] text-slate-500">{office.phone}</p>
+                </div>
+              ))}
+              {contact.factoryAddress && (
+                <div className="rounded-xl border border-slate-100 p-4">
+                  <p className="text-[13px] font-bold text-[#111]">Pabrik / Workshop Produksi</p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-slate-500">{contact.factoryAddress}</p>
+                </div>
+              )}
+            </div>
+            {contact.googleMapsUrl && (
+              <a
+                href={contact.googleMapsUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#111] px-5 py-2 text-[12px] font-semibold text-white"
+              >
+                <MapPin size={14} /> Lihat di Google Maps <ExternalLink size={12} />
+              </a>
+            )}
+          </div>
+
+          <div className="rounded-2xl p-6" style={{ backgroundColor: CREAM }}>
+            <h2 className="text-[16px] font-bold text-[#111]">Kirim Pesan</h2>
+            <p className="mt-1 text-[12.5px] text-slate-500">
+              Isi detail kebutuhan Anda, kami akan membalas melalui WhatsApp.
+            </p>
+            <form
+              className="mt-4 space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const form = e.currentTarget as HTMLFormElement;
+                const data = new FormData(form);
+                const text = `Halo ${config.brand.name},%0A%0ANama: ${data.get('name')}%0AKebutuhan: ${data.get('need')}%0APesan: ${data.get('message')}`;
+                window.open(`https://wa.me/${wa}?text=${text}`, '_blank');
+              }}
+            >
+              <input
+                name="name"
+                required
+                placeholder="Nama Anda"
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[13px] outline-none focus:border-[#F0B300]"
+              />
+              <input
+                name="need"
+                required
+                placeholder="Kebutuhan cetak"
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[13px] outline-none focus:border-[#F0B300]"
+              />
+              <textarea
+                name="message"
+                rows={4}
+                required
+                placeholder="Tulis pesan Anda"
+                className="w-full resize-none rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[13px] outline-none focus:border-[#F0B300]"
+              />
+              <button
+                type="submit"
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-[#111] py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#F0B300] hover:text-[#111]"
+              >
+                Kirim via WhatsApp <ArrowRight size={14} />
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <FaqSection faqs={config.faqs} />
+    </>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Halaman: Blog                                                             */
+/* -------------------------------------------------------------------------- */
+const BlogPage: React.FC<{
+  config: LandingPageConfig;
+  onNavigate: (page: LandingPageKey, categoryKey?: string) => void;
+  onOpenLightbox: (items: LightboxItem[], index: number) => void;
+}> = ({ config, onNavigate, onOpenLightbox }) => {
+  const posts = config.blogPosts.filter((p) => p.isActive);
+
+  return (
+    <>
+      <PageHero
+        title="Inspirasi Cetak"
+        subtitle="Tips, panduan, dan inspirasi seputar dunia cetak untuk bisnis Anda."
+        crumb="Inspirasi Cetak"
+        onHome={() => onNavigate('home')}
+      />
+
+      <section className="mx-auto max-w-[1200px] px-4 py-14">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {posts.map((post, i) => (
+            <article key={post.id} className="overflow-hidden rounded-xl border border-slate-100 shadow-sm">
+              <div className="relative" style={{ aspectRatio: '16 / 10' }}>
+                <Frame src={post.imageUrl} alt={post.title} label={post.title} />
+              </div>
+              <div className="p-5">
+                <p className="text-[14px] font-semibold leading-snug text-[#111]">{post.title}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (post.url) window.open(post.url, '_blank');
+                    else onOpenLightbox([{ src: post.imageUrl || '', title: post.title }], i);
+                  }}
+                  className="mt-4 flex items-center gap-2 text-[12px] font-semibold text-[#F0B300]"
+                >
+                  Baca Artikel <ArrowRight size={13} />
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    </>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Komponen utama                                                            */
+/* -------------------------------------------------------------------------- */
 export const LandingPage: React.FC<LandingPageProps> = ({
-  config,
-  storeName = 'BEJO STIKER & DIGITAL PRINTING',
+  config: rawConfig,
   logoUrl,
   currentUser,
   onOpenLogin,
   onEnterApp,
-  onOpenDeveloperCms
+  embedded = false,
 }) => {
-  const [page, setPage] = useState<PageId>('home');
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [lightbox, setLightbox] = useState<{ items: LightboxImage[]; index: number } | null>(null);
+  const config = rawConfig;
+  const logo = config.brand?.logoUrl || logoUrl || undefined;
 
-  const [selectedBrandCategory, setSelectedBrandCategory] = useState<string>('all');
-  const [brandSearchQuery, setBrandSearchQuery] = useState<string>('');
+  const [route, setRoute] = useState<LandingRoute>({ page: 'home' });
+  const [query, setQuery] = useState('');
+  const [lightbox, setLightbox] = useState<{ items: LightboxItem[]; index: number } | null>(null);
+  const [showTop, setShowTop] = useState(false);
 
-  // Kalkulator harga
-  const [calcServiceType, setCalcServiceType] = useState<'meteran' | 'roll' | 'print' | 'laser'>('meteran');
-  const [calcBrand, setCalcBrand] = useState<string>('DECOFIX');
-  const [calcLengthMeters, setCalcLengthMeters] = useState<number>(3);
-  const [calcRollQty, setCalcRollQty] = useState<number>(1);
-  const [calcPrintArea, setCalcPrintArea] = useState<number>(2);
-  const [calcLaserArea, setCalcLaserArea] = useState<number>(600);
+  /* Font Quicksand khusus halaman publik */
+  useEffect(() => {
+    const id = 'bejo-landing-font-quicksand';
+    if (document.getElementById(id)) return;
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap';
+    document.head.appendChild(link);
+  }, []);
 
-  // Form kontak
-  const [formName, setFormName] = useState('');
-  const [formEmail, setFormEmail] = useState('');
-  const [formPhone, setFormPhone] = useState('');
-  const [formMessage, setFormMessage] = useState('');
+  /* Kembali ke atas saat pindah halaman */
+  useEffect(() => {
+    if (embedded) return;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [route.page, route.categoryKey, embedded]);
 
-  const about = config.about;
-  const activeSlides = useMemo(() => config.slides.filter((s) => s.isActive), [config.slides]);
-  const activeBrands = useMemo(() => config.brands.filter((b) => b.isActive), [config.brands]);
-  const activeProducts = useMemo(() => config.featuredProducts.filter((p) => p.isActive), [config.featuredProducts]);
-  const activeServices = useMemo(() => config.services.filter((s) => s.isActive), [config.services]);
-  const activeTestimonials = useMemo(() => config.testimonials.filter((t) => t.isActive), [config.testimonials]);
-  const activeClients = useMemo(() => config.clients.filter((c) => c.isActive), [config.clients]);
-  const activeGallery = useMemo(() => config.gallery.filter((g) => g.isActive), [config.gallery]);
-  const activeOffices = useMemo(() => config.offices.filter((o) => o.isActive), [config.offices]);
-  const activeSocials = useMemo(() => config.socials.filter((s) => s.isActive), [config.socials]);
+  useEffect(() => {
+    const onScroll = () => setShowTop(window.scrollY > 500);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
-  const filteredBrands = useMemo(() => {
-    return activeBrands.filter((b) => {
-      const matchCat = selectedBrandCategory === 'all' || b.category === selectedBrandCategory;
-      const matchSearch =
-        !brandSearchQuery.trim() ||
-        b.name.toLowerCase().includes(brandSearchQuery.toLowerCase()) ||
-        b.tagline.toLowerCase().includes(brandSearchQuery.toLowerCase()) ||
-        b.description.toLowerCase().includes(brandSearchQuery.toLowerCase());
-      return matchCat && matchSearch;
-    });
-  }, [activeBrands, selectedBrandCategory, brandSearchQuery]);
+  const navigate = useCallback((page: LandingPageKey, categoryKey?: string) => {
+    setRoute({ page, categoryKey });
+  }, []);
 
-  const goTo = (next: PageId, anchor?: string) => {
-    setPage(next);
-    setMobileNavOpen(false);
-    window.requestAnimationFrame(() => {
-      window.scrollTo({ top: 0 });
-      if (anchor) {
-        window.setTimeout(() => {
-          const el = document.getElementById(anchor);
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 120);
-      }
-    });
-  };
+  const openLightbox = useCallback((items: LightboxItem[], index: number) => {
+    setLightbox({ items, index });
+  }, []);
 
-  const openLightbox = (items: LightboxImage[], index: number) => setLightbox({ items, index });
+  const wa = config.contact.whatsappNumber.replace(/[^0-9]/g, '');
 
-  const handleBrandImageClick = (brand: LandingBrandItem) => {
-    if (!brand.imageUrl) return;
-    const items: LightboxImage[] = activeBrands
-      .filter((b) => b.imageUrl)
-      .map((b) => ({ src: b.imageUrl!, title: b.name, caption: b.tagline }));
-    const idx = items.findIndex((x) => x.src === brand.imageUrl);
-    if (idx >= 0) openLightbox(items, idx);
-    else openLightbox([{ src: brand.imageUrl!, title: brand.name, caption: brand.tagline }], 0);
-  };
-
-  const handleProductImageClick = (prod: LandingProductItem) => {
-    if (!prod.imageUrl) return;
-    const all = productGalleryImages;
-    const idx = all.findIndex((x) => x.src === prod.imageUrl);
-    if (idx >= 0) openLightbox(all, idx);
-    else
-      openLightbox(
-        [{ src: prod.imageUrl!, title: prod.name, caption: `${prod.brand} · ${prod.priceEstimated}` }],
-        0
-      );
-  };
-
-  const handleGalleryImageClick = (item: LandingGalleryItem) => {
-    if (!item.imageUrl) return;
-    const items = activeGallery
-      .filter((x) => x.imageUrl)
-      .map((x) => ({ src: x.imageUrl!, title: x.title, caption: x.description }));
-    const idx = items.findIndex((x) => x.src === item.imageUrl);
-    if (idx >= 0) openLightbox(items, idx);
-  };
-
-  // Kumpulan semua gambar produk & galeri (untuk lightbox next/prev lintas item)
-  const productGalleryImages = useMemo<LightboxImage[]>(
-    () =>
-      activeProducts
-        .filter((p) => p.imageUrl)
-        .map((p) => ({ src: p.imageUrl!, title: p.name, caption: `${p.brand} · ${p.priceEstimated}` }))
-        .concat(
-          activeGallery
-            .filter((g) => g.imageUrl)
-            .map((g) => ({ src: g.imageUrl!, title: g.title, caption: g.description }))
-        ),
-    [activeProducts, activeGallery]
-  );
-
-  /**************** WA Link Builder ****************/
-  const buildWa = (customText?: string) => {
-    const phone = config.contact.whatsappNumber.replace(/[^0-9]/g, '');
-    const cleanPhone = phone.startsWith('0') ? '62' + phone.slice(1) : phone;
-    const msg = encodeURIComponent(
-      customText ||
-        `${config.contact.whatsappMessageTemplate}\n\n*Estimasi Pesanan via Web ${storeName}:*\n• Layanan: ${calculatedEstimate.title}\n• Rincian: ${calculatedEstimate.detailNote}\n• Estimasi Harga: Rp ${calculatedEstimate.estimatedTotal.toLocaleString('id-ID')}\n\nMohon informasi ketersediaan stok & proses pemesanannya. Terima kasih!`
-    );
-    return `https://wa.me/${cleanPhone}?text=${msg}`;
-  };
-  const wa = buildWa;
-
-  /**************** Kalkulator harga (logika lama dipertahankan) ****************/
-  const calculatedEstimate = useMemo(() => {
-    let title = '';
-    let estimatedTotal = 0;
-    let detailNote = '';
-
-    if (calcServiceType === 'meteran') {
-      const pricePerMeter = calcBrand === 'ORACAL' ? 85000 : calcBrand === 'SAICHOLITE' ? 45000 : calcBrand === '3M' ? 95000 : 25000;
-      estimatedTotal = pricePerMeter * Math.max(1, calcLengthMeters);
-      title = `Stiker Vinyl ${calcBrand} (Meteran)`;
-      detailNote = `${calcLengthMeters} Meter x Rp ${pricePerMeter.toLocaleString('id-ID')} / meter`;
-    } else if (calcServiceType === 'roll') {
-      const pricePerRoll = calcBrand === 'ORACAL' ? 3200000 : calcBrand === 'DEREK' ? 1850000 : 265000;
-      estimatedTotal = pricePerRoll * Math.max(1, calcRollQty);
-      title = `Stiker Vinyl ${calcBrand} (Roll Utuh)`;
-      detailNote = `${calcRollQty} Roll x Rp ${pricePerRoll.toLocaleString('id-ID')} / roll (Grosir)`;
-    } else if (calcServiceType === 'print') {
-      const pricePerM2 = 75000;
-      estimatedTotal = pricePerM2 * Math.max(0.5, calcPrintArea);
-      title = 'Cetak Digital Printing Hi-Res (Vinyl + Laminasi)';
-      detailNote = `${calcPrintArea} m² x Rp ${pricePerM2.toLocaleString('id-ID')} / m²`;
-    } else {
-      const pricePerCm2 = 40;
-      estimatedTotal = Math.max(30000, pricePerCm2 * Math.max(100, calcLaserArea));
-      title = 'Jasa Laser Cutting Presisi (Akrilik / Plywood)';
-      detailNote = `${calcLaserArea} cm² x Rp ${pricePerCm2} / cm² (Min order Rp 30.000)`;
-    }
-
-    return { title, estimatedTotal, detailNote };
-  }, [calcServiceType, calcBrand, calcLengthMeters, calcRollQty, calcPrintArea, calcLaserArea]);
-
-  /**************** Form kontak → WhatsApp ****************/
-  const submitContactForm = (e: React.FormEvent) => {
-    e.preventDefault();
-    const text = `*Pertanyaan dari Website*\n\nNama: ${formName || '-'}\nEmail: ${formEmail || '-'}\nNo. Telepon: ${formPhone || '-'}\n\nPertanyaan:${formMessage || '-'}\n\nTerima kasih!`;
-    const phone = config.contact.whatsappNumber.replace(/[^0-9]/g, '');
-    const cleanPhone = phone.startsWith('0') ? '62' + phone.slice(1) : phone;
-    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
-  };
-
-  /* ============================================================
-     RENDER
-     ============================================================ */
   return (
-    <div className="min-h-screen bg-white text-slate-800 font-sans selection:bg-indigo-600 selection:text-white">
-      {/* Pita pengumuman promo */}
-      {config.hero.bannerAnnouncement && (
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white text-[11px] sm:text-xs py-2 px-4 text-center font-medium tracking-wide border-b border-indigo-900/60 flex items-center justify-center gap-2">
-          <span>{config.hero.bannerAnnouncement}</span>
-        </div>
-      )}
+    <div className="bejo-landing min-h-screen bg-white text-[#111]" style={{ fontFamily: FONT_STACK }}>
+      <Header
+        config={config}
+        logo={logo}
+        currentUser={currentUser}
+        onNavigate={navigate}
+        onSearch={(q) => {
+          setQuery(q);
+          navigate('products');
+        }}
+        onOpenLogin={onOpenLogin}
+        onEnterApp={onEnterApp}
+      />
 
-      {/* Header navigasi utama */}
-      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-18 flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => goTo('home')}
-            className="flex items-center gap-3 cursor-pointer"
-          >
-            <StoreLogo size="md" rounded="rounded-xl" customLogoUrl={logoUrl} storeName={storeName} />
-            <div className="text-left">
-              <div className="text-sm sm:text-base font-black tracking-tight text-slate-900 leading-tight">
-                {storeName}
-              </div>
-              <div className="text-[9px] sm:text-[11px] font-bold text-indigo-700 tracking-wider uppercase">
-                Stiker Vinyl • Digital Printing • Laser Cutting
-              </div>
-            </div>
-          </button>
+      <main>
+        {route.page === 'home' && <HomePage config={config} onNavigate={navigate} onOpenLightbox={openLightbox} />}
+        {route.page === 'about' && <AboutPage config={config} onNavigate={navigate} onOpenLightbox={openLightbox} />}
+        {route.page === 'products' && (
+          <ProductsPage
+            config={config}
+            initialCategory={route.categoryKey}
+            query={query}
+            onNavigate={navigate}
+            onOpenLightbox={openLightbox}
+          />
+        )}
+        {route.page === 'clients' && <ClientsPage config={config} onNavigate={navigate} />}
+        {route.page === 'contact' && <ContactPage config={config} onNavigate={navigate} />}
+        {route.page === 'blog' && <BlogPage config={config} onNavigate={navigate} onOpenLightbox={openLightbox} />}
+      </main>
 
-          {/* Menu desktop */}
-          <nav className="hidden lg:flex items-center gap-6 text-xs font-bold text-slate-700">
-            {PAGE_MENUS.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => goTo(m.id)}
-                className={`py-1 transition-colors cursor-pointer border-b-2 ${
-                  page === m.id
-                    ? 'text-indigo-600 border-indigo-600'
-                    : 'text-slate-600 hover:text-indigo-600 border-transparent'
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </nav>
+      <Footer
+        config={config}
+        logo={logo}
+        onNavigate={navigate}
+        onOpenSocial={(url) => window.open(url, '_blank')}
+      />
 
-          <div className="flex items-center gap-2 sm:gap-3">
-            <a
-              href={wa('Halo Bejo Stiker! Saya ingin konsultasi stiker vinyl / kebutuhan cetak')}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold transition-all"
-            >
-              <MessageCircle className="w-4 h-4 text-emerald-600" />
-              <span>WhatsApp CS</span>
-            </a>
-
-            {currentUser ? (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onEnterApp}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-indigo-700 text-white text-xs font-bold shadow-md transition-all cursor-pointer active:scale-95"
-                >
-                  <span>Buka POS & SPK</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-                {currentUser.role === 'DEVELOPER' && onOpenDeveloperCms && (
-                  <button
-                    type="button"
-                    onClick={onOpenDeveloperCms}
-                    className="p-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition-all cursor-pointer"
-                    title="Edit Konten Landing Page (Khusus Developer)"
-                  >
-                    <Wrench className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={onOpenLogin}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black shadow-md transition-all cursor-pointer active:scale-95"
-              >
-                <LogIn className="w-4 h-4 text-emerald-400" />
-                <span>Login Sistem</span>
-              </button>
-            )}
-
-            {/* Hamburger mobile */}
+      {/* Aksi mengambang */}
+      {!embedded && (
+        <div className="fixed bottom-6 right-5 z-50 flex flex-col items-center gap-3">
+          {showTop && (
             <button
               type="button"
-              onClick={() => setMobileNavOpen((v) => !v)}
-              className="lg:hidden p-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 transition-all cursor-pointer"
-              aria-label="Menu navigasi"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              aria-label="Kembali ke atas"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FFC20D] text-[#111] shadow-lg transition-transform hover:-translate-y-0.5"
             >
-              {mobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              <ArrowUp size={18} />
             </button>
-          </div>
+          )}
+          <a
+            href={`https://wa.me/${wa}`}
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Chat WhatsApp"
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition-transform hover:-translate-y-0.5"
+          >
+            <MessageCircle size={22} />
+          </a>
         </div>
-
-        {/* Menu mobile */}
-        {mobileNavOpen && (
-          <div className="lg:hidden border-t border-slate-200 bg-white px-4 py-3 space-y-1 shadow-lg">
-            {PAGE_MENUS.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => goTo(m.id)}
-                className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                  page === m.id ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </header>
-
-      {/* ============================================================
-          HALAMAN: BERANDA
-     */}
-      {page === 'home' && (
-        <main>
-          {/* 1. Slider banner */}
-          <HeroSlider slides={activeSlides} />
-
-          {/* 2. Our Advantages */}
-          <section className="py-14 sm:py-20 bg-white border-b border-slate-100">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-              <SectionHeading
-                center
-                eyebrow="Our Advantages"
-                title="Solusi Stiker & Percetakan Terbaik"
-                desc="Melalui ketepatan waktu, teknologi canggih, dan kemudahan akses — kami memastikan setiap pesanan sesuai dengan permintaan pelanggan."
-              />
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {config.benefits.map((ben, idx) => (
-                  <div
-                    key={idx}
-                    className="group bg-slate-50 hover:bg-white rounded-2xl p-5 border border-slate-200 hover:border-indigo-300 hover:shadow-lg transition-all space-y-2.5"
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all">
-                      <Award className="w-5 h-5" />
-                    </div>
-                    <h4 className="text-sm font-black text-slate-900">{ben.title}</h4>
-                    <p className="text-xs text-slate-500 leading-relaxed">{ben.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* 3. About Us preview */}
-          <section className="py-14 sm:py-20 bg-slate-50/70 border-b border-slate-100">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
-              <div className="relative">
-                <div className="group rounded-3xl overflow-hidden border border-slate-200 shadow-xl">
-                  <SmartImage
-                    src={about.imageUrl}
-                    alt={about.imageCaption || 'Foto workshop kami'}
-                    className="w-full aspect-[4/3]"
-                  />
-                </div>
-                {activeGallery.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => goTo('about')}
-                    className="absolute -bottom-4 -right-2 sm:-right-4 px-4 py-2.5 rounded-2xl bg-white hover:bg-slate-900 hover:text-white border border-slate-200 shadow-lg text-[11px] font-black transition-all cursor-pointer flex items-center gap-1.5"
-                  >
-                    <Eye className="w-3.5 h-3.5 text-indigo-600" />
-                    Lihat Galeri Workshop
-                  </button>
-                )}
-              </div>
-
-              <div className="space-y-5">
-                <SectionHeading
-                  eyebrow={about.eyebrow}
-                  title={about.title}
-                  desc={about.intro}
-                />
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {about.stats.map((st, i) => (
-                    <div key={i} className="rounded-2xl bg-white border border-slate-200 p-3.5 shadow-xs text-center">
-                      <div className="text-lg sm:text-xl font-black text-indigo-700">{st.value}</div>
-                      <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mt-0.5">{st.label}</div>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={() => goTo('about')}
-                    className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-900 hover:bg-indigo-700 text-white text-xs font-black shadow-md transition-all cursor-pointer"
-                  >
-                    <span>Baca Selengkapnya</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                  <a
-                    href={wa('Halo! Saya ingin kenalan lebih lanjut dengan layanan BEJO Stiker.')}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 text-xs font-bold transition-all"
-                  >
-                    <MessageCircle className="w-4 h-4 text-emerald-600" />
-                    Sapa Kami
-                  </a>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* 4. Product showcase (4 pertama + tombol see all) */}
-          <section className="py-14 sm:py-20 bg-white border-b border-slate-100">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-              <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
-                <SectionHeading
-                  eyebrow="Product"
-                  title="Produk & Jasa Unggulan"
-                  desc="Klik foto produk untuk melihat detail gambar dengan jelas."
-                />
-                <button
-                  type="button"
-                  onClick={() => goTo('products')}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-900 hover:text-white text-slate-800 text-xs font-black transition-all cursor-pointer shrink-0"
-                >
-                  <span>Lihat Semua Produk</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                {activeProducts.slice(0, 4).map((prod) => (
-                  <ProductCard
-                    key={prod.id}
-                    prod={prod}
-                    wa={wa}
-                    onImageClick={() => handleProductImageClick(prod)}
-                  />
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* 5. Solusi percetakan lengkap (accordion) */}
-          <section className="py-14 sm:py-20 bg-slate-50/70 border-b border-slate-100">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="grid grid-cols-1 lg:grid-cols-[380px_minmax(0,1fr)] gap-8 lg:gap-12 items-start">
-                <div className="space-y-5 lg:sticky lg:top-24">
-                  <SectionHeading
-                    eyebrow="Solusi Percetakan Lengkap"
-                    title="Kebutuhan Cetak Ada di Satu Tempat"
-                    desc="Dari stiker vinyl meteran sampai packaging custom — semua diproduksi langsung di workshop kami."
-                  />
-                  <div className="group rounded-3xl overflow-hidden border border-slate-200 shadow-lg">
-                    <SmartImage
-                      src={activeGallery[0]?.imageUrl}
-                      alt={activeGallery[0]?.title || 'Workshop kami'}
-                      className="w-full aspect-[4/3]"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <SolutionsAccordion services={activeServices} wa={wa} />
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* 6. Testimoni */}
-          <section className="py-14 sm:py-20 bg-white border-b border-slate-100">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-              <SectionHeading
-                center
-                eyebrow="Testimoni"
-                title="Apa Kata Mereka"
-                desc="Dipercaya bengkel, toko stiker, agen, komunitas, hingga perusahaan."
-              />
-              <TestimonialSlider items={activeTestimonials} />
-            </div>
-          </section>
-
-          {/* 7. Logo klien */}
-          <section className="py-14 sm:py-16 bg-slate-50/70 border-b border-slate-100">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-              <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-3">
-                <SectionHeading eyebrow="Clients" title="Telah Dipercaya Oleh" />
-                <button
-                  type="button"
-                  onClick={() => goTo('clients')}
-                  className="inline-flex items-center gap-2 text-xs font-black text-indigo-700 hover:text-indigo-900 cursor-pointer"
-                >
-                  Lihat Klien & Testimoni Lengkap
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-                {activeClients.map((c) => (
-                  <div
-                    key={c.id}
-                    className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col items-center justify-center gap-2 hover:border-indigo-300 hover:shadow-md transition-all min-h-[92px]"
-                  >
-                    {c.logoUrl ? (
-                      <SmartImage src={c.logoUrl} alt={c.name} hoverZoom={false} className="w-12 h-12 object-contain" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400">
-                        <Building2 className="w-5 h-5" />
-                      </div>
-                    )}
-                    <span className="text-[10px] font-bold text-slate-600 text-center leading-tight">{c.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* 8. CTA strip */}
-          <section className="py-16 bg-slate-900 relative overflow-hidden">
-            <div className="absolute inset-0 opacity-30 [background-image:radial-gradient(circle_at_15%_30%,rgba(99,102,241,0.5),transparent_45%),radial-gradient(circle_at_85%_65%,rgba(16,185,129,0.4),transparent_40%)]" />
-            <div className="relative max-w-3xl mx-auto px-4 text-center space-y-5">
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight">
-                Punya Pertanyaan? Hubungi Kami
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-300 font-medium">
-                Tim marketing kami siap membantu memilih bahan terbaik, memberikan estimasi harga, dan menindaklanjuti pesanan Anda secepatnya.
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => goTo('contact')}
-                  className="inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-white text-slate-900 text-xs sm:text-sm font-black shadow-lg hover:bg-slate-100 transition-all cursor-pointer"
-                >
-                  <Send className="w-4 h-4 text-indigo-600" />
-                 Kirim Pesan via Website
-                </button>
-                <a
-                  href={wa('Halo! Saya ingin bertanya tentang produk & layanan.')}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs sm:text-sm font-black shadow-lg transition-all"
-                >
-                  <MessageCircle className="w-4 h-4" />
-                  Chat WhatsApp
-                </a>
-              </div>
-            </div>
-          </section>
-        </main>
       )}
 
-      {/* ============================================================
-          HALAMAN: TENTANG KAMI
-     */}
-      {page === 'about' && (
-        <main>
-          <PageHero title={about.title} eyebrow={about.eyebrow} subtitle={about.intro} />
-          <section className="py-14 sm:py-20 bg-white">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
-                <div className="space-y-6">
-                  <div className="group rounded-3xl overflow-hidden border border-slate-200 shadow-xl relative">
-                    <SmartImage src={about.imageUrl} alt={about.imageCaption || 'Workshop'} className="w-full aspect-[4/3]" />
-                    {about.imageCaption && (
-                      <div className="absolute bottom-0 inset-x-0 bg-slate-950/70 text-white text-[10px] sm:text-xs font-bold px-4 py-2 backdrop-blur-sm">
-                        {about.imageCaption}
-                      </div>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {about.stats.map((st, i) => (
-                      <div key={i} className="rounded-2xl bg-slate-50 border border-slate-200 p-3.5 text-center">
-                        <div className="text-lg font-black text-indigo-700">{st.value}</div>
-                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mt-0.5">{st.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-5">
-                  {about.paragraphs.map((p, i) => (
-                    <p key={i} className="text-sm text-slate-600 leading-relaxed">
-                      {p}
-                    </p>
-                  ))}
-                  <div className="pt-2">
-                    <a
-                      href={wa(`Halo! Berkenalan dengan ${storeName}, saya ingin tahu lebih banyak.`)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-900 hover:bg-indigo-700 text-white text-xs font-black shadow-md transition-all"
-                    >
-                      <span>{about.ctaText || 'Hubungi Kami'}</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </a>
-                  </div>
-                </div>
-              </div>
-
-              {/* Galeri workshop */}
-              {activeGallery.length > 0 && (
-                <div className="space-y-6">
-                  <SectionHeading
-                    eyebrow="Galeri"
-                    title="Dokumentasi Workshop & Produksi"
-                    desc="Klik thumbnail untuk melihat foto detail dengan jelas."
-                  />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {activeGallery.map((g) => (
-                      <div
-                        key={g.id}
-                        className={`group relative rounded-2xl overflow-hidden border border-slate-200 hover:shadow-lg transition-all ${
-                          g.imageUrl ? 'cursor-zoom-in' : ''
-                        }`}
-                        onClick={() => handleGalleryImageClick(g)}
-                      >
-                        <div className="relative aspect-[4/3] group">
-                          <SmartImage src={g.imageUrl} alt={g.title} className="w-full h-full absolute inset-0" />
-                        </div>
-                        <div className="p-3 bg-white group-hover:bg-slate-50 transition-colors">
-                          <div className="text-xs font-black text-slate-900 truncate">{g.title}</div>
-                          {g.description && (
-                            <div className="text-[10px] text-slate-500 truncate">{g.description}</div>
-                          )}
-                        </div>
-                        {g.imageUrl && (
-                          <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-slate-950/60 text-white hidden group-hover:flex items-center justify-center transition-all">
-                            <Eye className="w-4 h-4" />
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Nilai / keunggulan */}
-              <div className="space-y-6">
-                <SectionHeading center eyebrow="Nilai Kami" title="Mengapa Pelanggan Memilih Kami" />
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {config.benefits.map((ben, idx) => (
-                    <div key={idx} className="rounded-2xl bg-slate-50 border border-slate-200 p-5 space-y-2 hover:border-indigo-300 transition-all">
-                      <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600">
-                        <Award className="w-5 h-5" />
-                      </div>
-                      <h4 className="text-sm font-black text-slate-900">{ben.title}</h4>
-                      <p className="text-xs text-slate-500 leading-relaxed">{ben.description}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
-        </main>
-      )}
-
-      {/* ============================================================
-          HALAMAN: PRODUK & LAYANAN
-     */}
-      {page === 'products' && (
-        <main>
-          <PageHero
-            title="Produk, Merk & Layanan Produksi"
-            eyebrow="Product"
-            subtitle="Katalog lengkap merk stiker dunia tangan pertama, layanan digital printing & laser cutting, plus kalkulator estimasi harga instan."
-          />
-
-          {/* Katalog merk */}
-          <section id="katalog-merk" className="py-14 sm:py-20 bg-white border-b border-slate-100 scroll-mt-24">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-              <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                <SectionHeading
-                  eyebrow="Katalog Merk"
-                  title="Pilihan Merk Stiker Vinyl Dunia"
-                  desc="Klik foto merk untuk melihat detail gambar dengan jelas."
-                />
-                <div className="relative w-full md:w-72 shrink-0">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    value={brandSearchQuery}
-                    onChange={(e) => setBrandSearchQuery(e.target.value)}
-                    placeholder="Cari merk (Decofix, 3M, Oracal...)"
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 overflow-x-auto pb-2 text-xs font-bold scrollbar-none">
-                {[
-                  { v: 'all', label: `Semua Merk (${activeBrands.length})` },
-                  { v: 'wrapping', label: '🚗 Automotive Wrapping' },
-                  { v: 'cutting', label: '✂️ Cutting & Signage' },
-                  { v: 'reflective', label: '✨ Scotlite / Reflektif' },
-                  { v: 'protection', label: '🛡️ PPF & Protection' },
-                  { v: 'printing', label: '🖨️ Bahan Digital Print' },
-                  { v: 'general', label: '📦 Lainnya' },
-                ].map((c) => (
-                  <button
-                    key={c.v}
-                    type="button"
-                    onClick={() => setSelectedBrandCategory(c.v)}
-                    className={`px-4 py-2 rounded-xl transition-all shrink-0 cursor-pointer ${
-                      selectedBrandCategory === c.v
-                        ? 'bg-slate-900 text-white'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                    }`}
-                  >
-                    {c.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {filteredBrands.map((brand) => (
-                  <BrandCard
-                    key={brand.id}
-                    brand={brand}
-                    wa={wa}
-                    onImageClick={() => handleBrandImageClick(brand)}
-                  />
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* Layanan */}
-          <section id="layanan" className="py-14 sm:py-20 bg-slate-900 text-white scroll-mt-24">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
-              <SectionHeading
-                center
-                dark
-                eyebrow="Layanan Workshop Mandiri"
-                title="Digital Printing, Laser Cutting & Grosir Stiker"
-                desc="Didukung mesin produksi beresolusi tinggi milik sendiri untuk kecepatan pengerjaan maksimal."
-              />
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {activeServices.map((serv) => (
-                  <div
-                    key={serv.id}
-                    className="bg-slate-800/80 rounded-2xl p-6 border border-slate-700/80 flex flex-col hover:border-indigo-500 transition-all shadow-md"
-                  >
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center mb-4">
-                      {serv.iconName === 'printer' && <Printer className="w-6 h-6 text-indigo-400" />}
-                      {serv.iconName === 'scissors' && <Scissors className="w-6 h-6 text-indigo-400" />}
-                      {serv.iconName === 'package' && <Package className="w-6 h-6 text-indigo-400" />}
-                    </div>
-                    <h3 className="text-lg font-black tracking-tight mb-1">{serv.title}</h3>
-                    <div className="text-xs font-bold text-indigo-400 mb-3">{serv.subtitle}</div>
-                    <p className="text-xs text-slate-300 leading-relaxed mb-4">{serv.description}</p>
-                    <div className="space-y-2 mb-5">
-                      {serv.highlights.map((item, idx) => (
-                        <div key={idx} className="flex items-start gap-2 text-xs text-slate-300">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                          <span>{item}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <a
-                      href={wa(`Halo! Saya berminat order layanan: *${serv.title}*`)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-auto w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black transition-all flex items-center justify-center gap-2 shadow-md"
-                    >
-                      <span>{serv.ctaLabel || 'Order Layanan Ini'}</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </a>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* Produk unggulan dengan foto */}
-          <section id="produk-unggulan" className="py-14 sm:py-20 bg-white border-b border-slate-100 scroll-mt-24">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-              <SectionHeading
-                center
-                eyebrow="Katalog Produk Populer"
-                title="Produk & Layanan Favorit Pelanggan"
-                desc="Klik foto produk untuk popup detail yang jelas."
-              />
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {activeProducts.map((prod) => (
-                  <ProductCard
-                    key={prod.id}
-                    prod={prod}
-                    wa={wa}
-                    onImageClick={() => handleProductImageClick(prod)}
-                  />
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* Kalkulator */}
-          <section id="kalkulator" className="py-14 sm:py-20 bg-slate-100/80 scroll-mt-24">
-            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xl">
-                <div className="text-center space-y-2 mb-8">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold">
-                    <Calculator className="w-4 h-4 text-indigo-600" />
-                    <span>Simulasi Biaya Cepat</span>
-                  </div>
-                  <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                    Kalkulator Estimasi Harga
-                  </h2>
-                  <p className="text-xs sm:text-sm text-slate-500 font-medium">
-                    Pilih kebutuhan Anda untuk melihat perkiraan harga & konsultasi via WhatsApp.
-                  </p>
-                </div>
-
-                <div className="space-y-4 mb-6">
-                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider block">
-                    1. Pilih Kebutuhan Layanan / Produk:
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[
-                      { v: 'meteran', label: 'Stiker Meteran' },
-                      { v: 'roll', label: 'Roll Utuh (Grosir)' },
-                      { v: 'print', label: 'Digital Print' },
-                      { v: 'laser', label: 'Laser Cutting' },
-                    ].map((t) => (
-                      <button
-                        key={t.v}
-                        type="button"
-                        onClick={() => setCalcServiceType(t.v as typeof calcServiceType)}
-                        className={`p-3 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer ${
-                          calcServiceType === t.v
-                            ? 'bg-slate-900 text-white border-slate-900'
-                            : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                        }`}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                  {(calcServiceType === 'meteran' || calcServiceType === 'roll') && (
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Pilih Merk Stiker:</label>
-                      <select
-                        value={calcBrand}
-                        onChange={(e) => setCalcBrand(e.target.value)}
-                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="DECOFIX">DECOFIX (Super Gloss / Matte)</option>
-                        <option value="ORACAL">ORACAL 651 (German Quality)</option>
-                        <option value="DEREK">DEREK (Candy Chrome / Metallic)</option>
-                        <option value="CAR DIARY">CAR DIARY (Automotive Styling)</option>
-                        <option value="WT PREMIUM">WT PREMIUM (Color Wrap)</option>
-                        <option value="SAICHOLITE">SAICHOLITE (Reflektif Scotlite)</option>
-                        <option value="3M">3M (Scotchcal / Industrial)</option>
-                        <option value="NANO GARD">NANO GARD (PPF Pelindung)</option>
-                      </select>
-                    </div>
-                  )}
-
-                  {calcServiceType === 'meteran' && (
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Panjang Kebutuhan (Meter):</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={calcLengthMeters}
-                        onChange={(e) => setCalcLengthMeters(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                  )}
-
-                  {calcServiceType === 'roll' && (
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Jumlah Roll:</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={calcRollQty}
-                        onChange={(e) => setCalcRollQty(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                  )}
-
-                  {calcServiceType === 'print' && (
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Luas Cetak (m²):</label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        min="0.5"
-                        value={calcPrintArea}
-                        onChange={(e) => setCalcPrintArea(Math.max(0.5, parseFloat(e.target.value) || 0.5))}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                  )}
-
-                  {calcServiceType === 'laser' && (
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Luas Bidang Akrilik (cm²):</label>
-                      <input
-                        type="number"
-                        step="50"
-                        min="100"
-                        value={calcLaserArea}
-                        onChange={(e) => setCalcLaserArea(Math.max(100, parseInt(e.target.value) || 100))}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                  )}
-                </div>
-
-                <div className="bg-slate-900 text-white rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <div className="text-xs font-bold text-indigo-400">{calculatedEstimate.title}</div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">{calculatedEstimate.detailNote}</div>
-                    <div className="text-2xl sm:text-3xl font-black text-emerald-400 mt-1">
-                      Rp {calculatedEstimate.estimatedTotal.toLocaleString('id-ID')}
-                      <span className="text-xs font-normal text-slate-400 ml-1.5">(Perkiraan)</span>
-                    </div>
-                  </div>
-                  <a
-                    href={buildWa()}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs sm:text-sm shadow-md transition-all shrink-0"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    <span>Kirim Estimasi ke WhatsApp</span>
-                  </a>
-                </div>
-              </div>
-            </div>
-          </section>
-        </main>
-      )}
-
-      {/* ============================================================
-          HALAMAN: KLIEN & TESTIMONI
-     */}
-      {page === 'clients' && (
-        <main>
-          <PageHero
-            title="Klien & Testimoni Pelanggan"
-            eyebrow="Clients"
-            subtitle="Dipercaya bengkel variasi, toko stiker, agen, event organizer, komunitas, hingga perusahaan besar."
-          />
-          <section className="py-14 sm:py-20 bg-white">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-              <div className="space-y-8">
-                <SectionHeading center eyebrow="Testimoni" title="Pengalaman Pelanggan Kami" />
-                <div className="hidden lg:grid grid-cols-1 lg:grid-cols-3 gap-5">
-                  {activeTestimonials.map((t) => (
-                    <TestimonialCard key={t.id} t={t} />
-                  ))}
-                </div>
-                <div className="lg:hidden">
-                  <TestimonialSlider items={activeTestimonials} />
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                <SectionHeading center eyebrow="Clients" title="Logo & Nama Pelanggan" />
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                  {activeClients.map((c) => (
-                    <div
-                      key={c.id}
-                      className="bg-slate-50 hover:bg-white rounded-2xl border border-slate-200 p-4 flex flex-col items-center justify-center gap-2 hover:shadow-md transition-all min-h-[110px]"
-                    >
-                      {c.logoUrl ? (
-                        <SmartImage src={c.logoUrl} alt={c.name} hoverZoom={false} className="w-14 h-14 object-contain" />
-                      ) : (
-                        <div className="w-11 h-11 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400">
-                          <Building2 className="w-5 h-5" />
-                        </div>
-                      )}
-                      <span className="text-[11px] font-black text-slate-800 text-center">{c.name}</span>
-                      {c.websiteUrl && (
-                        <a
-                          href={c.websiteUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[10px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          Website
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="text-center">
-                <button
-                  type="button"
-                  onClick={() => goTo('contact')}
-                  className="inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-slate-900 hover:bg-indigo-700 text-white text-xs font-black shadow-md transition-all cursor-pointer"
-                >
-                  <span>Jadi Pelanggan Berikutnya</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </section>
-        </main>
-      )}
-
-      {/* ============================================================
-          HALAMAN: KONTAK
-     */}
-      {page === 'contact' && (
-        <main>
-          <PageHero
-            title="Punya Pertanyaan? Hubungi Kami"
-            eyebrow="Contact Us"
-            subtitle="Kirim pertanyaan lewat formulir (otomatis diteruskan ke WhatsApp), hubungi PIC cabang, atau kunjungi toko kami langsung."
-          />
-          <section className="py-14 sm:py-20 bg-white">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-8">
-                {/* Formulir */}
-                <div className="bg-white rounded-3xl border border-slate-200 shadow-md p-6 sm:p-8 space-y-4">
-                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                    <Send className="w-4 h-4 text-indigo-600" />
-                    Formulir Pertanyaan
-                  </h3>
-                  <form onSubmit={submitContactForm} className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-600 block mb-1">Nama *</label>
-                        <input
-                          type="text"
-                          required
-                          value={formName}
-                          onChange={(e) => setFormName(e.target.value)}
-                          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-600 block mb-1">Nomor Telepon</label>
-                        <div className="relative">
-                          <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="tel"
-                            value={formPhone}
-                            onChange={(e) => setFormPhone(e.target.value)}
-                            className="w-full pl-8 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-600 block mb-1">Email</label>
-                      <div className="relative">
-                        <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="email"
-                          value={formEmail}
-                          onChange={(e) => setFormEmail(e.target.value)}
-                          className="w-full pl-8 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-600 block mb-1">Pesan *</label>
-                      <textarea
-                        required
-                        rows={5}
-                        value={formMessage}
-                        onChange={(e) => setFormMessage(e.target.value)}
-                        placeholder="Tuliskan kebutuhan Anda: merk bahan, jumlah, deadline, dll."
-                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white resize-y"
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      className="w-full inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl bg-slate-900 hover:bg-indigo-700 text-white text-sm font-black shadow-md transition-all cursor-pointer active:scale-[0.98]"
-                    >
-                      <MessageCircle className="w-4 h-4 text-emerald-400" />
-                      Kirim Pertanyaan (via WhatsApp)
-                    </button>
-                  </form>
-                </div>
-
-                {/* Panel kontak */}
-                <div className="space-y-5">
-                  <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 text-white rounded-3xl p-6 border border-slate-800 shadow-xl space-y-3">
-                    <h3 className="text-sm font-black flex items-center gap-2">
-                      <PhoneCall className="w-4 h-4 text-emerald-400" />
-                      Kontak Cepat
-                    </h3>
-                    <a
-                      href={wa('Halo! Saya ingin bertanya via WhatsApp.')}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block text-2xl font-black text-emerald-400 hover:text-emerald-300 transition-colors"
-                    >
-                      {config.contact.phoneDisplay}
-                    </a>
-                    <div className="text-[11px] text-slate-400 font-medium leading-relaxed">
-                      {config.contact.operatingHours}
-                    </div>
-                    <div className="flex items-start gap-2 text-[11px] text-slate-300 pt-1">
-                      <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
-                      <span>{config.contact.storeAddress}</span>
-                    </div>
-                    {config.contact.googleMapsUrl && (
-                      <a
-                        href={config.contact.googleMapsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 mt-1 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[11px] font-bold transition-all"
-                      >
-                        <MapPin className="w-3.5 h-3.5" />
-                        Buka Google Maps
-                      </a>
-                    )}
-                  </div>
-
-                  {/* Cabang / kantor */}
-                  {activeOffices.length > 0 && (
-                    <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-5 space-y-4">
-                      <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                        <Building2 className="w-4 h-4 text-indigo-600" />
-                        Toko & Cabang
-                      </h3>
-                      {activeOffices.map((o) => (
-                        <div key={o.id} className="rounded-2xl bg-slate-50 border border-slate-200 p-3.5 space-y-1.5">
-                          <div className="text-xs font-black text-slate-900">{o.name}</div>
-                          <div className="flex items-start gap-2 text-[11px] text-slate-600">
-                            <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
-                            <span className="leading-relaxed">{o.address}</span>
-                          </div>
-                          {o.phone && (
-                            <a
-                              href={`https://wa.me/${o.phone.replace(/[^0-9]/g, '')}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-2 text-[11px] font-bold text-emerald-700 hover:underline"
-                            >
-                              <MessageCircle className="w-3.5 h-3.5" />
-                              {o.phone}
-                            </a>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Media sosial */}
-                  {activeSocials.length > 0 && (
-                    <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-5 space-y-3">
-                      <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                        <Globe className="w-4 h-4 text-indigo-600" />
-                        Media Sosial
-                      </h3>
-                      <div className="space-y-2">
-                        {activeSocials.map((s) => (
-                          <a
-                            key={s.id}
-                            href={s.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all group"
-                          >
-                            <span className="text-xs font-bold text-slate-700 flex items-center gap-2">
-                              <span className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center text-[10px] font-black">
-                                {s.label.slice(0, 2).toUpperCase()}
-                              </span>
-                              {s.label}
-                            </span>
-                            <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600" />
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </section>
-        </main>
-      )}
-
-      {/* Footer */}
-      <footer className="bg-slate-950 text-slate-400 py-10 border-t border-slate-800 text-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <StoreLogo size="sm" rounded="rounded-lg" customLogoUrl={logoUrl} storeName={storeName} />
-                <div className="text-sm font-black text-white">{storeName}</div>
-              </div>
-              <p className="text-[11px] leading-relaxed">{config.hero.subheadline}</p>
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-[11px] font-black uppercase tracking-wider text-slate-500">Navigasi</div>
-              {PAGE_MENUS.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => goTo(m.id)}
-                  className="block text-xs font-semibold hover:text-white transition-colors cursor-pointer"
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-[11px] font-black uppercase tracking-wider text-slate-500">Kontak</div>
-              <div className="flex items-center gap-2 text-xs font-semibold font-mono">{config.contact.phoneDisplay}</div>
-              <div className="flex items-start gap-2 text-[11px] leading-relaxed">
-                <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5 text-slate-500" />
-                {config.contact.storeAddress}
-              </div>
-              {activeSocials.length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {activeSocials.map((s) => (
-                    <a
-                      key={s.id}
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-indigo-500 hover:text-white text-[10px] font-bold transition-all"
-                    >
-                      {s.label}
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="border-t border-slate-900 pt-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-500">
-            <div>&copy; {new Date().getFullYear()} {storeName}. All rights reserved.</div>
-            <div className="flex items-center gap-3 flex-wrap justify-center">
-              <span className="font-mono text-[10px]">
-                Distributor: DECOFIX • ORACAL • DEREK • CAR DIARY • 3M • SAICHOLITE • DURATAC
-              </span>
-              <button
-                type="button"
-                onClick={onOpenLogin}
-                className="text-indigo-400 hover:text-indigo-300 font-bold cursor-pointer"
-              >
-                Akses Internal Karyawan (Login)
-              </button>
-            </div>
-          </div>
-        </div>
-      </footer>
-
-      {/* Lightbox gambar detail */}
       {lightbox && (
         <Lightbox
-          images={lightbox.items}
+          items={lightbox.items}
           index={lightbox.index}
           onClose={() => setLightbox(null)}
-          onChangeIndex={(i) => setLightbox((prev) => (prev ? { ...prev, index: i } : prev))}
+          onIndex={(i) => setLightbox((prev) => (prev ? { ...prev, index: i } : prev))}
         />
       )}
     </div>
   );
 };
 
-/* ============================================================
-   Sub-komponen halaman
-   ============================================================ */
-
-const PageHero: React.FC<{ title: string; eyebrow: string; subtitle?: string }> = ({ title, eyebrow, subtitle }) => (
-  <section className="relative bg-slate-950 text-white overflow-hidden">
-    <div className="absolute inset-0 opacity-40 [background-image:radial-gradient(circle_at_20%_30%,rgba(99,102,241,0.45),transparent_45%),radial-gradient(circle_at_80%_70%,rgba(16,185,129,0.3),transparent_40%)]" />
-    <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 space-y-3">
-      <span className="text-[11px] font-extrabold uppercase tracking-widest text-indigo-300">{eyebrow}</span>
-      <h1 className="text-2xl sm:text-4xl font-black tracking-tight leading-tight max-w-3xl">{title}</h1>
-      {subtitle && <p className="text-xs sm:text-sm text-slate-300 font-medium max-w-2xl leading-relaxed">{subtitle}</p>}
-    </div>
-  </section>
-);
-
-/** Kartu produk dengan foto + tombol zoom */
-const ProductCard: React.FC<{
-  prod: LandingProductItem;
-  wa: (t?: string) => string;
-  onImageClick: () => void;
-}> = ({ prod, wa, onImageClick }) => (
-  <div className="group bg-slate-50/70 hover:bg-white rounded-2xl border border-slate-200 hover:border-slate-300 hover:shadow-lg transition-all overflow-hidden flex flex-col">
-    <div className="relative aspect-square bg-white">
-      <SmartImage src={prod.imageUrl} alt={prod.name} onClick={onImageClick} className="w-full h-full absolute inset-0" />
-      <div className="absolute top-3 left-3 flex gap-1.5">
-        <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-slate-950/85 text-white uppercase tracking-wider backdrop-blur-sm">
-          {prod.brand}
-        </span>
-        {prod.badge && (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-500 text-white uppercase">{prod.badge}</span>
-        )}
-      </div>
-      <button
-        type="button"
-        onClick={onImageClick}
-        className="absolute bottom-3 right-3 px-2.5 py-1.5 rounded-lg bg-slate-950/70 hover:bg-slate-950 text-white text-[10px] font-black flex items-center gap-1 transition-all cursor-pointer opacity-0 group-hover:opacity-100 backdrop-blur-sm"
-        title="Lihat detail gambar"
-      >
-        <Eye className="w-3 h-3" />
-        Detail
-      </button>
-    </div>
-
-    <div className="p-4 space-y-1.5 flex-1">
-      <h4 className="text-sm font-black text-slate-900 leading-snug">{prod.name}</h4>
-      <div className="text-[10px] font-mono text-slate-500">{prod.specs}</div>
-      <p className="text-[11px] text-slate-600 leading-relaxed line-clamp-2">{prod.description}</p>
-    </div>
-
-    <div className="px-4 pb-4 pt-2 border-t border-slate-200/80 flex items-center justify-between gap-2">
-      <div>
-        <div className="text-[10px] text-slate-400 font-bold uppercase">{prod.unit}</div>
-        <div className="text-sm font-black text-indigo-700">{prod.priceEstimated}</div>
-      </div>
-      <a
-        href={wa(`Halo! Mau order produk: *${prod.name}* (${prod.priceEstimated})`)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="p-2 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white transition-colors"
-        title="Pesan produk ini via WhatsApp"
-      >
-        <MessageCircle className="w-4 h-4" />
-      </a>
-    </div>
-  </div>
-);
-
-/** Kartu merk dengan foto */
-const BrandCard: React.FC<{
-  brand: LandingBrandItem;
-  wa: (t?: string) => string;
-  onImageClick: () => void;
-}> = ({ brand, wa, onImageClick }) => (
-  <div className="group bg-slate-50/70 hover:bg-white rounded-2xl border border-slate-200 hover:border-indigo-400 hover:shadow-lg transition-all overflow-hidden flex flex-col">
-    <div
-      className={`relative aspect-[16/10] bg-white ${brand.imageUrl ? 'cursor-zoom-in' : ''}`}
-      onClick={() => brand.imageUrl && onImageClick()}
-    >
-      <SmartImage src={brand.imageUrl} alt={brand.name} className="w-full h-full absolute inset-0" />
-      <span className="absolute top-3 left-3 px-2 py-0.5 rounded-md text-[10px] font-black bg-slate-950/85 text-white uppercase backdrop-blur-sm">
-        {brand.name}
-      </span>
-      {brand.badge && (
-        <span className="absolute top-3 right-3 px-2 py-0.5 rounded-md text-[10px] font-black bg-indigo-600 text-white uppercase">
-          {brand.badge}
-        </span>
-      )}
-    </div>
-
-    <div className="p-4 space-y-2 flex-1">
-      <p className="text-xs font-bold text-slate-700">{brand.tagline}</p>
-      <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-3">{brand.description}</p>
-      <div className="space-y-1">
-        {brand.features.slice(0, 4).map((feat, idx) => (
-          <div key={idx} className="flex items-center gap-2 text-[11px] font-semibold text-slate-600">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-            <span className="truncate">{feat}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-
-    <div className="px-4 pb-4">
-      <a
-        href={wa(`Halo! Mau tanya stok & harga stiker merk *${brand.name}*`)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="w-full py-2 px-3 rounded-xl bg-white hover:bg-slate-900 hover:text-white text-slate-800 border border-slate-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 group-hover:border-indigo-400"
-      >
-        <MessageCircle className="w-3.5 h-3.5 text-emerald-600 group-hover:text-emerald-400" />
-        <span>Tanya Stok {brand.name}</span>
-      </a>
-    </div>
-  </div>
-);
-
-/** Accordion solusi (ala "Solusi Percetakan Lengkap" subur) */
-const SolutionsAccordion: React.FC<{
-  services: import('../../types').LandingServiceItem[];
-  wa: (t?: string) => string;
-}> = ({ services, wa }) => {
-  const [openId, setOpenId] = useState<string | null>(services[0]?.id ?? null);
-
-  return (
-    <div className="space-y-3">
-      {services.map((serv) => {
-        const open = openId === serv.id;
-        return (
-          <div
-            key={serv.id}
-            className={`rounded-2xl border transition-all overflow-hidden ${
-              open ? 'bg-white border-indigo-300 shadow-lg' : 'bg-white border-slate-200 hover:border-slate-300'
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => setOpenId(open ? null : serv.id)}
-              className="w-full flex items-center gap-3 p-4 text-left cursor-pointer"
-            >
-              <span
-                className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-black shrink-0 transition-all ${
-                  open ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-white'
-                }`}
-              >
-                {open ? '−' : '+'}
-              </span>
-              <span className="flex-1 text-sm sm:text-base font-black text-slate-900">{serv.title}</span>
-              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
-            </button>
-
-            {open && (
-              <div className="px-4 pb-4 space-y-3">
-                <div className="text-xs font-bold text-indigo-700">{serv.subtitle}</div>
-                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">{serv.description}</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {serv.highlights.map((item, idx) => (
-                    <div key={idx} className="flex items-start gap-2 text-[11px] text-slate-600 bg-slate-50 rounded-xl p-2.5 border border-slate-100">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
-                      <span>{item}</span>
-                    </div>
-                  ))}
-                </div>
-                <a
-                  href={wa(`Halo! Saya berminat order layanan: *${serv.title}*`)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-indigo-700 text-white text-xs font-black transition-all"
-                >
-                  <span>{serv.ctaLabel || 'Order Layanan Ini'}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </a>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-};
-
-/** Kartu testimoni (grid versi halaman klien) */
-const TestimonialCard: React.FC<{ t: LandingTestimonial }> = ({ t }) => (
-  <div className="bg-slate-50 hover:bg-white rounded-3xl border border-slate-200 hover:border-indigo-200 hover:shadow-lg transition-all p-6 space-y-4 flex flex-col">
-    <div className="flex items-start justify-between gap-3">
-      <Quote className="w-7 h-7 text-indigo-100" />
-      {t.logoUrl ? (
-        <SmartImage src={t.logoUrl} alt={t.company} hoverZoom={false} className="w-12 h-12 rounded-full border border-slate-200" />
-      ) : (
-        <div className="w-12 h-12 rounded-full bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-700 text-xs font-black">
-          {t.company.slice(0, 2).toUpperCase()}
-        </div>
-      )}
-    </div>
-    <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium">“{t.quote}”</p>
-    <div className="mt-auto border-t border-slate-200 pt-3">
-      <div className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-        <User className="w-3.5 h-3.5 text-slate-400" />
-        {t.author}
-      </div>
-      <div className="text-[11px] text-slate-500 font-semibold">{t.role}</div>
-      <div className="text-xs font-black text-indigo-700">{t.company}</div>
-    </div>
-  </div>
-);
+export default LandingPage;

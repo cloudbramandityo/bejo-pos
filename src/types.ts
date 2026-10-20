@@ -689,6 +689,8 @@ export interface LandingContactConfig {
   phoneDisplay: string;
   operatingHours: string;
   googleMapsUrl?: string;
+  emailDisplay?: string; // tampil di top bar & footer, mis. "order@bejostiker.id"
+  factoryAddress?: string; // alamat workshop/pabrik (footer)
 }
 
 export interface LandingBenefitItem {
@@ -697,16 +699,154 @@ export interface LandingBenefitItem {
   icon: string;
 }
 
-// ===== Konten ala situs perusahaan multi-halaman (referensi: subur.co.id) =====
+// ===== Konten ala situs percetakan online (referensi: uprint.id) =====
 
-/** Slide banner utama (slider hero). Rekomendasi gambar: 1600 x 700 px, JPEG ≤ 250KB */
+/** Halaman internal landing page */
+export type LandingPageKey = 'home' | 'about' | 'products' | 'clients' | 'contact' | 'blog';
+
+/** Rute internal landing page (tanpa router eksternal) */
+export interface LandingRoute {
+  page: LandingPageKey;
+  /** bila diisi, halaman produk menampilkan kategori tertentu */
+  categoryKey?: string;
+}
+
+/** Slide banner utama (slider hero). Rekomendasi gambar: 1280 x 720 px (16:9) */
 export interface LandingSlide {
   id: string;
+  eyebrow: string; // label kecil di atas judul, mis. "TEMPLATE DESIGN"
   title: string;
-  subtitle?: string;
-  ctaText?: string;
+  subtitle?: string; // tidak ditampilkan di banner, dipakai sebagai metadata
+  ctaText?: string; // teks tombol pil di dalam banner
   imageUrl?: string;
   isActive: boolean;
+}
+
+/** Kartu produk pada slider kategori. Rekomendasi gambar: 640 x 1138 px (9:16) */
+export interface LandingCategoryCard {
+  id: string;
+  label: string;
+  imageUrl?: string;
+  isActive: boolean;
+}
+
+/** Grup kategori utama (tab KEMASAN / STATIONERY / PROMOSI / SOUVENIR) */
+export interface LandingCategoryGroup {
+  id: string;
+  key: string; // 'kemasan' | 'stationery' | 'promosi' | 'souvenir'
+  title: string; // label tab, mis. "KEMASAN"
+  heading: string; // judul seksi
+  description: string; // paragraf pendukung
+  cards: LandingCategoryCard[];
+  isActive: boolean;
+}
+
+/** Tautan di dalam mega menu header */
+export interface LandingMenuLink {
+  id: string;
+  label: string;
+  categoryKey?: string; // membuka halaman produk dengan kategori terkait
+  page?: LandingPageKey; // membuka halaman internal tertentu
+}
+
+/** Kolom mega menu header */
+export interface LandingMenuColumn {
+  id: string;
+  heading: string;
+  links: LandingMenuLink[];
+}
+
+/** Item menu utama header */
+export interface LandingMenuItem {
+  id: string;
+  label: string;
+  type: 'mega' | 'link';
+  page?: LandingPageKey; // tujuan bila type = 'link'
+  columns?: LandingMenuColumn[]; // dipakai bila type = 'mega'
+  isActive: boolean;
+}
+
+/** Promo template design (kartu besar di bawah slider kategori) */
+export interface LandingTemplatePromo {
+  id: string;
+  eyebrow: string;
+  title: string;
+  ctaText: string;
+  imageUrl?: string; // rekomendasi 1280 x 640 px
+  isActive: boolean;
+}
+
+/** Poin keluhan pelanggan pada seksi "Problem Customer" */
+export interface LandingProblemPoint {
+  id: string;
+  text: string;
+  side: 'left' | 'right';
+}
+
+/** Seksi "Problem Customer" */
+export interface LandingProblemConfig {
+  title: string;
+  imageUrl?: string; // ilustrasi line-art, rekomendasi 1024 x 1024 px
+  points: LandingProblemPoint[];
+  primaryCtaText: string;
+  secondaryCtaText: string;
+}
+
+/** Statistik pada seksi "Mengapa Kami" */
+export interface LandingStatItem {
+  id: string;
+  value: string; // mis. "20th"
+  label: string;
+  description: string;
+  iconUrl?: string; // ikon lingkaran 200 x 200 px
+  isActive: boolean;
+}
+
+/** Foto fasilitas produksi. Rekomendasi gambar: 640 x 480 px */
+export interface LandingFacilityItem {
+  id: string;
+  title: string;
+  imageUrl?: string;
+  isActive: boolean;
+}
+
+/** Artikel blog / inspirasi cetak. Rekomendasi gambar: 640 x 420 px */
+export interface LandingBlogPost {
+  id: string;
+  title: string;
+  imageUrl?: string;
+  url?: string;
+  isActive: boolean;
+}
+
+/** Pertanyaan umum (FAQ) */
+export interface LandingFaqItem {
+  id: string;
+  question: string;
+  answer: string;
+  isActive: boolean;
+}
+
+/** Tautan footer */
+export interface LandingFooterLink {
+  id: string;
+  label: string;
+  categoryKey?: string;
+  page?: LandingPageKey;
+}
+
+/** Blok tautan footer (satu sub-judul + daftar tautan) */
+export interface LandingFooterBlock {
+  id: string;
+  title?: string;
+  links: LandingFooterLink[];
+}
+
+/** Kolom footer */
+export interface LandingFooterColumn {
+  id: string;
+  heading: string;
+  blocks: LandingFooterBlock[];
 }
 
 export interface LandingAboutStat {
@@ -772,23 +912,38 @@ export interface LandingSocialLink {
   isActive: boolean;
 }
 
+/** Identitas merek pada header & footer */
+export interface LandingBrandingConfig {
+  name: string; // teks logo jika gambar belum diunggah, mis. "bejo stiker"
+  tagline: string; // mis. "percetakan online indonesia"
+  logoUrl?: string; // rekomendasi 400 x 150 px (PNG transparan)
+}
+
 export interface LandingPageConfig {
   isPublished: boolean; // Slide button: true = PUBLISH (Tampilan Awal Aktif), false = ON HOLD
   lastModifiedAt: number;
   lastModifiedBy?: string;
+  /** Judul H1 + paragraf pembuka di bawah slider banner */
   hero: LandingHeroConfig;
+  brand: LandingBrandingConfig; // logo & tagline header/footer
   slides: LandingSlide[]; // slider banner utama (halaman Beranda)
-  brands: LandingBrandItem[];
-  services: LandingServiceItem[];
-  featuredProducts: LandingProductItem[];
+  menu: LandingMenuItem[]; // navigasi header + mega menu
+  categories: LandingCategoryGroup[]; // tab kategori + slider kartu
+  templatePromos: LandingTemplatePromo[]; // seksi "Produk Template Design"
+  problem: LandingProblemConfig; // seksi "Problem Customer"
+  stats: LandingStatItem[]; // seksi "Mengapa Kami"
+  facilities: LandingFacilityItem[]; // seksi "Fasilitas Produksi"
+  blogPosts: LandingBlogPost[]; // seksi "Blog / Inspirasi Cetak"
+  faqs: LandingFaqItem[]; // seksi FAQ
   contact: LandingContactConfig;
-  benefits: LandingBenefitItem[];
   about: LandingAboutConfig; // seksi & halaman Tentang Kami
   gallery: LandingGalleryItem[]; // dokumentasi workshop (halaman Tentang Kami)
   testimonials: LandingTestimonial[]; // testimoni (beranda & halaman Klien)
   clients: LandingClientLogo[]; // logo klien (beranda & halaman Klien)
   offices: LandingOffice[]; // alamat cabang (halaman Kontak)
   socials: LandingSocialLink[]; // media sosial (footer & halaman Kontak)
+  footerColumns: LandingFooterColumn[]; // tautan footer multi-kolom
+  footerNote?: string; // teks hak cipta tambahan
 }
 
 // =========================================================================

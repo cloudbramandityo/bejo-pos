@@ -58,9 +58,18 @@ import type {
 /*  Token desain                                                              */
 /* -------------------------------------------------------------------------- */
 const FONT_STACK = "'Quicksand', 'Segoe UI', system-ui, -apple-system, sans-serif";
-const YELLOW = '#FFC20D';
-const AMBER = '#F0B300';
-const CREAM = '#F5F2ED';
+/** Main Accent */
+const ACCENT = '#00AAFF';
+/** Secondary Accent */
+const ACCENT_2 = '#FF4400';
+/** Active tab / warna highlight */
+const ACTIVE = '#00AAFF';
+/** Background seksi (putih tulang) */
+const CREAM = '#F1F2F2';
+/** Body text */
+const INK = '#111111';
+/** Teks muted */
+const MUTED = '#7A7A7A';
 
 const cx = (...parts: Array<string | false | null | undefined>) => parts.filter(Boolean).join(' ');
 
@@ -96,7 +105,7 @@ const Frame: React.FC<{
   dark?: boolean;
   bare?: boolean;
 }> = ({ src, alt, label, className, imgClassName, dark, bare }) => (
-  <div className={cx('relative h-full w-full overflow-hidden', dark ? 'bg-slate-800' : 'bg-[#F5F2ED]', className)}>
+  <div className={cx('relative h-full w-full overflow-hidden', dark ? 'bg-slate-800' : 'bg-[#F1F2F2]', className)}>
     {src ? (
       <img src={src} alt={alt} className={cx('h-full w-full object-cover', imgClassName)} loading="lazy" />
     ) : (
@@ -104,7 +113,7 @@ const Frame: React.FC<{
         className={cx(
           'absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center',
           dark
-            ? 'bg-[linear-gradient(135deg,#0f172a_0%,#1f2937_55%,#7c5c10_100%)] text-white/55'
+            ? 'bg-[linear-gradient(135deg,#0f172a_0%,#1e3a5f_55%,#0b4f6f_100%)] text-white/55'
             : 'text-slate-400'
         )}
       >
@@ -132,7 +141,7 @@ const ScrollArrows: React.FC<{ onPrev: () => void; onNext: () => void; light?: b
         'absolute left-0 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border transition-colors md:flex',
         light
           ? 'border-white/70 text-white hover:bg-white hover:text-[#111]'
-          : 'border-slate-300 bg-white text-slate-600 hover:border-[#F0B300] hover:text-[#F0B300]'
+          : 'border-slate-300 bg-white text-slate-600 hover:border-[#00AAFF] hover:text-[#00AAFF]'
       )}
       style={{ left: -20 }}
     >
@@ -146,7 +155,7 @@ const ScrollArrows: React.FC<{ onPrev: () => void; onNext: () => void; light?: b
         'absolute right-0 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border transition-colors md:flex',
         light
           ? 'border-white/70 text-white hover:bg-white hover:text-[#111]'
-          : 'border-slate-300 bg-white text-slate-600 hover:border-[#F0B300] hover:text-[#F0B300]'
+          : 'border-slate-300 bg-white text-slate-600 hover:border-[#00AAFF] hover:text-[#00AAFF]'
       )}
       style={{ right: -20 }}
     >
@@ -184,7 +193,7 @@ const HeroSlider: React.FC<{ slides: LandingSlide[]; onCta: () => void }> = ({ s
 
   if (total === 0) {
     return (
-      <div className="relative flex aspect-[4/5] w-full items-center justify-center overflow-hidden rounded-2xl bg-[#F5F2ED] sm:aspect-[16/9]">
+      <div className="relative flex aspect-[4/5] w-full items-center justify-center overflow-hidden rounded-2xl bg-[#F1F2F2] sm:aspect-[16/9]">
         <div className="flex flex-col items-center gap-2 text-slate-400">
           <ImageIcon size={32} />
           <span className="text-[12px] font-semibold uppercase tracking-[0.2em]">Banner belum diunggah</span>
@@ -210,7 +219,7 @@ const HeroSlider: React.FC<{ slides: LandingSlide[]; onCta: () => void }> = ({ s
           ) : (
             <div
               className="h-full w-full"
-              style={{ background: `linear-gradient(120deg, #1f2937 0%, #374151 45%, ${AMBER} 140%)` }}
+              style={{ background: 'linear-gradient(120deg, #0f172a 0%, #1e3a5f 55%, #00AAFF 150%)' }}
             />
           )}
         </div>
@@ -319,24 +328,24 @@ const Header: React.FC<{
     <div className="sticky top-0 z-40">
       {/* Top bar */}
       <div className="hidden border-b border-slate-100 bg-white md:block">
-        <div className="mx-auto flex h-9 max-w-[1200px] items-center justify-between px-4 text-[12px] text-slate-500">
+        <div className="mx-auto flex h-9 max-w-[1200px] items-center justify-between px-4 text-[12px] text-[#7A7A7A]">
           <div className="flex items-center gap-5">
-            <a href={`tel:${config.contact.phoneDisplay}`} className="flex items-center gap-1.5 transition-colors hover:text-[#F0B300]">
+            <a href={`tel:${config.contact.phoneDisplay}`} className="flex items-center gap-1.5 transition-colors hover:text-[#00AAFF]">
               <Phone size={12} /> {config.contact.phoneDisplay}
             </a>
             <a
               href={`mailto:${config.contact.emailDisplay || ''}`}
-              className="flex items-center gap-1.5 transition-colors hover:text-[#F0B300]"
+              className="flex items-center gap-1.5 transition-colors hover:text-[#00AAFF]"
             >
               <Mail size={12} /> {config.contact.emailDisplay}
             </a>
           </div>
           <div className="flex items-center gap-4">
-            <button type="button" onClick={onOpenLogin} className="flex items-center gap-1.5 transition-colors hover:text-[#F0B300]">
+            <button type="button" onClick={onOpenLogin} className="flex items-center gap-1.5 transition-colors hover:text-[#00AAFF]">
               <User size={12} /> {currentUser ? 'Buka Aplikasi' : 'Masuk'}
             </button>
             {currentUser && onEnterApp && (
-              <button type="button" onClick={onEnterApp} className="font-semibold text-[#111] transition-colors hover:text-[#F0B300]">
+              <button type="button" onClick={onEnterApp} className="font-semibold text-[#111] transition-colors hover:text-[#00AAFF]">
                 Dashboard
               </button>
             )}
@@ -374,7 +383,7 @@ const Header: React.FC<{
                     }}
                     className={cx(
                       'flex items-center gap-1 whitespace-nowrap py-6 text-[11px] font-semibold uppercase tracking-[0.04em] transition-colors lg:text-[12px]',
-                      openMenu === item.id ? 'text-[#F0B300]' : 'text-[#111] hover:text-[#F0B300]'
+                      openMenu === item.id ? 'text-[#00AAFF]' : 'text-[#111] hover:text-[#00AAFF]'
                     )}
                   >
                     {item.label}
@@ -392,10 +401,10 @@ const Header: React.FC<{
             ) : (
               <span className="text-[24px] font-bold tracking-tight text-[#111] md:text-[27px]">
                 {config.brand.name.split(' ')[0]}
-                <span className="text-[#F0B300]">{config.brand.name.split(' ').slice(1).join(' ')}</span>
+                <span className="text-[#00AAFF]">{config.brand.name.split(' ').slice(1).join(' ')}</span>
               </span>
             )}
-            <span className="mt-1 text-[8px] font-medium uppercase tracking-[0.24em] text-slate-500 md:text-[9px]">
+            <span className="mt-1 text-[8px] font-medium uppercase tracking-[0.24em] text-[#7A7A7A] md:text-[9px]">
               {config.brand.tagline}
             </span>
           </button>
@@ -418,7 +427,7 @@ const Header: React.FC<{
                     }}
                     className={cx(
                       'flex items-center gap-1 whitespace-nowrap py-6 text-[11px] font-semibold uppercase tracking-[0.04em] transition-colors lg:text-[12px]',
-                      openMenu === item.id ? 'text-[#F0B300]' : 'text-[#111] hover:text-[#F0B300]'
+                      openMenu === item.id ? 'text-[#00AAFF]' : 'text-[#111] hover:text-[#00AAFF]'
                     )}
                   >
                     {item.label}
@@ -430,9 +439,9 @@ const Header: React.FC<{
 
             <form
               onSubmit={submitSearch}
-              className="hidden h-9 items-center gap-2 rounded-full border border-[#FFC20D] px-3 lg:flex"
+              className="hidden h-9 items-center gap-2 rounded-full border border-[#00AAFF] px-3 lg:flex"
             >
-              <Search size={14} className="text-[#F0B300]" />
+              <Search size={14} className="text-[#00AAFF]" />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -469,7 +478,7 @@ const Header: React.FC<{
                           <button
                             type="button"
                             onClick={() => handleMegaLink(link)}
-                            className="text-left text-[13px] text-slate-600 transition-colors hover:text-[#F0B300]"
+                            className="text-left text-[13px] text-slate-600 transition-colors hover:text-[#00AAFF]"
                           >
                             {link.label}
                           </button>
@@ -560,7 +569,7 @@ const SectionTitle: React.FC<{ children: React.ReactNode; className?: string; su
 }) => (
   <div className={cx('text-center', className)}>
     <h2 className="text-[18px] font-bold uppercase tracking-[0.02em] text-[#111] md:text-[22px]">{children}</h2>
-    {subtitle && <p className="mx-auto mt-2 max-w-[640px] text-[13px] leading-relaxed text-slate-500">{subtitle}</p>}
+    {subtitle && <p className="mx-auto mt-2 max-w-[640px] text-[13px] leading-relaxed text-[#7A7A7A]">{subtitle}</p>}
   </div>
 );
 
@@ -592,8 +601,8 @@ const CategorySection: React.FC<{
             className={cx(
               'shrink-0 border-b-2 pb-3 pt-4 text-[15px] font-medium uppercase tracking-wide transition-colors',
               cat.key === activeKey
-                ? 'border-[#F0B300] font-bold text-[#F0B300]'
-                : 'border-transparent text-slate-500 hover:text-[#111]'
+                ? 'border-[#00AAFF] font-bold text-[#00AAFF]'
+                : 'border-transparent text-[#7A7A7A] hover:text-[#111]'
             )}
           >
             {cat.title}
@@ -603,7 +612,7 @@ const CategorySection: React.FC<{
 
       <div className="py-8 text-center">
         <h2 className="text-[15px] font-bold text-[#111] md:text-[17px]">{group.heading}</h2>
-        <p className="mx-auto mt-2 max-w-[680px] text-[12.5px] leading-relaxed text-slate-500">{group.description}</p>
+        <p className="mx-auto mt-2 max-w-[680px] text-[12.5px] leading-relaxed text-[#7A7A7A]">{group.description}</p>
       </div>
 
       <div className="relative pb-10">
@@ -618,7 +627,7 @@ const CategorySection: React.FC<{
                 key={card.id}
                 type="button"
                 onClick={() => onOpenCard(card, group)}
-                className="group relative w-[68%] shrink-0 snap-start overflow-hidden rounded-lg bg-[#F5F2ED] sm:w-[42%] md:w-[calc((100%-40px)/3)]"
+                className="group relative w-[68%] shrink-0 snap-start overflow-hidden rounded-lg bg-[#F1F2F2] sm:w-[42%] md:w-[calc((100%-40px)/3)]"
                 style={{ aspectRatio: '9 / 16' }}
               >
                 <Frame src={card.imageUrl} alt={card.label} label={card.label} imgClassName="transition-transform duration-500 group-hover:scale-[1.04]" />
@@ -722,14 +731,16 @@ const ProblemSection: React.FC<{ config: LandingPageConfig; onConsult: () => voi
         <button
           type="button"
           onClick={onConsult}
-          className="rounded-full bg-[#5CE65C] px-9 py-3 text-[14px] font-bold text-[#111] shadow-[0_4px_0_0_#111] transition-transform hover:-translate-y-0.5 active:translate-y-0 active:shadow-[0_2px_0_0_#111]"
+          style={{ backgroundColor: ACCENT }}
+          className="rounded-full px-9 py-3 text-[14px] font-bold text-[#111] shadow-[0_4px_0_0_#111] transition-transform hover:-translate-y-0.5 active:translate-y-0 active:shadow-[0_2px_0_0_#111]"
         >
           {problem.primaryCtaText}
         </button>
         <button
           type="button"
           onClick={onConsult}
-          className="flex items-center gap-2 rounded-full bg-[#FFD84D] px-9 py-3 text-[14px] font-bold text-[#111] shadow-[0_4px_0_0_#111] transition-transform hover:-translate-y-0.5 active:translate-y-0 active:shadow-[0_2px_0_0_#111]"
+          style={{ backgroundColor: ACCENT_2 }}
+          className="flex items-center gap-2 rounded-full px-9 py-3 text-[14px] font-bold text-white shadow-[0_4px_0_0_#111] transition-transform hover:-translate-y-0.5 active:translate-y-0 active:shadow-[0_2px_0_0_#111]"
         >
           <Download size={15} /> {problem.secondaryCtaText}
         </button>
@@ -770,13 +781,13 @@ const StatsSection: React.FC<{ stats: LandingPageConfig['stats']; about: Landing
                   {stat.iconUrl ? (
                     <img src={stat.iconUrl} alt={stat.label} className="h-full w-full object-cover" />
                   ) : (
-                    <Sparkles size={26} className="text-[#F0B300]" />
+                    <Sparkles size={26} className="text-[#00AAFF]" />
                   )}
                 </div>
                 <div>
                   <p className="text-[28px] font-semibold leading-none text-[#111] md:text-[32px]">{stat.value}</p>
                   <p className="mt-1 text-[13px] font-semibold text-[#111]">{stat.label}</p>
-                  <p className="mt-1 max-w-[420px] text-[12.5px] leading-relaxed text-slate-500">{stat.description}</p>
+                  <p className="mt-1 max-w-[420px] text-[12.5px] leading-relaxed text-[#7A7A7A]">{stat.description}</p>
                 </div>
               </div>
             ))}
@@ -801,7 +812,7 @@ const FacilitiesSection: React.FC<{ facilities: LandingPageConfig['facilities'] 
       </SectionTitle>
       <div className={cx('grid gap-5 sm:grid-cols-2', items.length >= 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3')}>
         {items.map((item) => (
-          <div key={item.id} className="overflow-hidden rounded-xl bg-[#F5F2ED]">
+          <div key={item.id} className="overflow-hidden rounded-xl bg-[#F1F2F2]">
             <div className="relative" style={{ aspectRatio: '4 / 3' }}>
               <Frame src={item.imageUrl} alt={item.title} label={item.title} />
             </div>
@@ -839,7 +850,7 @@ const ClientsSection: React.FC<{ clients: LandingPageConfig['clients'] }> = ({ c
                 {client.logoUrl ? (
                   <img src={client.logoUrl} alt={client.name} className="max-h-full max-w-full object-contain" />
                 ) : (
-                  <span className="text-center text-[10px] font-bold uppercase leading-tight text-slate-500">{client.name}</span>
+                  <span className="text-center text-[10px] font-bold uppercase leading-tight text-[#7A7A7A]">{client.name}</span>
                 )}
               </a>
             ))}
@@ -864,10 +875,10 @@ const TestimonialsSection: React.FC<{ testimonials: LandingPageConfig['testimoni
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {items.map((t) => (
           <div key={t.id} className="flex h-full flex-col rounded-xl p-6" style={{ backgroundColor: CREAM }}>
-            <Quote size={26} className="text-[#F0B300]" />
+            <Quote size={26} className="text-[#00AAFF]" />
             <div className="mt-3 flex gap-0.5">
               {Array.from({ length: 5 }).map((_, i) => (
-                <Star key={i} size={13} className="fill-[#FFC20D] text-[#FFC20D]" />
+                <Star key={i} size={13} className="fill-[#00AAFF] text-[#00AAFF]" />
               ))}
             </div>
             <p className="mt-3 flex-1 text-[12.5px] leading-relaxed text-slate-600">{t.quote}</p>
@@ -876,12 +887,12 @@ const TestimonialsSection: React.FC<{ testimonials: LandingPageConfig['testimoni
                 {t.logoUrl ? (
                   <img src={t.logoUrl} alt={t.company} className="h-full w-full object-cover" />
                 ) : (
-                  <span className="text-[12px] font-bold text-[#F0B300]">{t.author.charAt(0)}</span>
+                  <span className="text-[12px] font-bold text-[#00AAFF]">{t.author.charAt(0)}</span>
                 )}
               </div>
               <div>
                 <p className="text-[12px] font-bold text-[#111]">{t.author}</p>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-[#7A7A7A]">
                   {t.role}
                   {t.company ? ` · ${t.company}` : ''}
                 </p>
@@ -954,11 +965,11 @@ const FaqSection: React.FC<{ faqs: LandingFaqItem[] }> = ({ faqs }) => {
                 <span className={cx('text-[13.5px] font-semibold', isOpen ? 'text-[#111]' : 'text-slate-700')}>
                   {faq.question}
                 </span>
-                <span className="mt-0.5 shrink-0 text-[#F0B300]">
+                <span className="mt-0.5 shrink-0 text-[#00AAFF]">
                   {isOpen ? <Minus size={16} /> : <Plus size={16} />}
                 </span>
               </button>
-              {isOpen && <p className="pb-4 pr-8 text-[12.5px] leading-relaxed text-slate-500">{faq.answer}</p>}
+              {isOpen && <p className="pb-4 pr-8 text-[12.5px] leading-relaxed text-[#7A7A7A]">{faq.answer}</p>}
             </div>
           );
         })}
@@ -1003,10 +1014,10 @@ const Footer: React.FC<{
             ) : (
               <p className="text-[26px] font-bold leading-none text-[#111]">
                 {config.brand.name.split(' ')[0]}
-                <span className="text-[#F0B300]">{config.brand.name.split(' ').slice(1).join(' ')}</span>
+                <span className="text-[#00AAFF]">{config.brand.name.split(' ').slice(1).join(' ')}</span>
               </p>
             )}
-            <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.24em] text-slate-500">
+            <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.24em] text-[#7A7A7A]">
               {config.brand.tagline}
             </p>
           </div>
@@ -1018,7 +1029,7 @@ const Footer: React.FC<{
                 onClick={() => onOpenSocial(s.url)}
                 title={s.label}
                 aria-label={s.label}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-[#F5F2ED] text-[#111] transition-colors hover:bg-[#FFC20D]"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-[#F1F2F2] text-[#111] transition-colors hover:bg-[#00AAFF]"
               >
                 {socialIcon(s.label)}
               </button>
@@ -1028,10 +1039,10 @@ const Footer: React.FC<{
 
         <div className="mt-8 grid gap-5 border-y border-slate-200 py-6 sm:grid-cols-2 lg:grid-cols-4">
           <div className="flex items-start gap-3">
-            <Clock size={18} className="mt-0.5 shrink-0 text-[#F0B300]" />
+            <Clock size={18} className="mt-0.5 shrink-0 text-[#00AAFF]" />
             <div>
               <p className="text-[12px] font-bold text-[#111]">Jam Operasional</p>
-              <p className="mt-0.5 text-[11.5px] leading-snug text-slate-500">{config.contact.operatingHours}</p>
+              <p className="mt-0.5 text-[11.5px] leading-snug text-[#7A7A7A]">{config.contact.operatingHours}</p>
             </div>
           </div>
           <div className="flex items-start gap-3">
@@ -1042,7 +1053,7 @@ const Footer: React.FC<{
                 href={`https://wa.me/${wa}`}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-0.5 block text-[11.5px] text-slate-500 transition-colors hover:text-[#F0B300]"
+                className="mt-0.5 block text-[11.5px] text-[#7A7A7A] transition-colors hover:text-[#00AAFF]"
               >
                 {config.contact.phoneDisplay}
               </a>
@@ -1052,14 +1063,14 @@ const Footer: React.FC<{
             <MapPin size={18} className="mt-0.5 shrink-0 text-rose-500" />
             <div>
               <p className="text-[12px] font-bold text-[#111]">Kantor</p>
-              <p className="mt-0.5 text-[11.5px] leading-snug text-slate-500">{config.contact.storeAddress}</p>
+              <p className="mt-0.5 text-[11.5px] leading-snug text-[#7A7A7A]">{config.contact.storeAddress}</p>
             </div>
           </div>
           <div className="flex items-start gap-3">
             <Factory size={18} className="mt-0.5 shrink-0 text-sky-600" />
             <div>
               <p className="text-[12px] font-bold text-[#111]">Pabrik</p>
-              <p className="mt-0.5 text-[11.5px] leading-snug text-slate-500">
+              <p className="mt-0.5 text-[11.5px] leading-snug text-[#7A7A7A]">
                 {config.contact.factoryAddress || config.contact.storeAddress}
               </p>
             </div>
@@ -1080,7 +1091,7 @@ const Footer: React.FC<{
                           <button
                             type="button"
                             onClick={() => blockLink(link)}
-                            className="text-left text-[12px] text-slate-500 transition-colors hover:text-[#F0B300]"
+                            className="text-left text-[12px] text-[#7A7A7A] transition-colors hover:text-[#00AAFF]"
                           >
                             {link.label}
                           </button>
@@ -1096,7 +1107,7 @@ const Footer: React.FC<{
       </div>
 
       <div className="border-t border-slate-200 py-5">
-        <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-2 px-4 text-[11px] text-slate-500 sm:flex-row">
+        <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-2 px-4 text-[11px] text-[#7A7A7A] sm:flex-row">
           <p>
             © {new Date().getFullYear()} {config.brand.name}. {config.footerNote}
           </p>
@@ -1122,15 +1133,15 @@ const PageHero: React.FC<{ title: string; subtitle?: string; crumb: string; onHo
 }) => (
   <section style={{ backgroundColor: CREAM }} className="border-b border-slate-200">
     <div className="mx-auto max-w-[1200px] px-4 py-12 text-center md:py-16">
-      <div className="mb-3 flex items-center justify-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-500">
-        <button type="button" onClick={onHome} className="transition-colors hover:text-[#F0B300]">
+      <div className="mb-3 flex items-center justify-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[#7A7A7A]">
+        <button type="button" onClick={onHome} className="transition-colors hover:text-[#00AAFF]">
           Beranda
         </button>
         <span>/</span>
         <span className="text-[#111]">{crumb}</span>
       </div>
       <h1 className="text-[24px] font-bold uppercase tracking-[0.02em] text-[#111] md:text-[32px]">{title}</h1>
-      {subtitle && <p className="mx-auto mt-3 max-w-[720px] text-[13px] leading-relaxed text-slate-500">{subtitle}</p>}
+      {subtitle && <p className="mx-auto mt-3 max-w-[720px] text-[13px] leading-relaxed text-[#7A7A7A]">{subtitle}</p>}
     </div>
   </section>
 );
@@ -1182,7 +1193,7 @@ const Lightbox: React.FC<{
           </div>
           <div className="flex items-center justify-between gap-4 px-5 py-4">
             <p className="text-[14px] font-semibold text-[#111]">{item.title}</p>
-            <p className="text-[12px] text-slate-500">
+            <p className="text-[12px] text-[#7A7A7A]">
               {index + 1} / {items.length}
             </p>
           </div>
@@ -1243,7 +1254,7 @@ const HomePage: React.FC<{
         <h1 className="text-[17px] font-semibold uppercase leading-snug tracking-[0.01em] text-[#111] md:text-[24px]">
           {config.hero.headline}
         </h1>
-        <p className="mx-auto mt-3 max-w-[760px] text-[12.5px] leading-relaxed text-slate-500 md:text-[13.5px]">
+        <p className="mx-auto mt-3 max-w-[760px] text-[12.5px] leading-relaxed text-[#7A7A7A] md:text-[13.5px]">
           {config.hero.subheadline}
         </p>
       </section>
@@ -1293,12 +1304,12 @@ const AboutPage: React.FC<{
             <Frame src={about.imageUrl} alt={about.imageCaption || 'Tentang kami'} label="Foto Workshop" />
           </div>
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#F0B300]">{about.eyebrow}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#00AAFF]">{about.eyebrow}</p>
             <h2 className="mt-2 text-[22px] font-bold leading-snug text-[#111] md:text-[28px]">{about.title}</h2>
             <p className="mt-4 text-[13px] leading-relaxed text-slate-600">{about.intro}</p>
             <div className="mt-5 space-y-3">
               {about.paragraphs.map((p, i) => (
-                <p key={i} className="text-[12.5px] leading-relaxed text-slate-500">
+                <p key={i} className="text-[12.5px] leading-relaxed text-[#7A7A7A]">
                   {p}
                 </p>
               ))}
@@ -1310,7 +1321,7 @@ const AboutPage: React.FC<{
           {about.stats.map((stat, i) => (
             <div key={i} className="rounded-xl px-5 py-6 text-center" style={{ backgroundColor: CREAM }}>
               <p className="text-[26px] font-semibold text-[#111]">{stat.value}</p>
-              <p className="mt-1 text-[12px] text-slate-500">{stat.label}</p>
+              <p className="mt-1 text-[12px] text-[#7A7A7A]">{stat.label}</p>
             </div>
           ))}
         </div>
@@ -1338,7 +1349,7 @@ const AboutPage: React.FC<{
                   </div>
                   <div className="p-4">
                     <p className="text-[12.5px] font-semibold text-[#111]">{item.title}</p>
-                    {item.description && <p className="mt-1 text-[11.5px] text-slate-500">{item.description}</p>}
+                    {item.description && <p className="mt-1 text-[11.5px] text-[#7A7A7A]">{item.description}</p>}
                   </div>
                 </button>
               ))}
@@ -1356,7 +1367,7 @@ const AboutPage: React.FC<{
           <button
             type="button"
             onClick={() => onNavigate('contact')}
-            className="rounded-full bg-[#FFC20D] px-7 py-2.5 text-[13px] font-bold text-[#111] transition-transform hover:-translate-y-0.5"
+            className="rounded-full bg-[#00AAFF] px-7 py-2.5 text-[13px] font-bold text-[#111] transition-transform hover:-translate-y-0.5"
           >
             Hubungi Kami
           </button>
@@ -1403,8 +1414,8 @@ const ProductsPage: React.FC<{
             className={cx(
               'rounded-full border px-5 py-2 text-[12px] font-semibold uppercase tracking-wide transition-colors',
               active === 'all'
-                ? 'border-[#F0B300] bg-[#FFC20D] text-[#111]'
-                : 'border-slate-200 text-slate-500 hover:border-[#F0B300]'
+                ? 'border-[#00AAFF] bg-[#00AAFF] text-[#111]'
+                : 'border-slate-200 text-[#7A7A7A] hover:border-[#00AAFF]'
             )}
           >
             Semua
@@ -1417,8 +1428,8 @@ const ProductsPage: React.FC<{
               className={cx(
                 'rounded-full border px-5 py-2 text-[12px] font-semibold uppercase tracking-wide transition-colors',
                 active === cat.key
-                  ? 'border-[#F0B300] bg-[#FFC20D] text-[#111]'
-                  : 'border-slate-200 text-slate-500 hover:border-[#F0B300]'
+                  ? 'border-[#00AAFF] bg-[#00AAFF] text-[#111]'
+                  : 'border-slate-200 text-[#7A7A7A] hover:border-[#00AAFF]'
               )}
             >
               {cat.title}
@@ -1433,7 +1444,7 @@ const ProductsPage: React.FC<{
             <div key={group.id} className="mt-12">
               <div className="mb-5 text-center">
                 <h2 className="text-[15px] font-bold text-[#111] md:text-[17px]">{group.heading}</h2>
-                <p className="mx-auto mt-2 max-w-[680px] text-[12.5px] leading-relaxed text-slate-500">{group.description}</p>
+                <p className="mx-auto mt-2 max-w-[680px] text-[12.5px] leading-relaxed text-[#7A7A7A]">{group.description}</p>
               </div>
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
                 {cards.map((card, i) => (
@@ -1446,7 +1457,7 @@ const ProductsPage: React.FC<{
                         i
                       )
                     }
-                    className="group relative overflow-hidden rounded-lg bg-[#F5F2ED] text-left"
+                    className="group relative overflow-hidden rounded-lg bg-[#F1F2F2] text-left"
                     style={{ aspectRatio: '9 / 16' }}
                   >
                     <Frame src={card.imageUrl} alt={card.label} label={card.label} imgClassName="transition-transform duration-500 group-hover:scale-[1.04]" />
@@ -1464,7 +1475,7 @@ const ProductsPage: React.FC<{
         })}
 
         {visibleGroups.every((g) => g.cards.filter((c) => c.isActive && (!q || c.label.toLowerCase().includes(q))).length === 0) && (
-          <p className="mt-16 text-center text-[13px] text-slate-500">Produk tidak ditemukan. Coba kata kunci lain.</p>
+          <p className="mt-16 text-center text-[13px] text-[#7A7A7A]">Produk tidak ditemukan. Coba kata kunci lain.</p>
         )}
       </section>
     </>
@@ -1499,7 +1510,7 @@ const ClientsPage: React.FC<{
               {client.logoUrl ? (
                 <img src={client.logoUrl} alt={client.name} className="max-h-full max-w-full object-contain" />
               ) : (
-                <span className="text-center text-[12px] font-bold uppercase tracking-wide text-slate-500">{client.name}</span>
+                <span className="text-center text-[12px] font-bold uppercase tracking-wide text-[#7A7A7A]">{client.name}</span>
               )}
             </div>
           ))}
@@ -1512,7 +1523,7 @@ const ClientsPage: React.FC<{
         <div className="flex flex-col items-center justify-between gap-5 rounded-2xl px-8 py-10 text-center md:flex-row md:text-left" style={{ backgroundColor: CREAM }}>
           <div>
             <p className="text-[18px] font-semibold text-[#111]">Ingin menjadi klien berikutnya?</p>
-            <p className="mt-1 text-[12.5px] text-slate-500">Konsultasikan kebutuhan cetak Anda hari ini.</p>
+            <p className="mt-1 text-[12.5px] text-[#7A7A7A]">Konsultasikan kebutuhan cetak Anda hari ini.</p>
           </div>
           <button
             type="button"
@@ -1557,11 +1568,11 @@ const ContactPage: React.FC<{
           ].map((item, i) => (
             <div key={i} className="rounded-xl border border-slate-100 p-5 shadow-sm">
               <span className="flex h-10 w-10 items-center justify-center rounded-full" style={{ backgroundColor: CREAM }}>
-                <span className="text-[#F0B300]">{item.icon}</span>
+                <span className="text-[#00AAFF]">{item.icon}</span>
               </span>
               <p className="mt-3 text-[12px] font-bold uppercase tracking-wide text-slate-400">{item.title}</p>
               {item.href ? (
-                <a href={item.href} target="_blank" rel="noreferrer" className="mt-1 block text-[13px] font-semibold text-[#111] hover:text-[#F0B300]">
+                <a href={item.href} target="_blank" rel="noreferrer" className="mt-1 block text-[13px] font-semibold text-[#111] hover:text-[#00AAFF]">
                   {item.value}
                 </a>
               ) : (
@@ -1578,14 +1589,14 @@ const ContactPage: React.FC<{
               {offices.map((office) => (
                 <div key={office.id} className="rounded-xl border border-slate-100 p-4">
                   <p className="text-[13px] font-bold text-[#111]">{office.name}</p>
-                  <p className="mt-1 text-[12px] leading-relaxed text-slate-500">{office.address}</p>
-                  <p className="mt-1 text-[12px] text-slate-500">{office.phone}</p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-[#7A7A7A]">{office.address}</p>
+                  <p className="mt-1 text-[12px] text-[#7A7A7A]">{office.phone}</p>
                 </div>
               ))}
               {contact.factoryAddress && (
                 <div className="rounded-xl border border-slate-100 p-4">
                   <p className="text-[13px] font-bold text-[#111]">Pabrik / Workshop Produksi</p>
-                  <p className="mt-1 text-[12px] leading-relaxed text-slate-500">{contact.factoryAddress}</p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-[#7A7A7A]">{contact.factoryAddress}</p>
                 </div>
               )}
             </div>
@@ -1603,7 +1614,7 @@ const ContactPage: React.FC<{
 
           <div className="rounded-2xl p-6" style={{ backgroundColor: CREAM }}>
             <h2 className="text-[16px] font-bold text-[#111]">Kirim Pesan</h2>
-            <p className="mt-1 text-[12.5px] text-slate-500">
+            <p className="mt-1 text-[12.5px] text-[#7A7A7A]">
               Isi detail kebutuhan Anda, kami akan membalas melalui WhatsApp.
             </p>
             <form
@@ -1620,24 +1631,24 @@ const ContactPage: React.FC<{
                 name="name"
                 required
                 placeholder="Nama Anda"
-                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[13px] outline-none focus:border-[#F0B300]"
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[13px] outline-none focus:border-[#00AAFF]"
               />
               <input
                 name="need"
                 required
                 placeholder="Kebutuhan cetak"
-                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[13px] outline-none focus:border-[#F0B300]"
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[13px] outline-none focus:border-[#00AAFF]"
               />
               <textarea
                 name="message"
                 rows={4}
                 required
                 placeholder="Tulis pesan Anda"
-                className="w-full resize-none rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[13px] outline-none focus:border-[#F0B300]"
+                className="w-full resize-none rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[13px] outline-none focus:border-[#00AAFF]"
               />
               <button
                 type="submit"
-                className="flex w-full items-center justify-center gap-2 rounded-full bg-[#111] py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#F0B300] hover:text-[#111]"
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-[#111] py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#00AAFF] hover:text-[#111]"
               >
                 Kirim via WhatsApp <ArrowRight size={14} />
               </button>
@@ -1685,7 +1696,7 @@ const BlogPage: React.FC<{
                     if (post.url) window.open(post.url, '_blank');
                     else onOpenLightbox([{ src: post.imageUrl || '', title: post.title }], i);
                   }}
-                  className="mt-4 flex items-center gap-2 text-[12px] font-semibold text-[#F0B300]"
+                  className="mt-4 flex items-center gap-2 text-[12px] font-semibold text-[#00AAFF]"
                 >
                   Baca Artikel <ArrowRight size={13} />
                 </button>
@@ -1797,7 +1808,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               type="button"
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
               aria-label="Kembali ke atas"
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FFC20D] text-[#111] shadow-lg transition-transform hover:-translate-y-0.5"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-[#00AAFF] text-[#111] shadow-lg transition-transform hover:-translate-y-0.5"
             >
               <ArrowUp size={18} />
             </button>

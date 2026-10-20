@@ -682,19 +682,32 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                       hint="PNG transparan agar ikon tetap rapi di tab browser."
                     />
                   </div>
-                  {/* Pratinjau favicon */}
-                  <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pratinjau</span>
-                    <span className="flex items-center gap-2 rounded-t-lg border border-b-0 border-slate-200 bg-white px-2.5 py-1.5">
+                  {/* Pratinjau favicon + judul tab browser */}
+                  <div className="flex flex-col gap-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Pratinjau Tab Browser
+                    </p>
+                    <span className="flex w-fit max-w-full items-center gap-2 rounded-t-lg border border-b-0 border-slate-200 bg-white px-2.5 py-1.5">
                       {config.brand.faviconUrl ? (
-                        <img src={config.brand.faviconUrl} alt="Favicon" className="h-4 w-4 object-contain" />
+                        <img src={config.brand.faviconUrl} alt="Favicon" className="h-4 w-4 shrink-0 object-contain" />
                       ) : (
-                        <span className="h-4 w-4 rounded bg-slate-200" />
+                        <span className="h-4 w-4 shrink-0 rounded bg-slate-200" />
                       )}
-                      <span className="text-[11px] font-semibold text-slate-700">
-                        {config.brand.name || 'bejo stiker'}
+                      <span className="truncate text-[11px] font-semibold text-slate-700">
+                        {config.brand.siteTitle || 'Bejo Stiker POS'}
                       </span>
                     </span>
+                    <Field
+                      label="Judul Website (Teks Tab Browser)"
+                      hint="Tampil di sebelah favicon pada tab browser dan sebagai judul di hasil pencarian."
+                    >
+                      <input
+                        value={config.brand.siteTitle || ''}
+                        onChange={(e) => patchSub('brand', { siteTitle: e.target.value })}
+                        className={inputCls}
+                        placeholder="Contoh: BEJO STIKER & DIGITAL PRINTING"
+                      />
+                    </Field>
                   </div>
                 </div>
               </div>

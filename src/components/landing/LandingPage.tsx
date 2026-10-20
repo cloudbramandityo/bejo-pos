@@ -1739,7 +1739,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     document.head.appendChild(link);
   }, []);
 
-  /* Favicon + deskripsi website (meta description).
+  /* Favicon + judul tab browser + deskripsi website (meta description).
      Hanya berlaku untuk halaman publik sungguhan — pratinjau CMS (embedded)
      memakai portal sehingga document.head-nya sama dengan dokumen utama. */
   useEffect(() => {
@@ -1747,6 +1747,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     const head = document.head;
     const favicon = config.brand?.faviconUrl;
     const description = (config.brand?.metaDescription || '').trim();
+    const siteTitle = (config.brand?.siteTitle || '').trim();
 
     /* --- favicon --- */
     let icon = document.getElementById('bejo-landing-favicon') as HTMLLinkElement | null;
@@ -1764,24 +1765,33 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       icon.remove();
     }
 
+    /* --- judul tab browser --- */
+    const previousTitle = document.title;
+    if (siteTitle) document.title = siteTitle;
+
     /* --- meta description --- */
     const meta = head.querySelector('meta[name="description"]') as HTMLMetaElement | null;
     const og = head.querySelector('meta[property="og:description"]') as HTMLMetaElement | null;
+    const ogTitle = head.querySelector('meta[property="og:title"]') as HTMLMetaElement | null;
     const previousMeta = meta?.content;
     const previousOg = og?.content;
+    const previousOgTitle = ogTitle?.content;
 
     if (description) {
       if (meta) meta.content = description;
       if (og) og.content = description;
     }
+    if (siteTitle && ogTitle) ogTitle.content = siteTitle;
 
     return () => {
       /* kembalikan seperti semula saat meninggalkan halaman publik */
       if (!hadIcon && icon) icon.remove();
+      document.title = previousTitle;
       if (meta && previousMeta !== undefined) meta.content = previousMeta;
       if (og && previousOg !== undefined) og.content = previousOg;
+      if (ogTitle && previousOgTitle !== undefined) ogTitle.content = previousOgTitle;
     };
-  }, [embedded, config.brand?.faviconUrl, config.brand?.metaDescription]);
+  }, [embedded, config.brand?.faviconUrl, config.brand?.siteTitle, config.brand?.metaDescription]);
 
   /* Kembali ke atas saat pindah halaman */
   useEffect(() => {

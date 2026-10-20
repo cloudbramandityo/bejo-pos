@@ -17,6 +17,21 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR === 'true' ? false : { overlay: false },
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      // Izinkan akses lewat domain terowongan (Cloudflare/ngrok) agar aplikasi
+      // bisa dibuka dari internet tanpa diblokir proteksi host Vite.
+      // Tambahkan hostname Anda sendiri di ALLOWED_HOSTS (dipisah koma).
+      allowedHosts: [
+        '.trycloudflare.com',
+        '.ngrok-free.app',
+        '.ngrok-free.dev',
+        '.ngrok.io',
+        '.loca.lt',
+        '.lhr.life',
+        ...(process.env.ALLOWED_HOSTS || '')
+          .split(',')
+          .map((h) => h.trim())
+          .filter(Boolean),
+      ],
     },
   };
 });

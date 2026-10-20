@@ -11,6 +11,96 @@ const app = express();
 const server = http.createServer(app);
 const PORT = 3000;
 
+// =========================================================================
+// PROTEKSI AKSES JARINGAN LUAR (Cloudflare Tunnel / akses dari internet)
+// =========================================================================
+// Bila aplikasi diakses dari luar jaringan lokal, seluruh pengunjung wajib
+// melewati lapisan login ini terlebih dahulu. Dijalankan SEBELUM semua route.
+// Kredensial diambil dari environment variable sehingga TIDAK ikut ter-commit.
+const REMOTE_ACCESS_USER = process.env.REMOTE_ACCESS_USER || 'bejo';
+const REMOTE_ACCESS_PASS = process.env.REMOTE_ACCESS_PASS || '';
+const REMOTE_ACCESS_ENABLED = REMOTE_ACCESS_PASS.length > 0;
+
+// IP lokal & LAN tidak perlu login tambahan (sudah terlindungi jaringan fisik).
+function isLocalRequest(req: express.Request): boolean {
+  const ip = (req.ip || req.socket.remoteAddress || '').replace('::ffff:', '');
+  return (
+    ip === '127.0.0.1' ||
+    ip === '::1' ||
+    ip === 'localhost' ||
+    /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip)
+  );
+}
+
+// Hostname lokal (localhost / IP LAN). Selain ini dianggap dari luar.
+function isLocalHostName(req: express.Request): boolean {
+  const host = String(req.headers.host || '').split(':')[0].toLowerCase();
+  if (!host) return true;
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '::1' ||
+    host === '[::1]' ||
+    /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)
+  );
+}
+
+// Header khas Cloudflare Tunnel / reverse proxy — penanda pasti akses dari internet.
+function hasTunnelHeaders(req: express.Request): boolean {
+  return Boolean(
+    req.headers['cf-connecting-ip'] ||
+    req.headers['cf-ray'] ||
+    req.headers['cf-visitor'] ||
+    req.headers['x-forwarded-for']
+  );
+}
+
+/**
+ * Menentukan apakah request WAJIB melewati login.
+ * PENTING: cloudflared meneruskan request dari 127.0.0.1, sehingga deteksi
+ * berbasis IP saja tidak cukup — header terowongan ikut diperiksa.
+ */
+function needsRemoteAuth(req: express.Request): boolean {
+  if (hasTunnelHeaders(req)) return true;   // datang lewat terowongan internet
+  if (!isLocalRequest(req)) return true;    // socket bukan dari jaringan lokal
+  if (!isLocalHostName(req)) return true;   // hostname bukan lokal/LAN
+  return false;
+}
+
+if (REMOTE_ACCESS_ENABLED) {
+  app.use((req, res, next) => {
+    if (!needsRemoteAuth(req)) return next();
+
+    const header = req.headers.authorization || '';
+    const [scheme, encoded] = header.split(' ');
+
+    if (scheme === 'Basic' && encoded) {
+      const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
+      const sepIndex = decoded.indexOf(':');
+      const user = decoded.slice(0, sepIndex);
+      const pass = decoded.slice(sepIndex + 1);
+
+      // Perbandingan panjang tetap untuk mengurangi risiko timing attack
+      const userOk = user.length === REMOTE_ACCESS_USER.length && user === REMOTE_ACCESS_USER;
+      const passOk = pass.length === REMOTE_ACCESS_PASS.length && pass === REMOTE_ACCESS_PASS;
+      if (userOk && passOk) return next();
+    }
+
+    res.setHeader('WWW-Authenticate', 'Basic realm="Bejo Stiker POS - Akses Terbatas", charset="UTF-8"');
+    res.status(401).send(
+      '<!doctype html><html lang="id"><head><meta charset="utf-8">' +
+      '<title>Akses Terbatas</title></head><body style="font-family:system-ui;display:flex;' +
+      'align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:#e2e8f0">' +
+      '<div style="text-align:center"><h1 style="font-size:20px">Akses Terbatas</h1>' +
+      '<p style="font-size:13px;color:#94a3b8">Silakan login untuk membuka Bejo Stiker POS.</p></div>' +
+      '</body></html>'
+    );
+  });
+  console.log('[Keamanan] Proteksi akses jaringan luar AKTIF (user: ' + REMOTE_ACCESS_USER + ').');
+} else {
+  console.log('[Keamanan] Proteksi akses luar NONAKTIF — set REMOTE_ACCESS_PASS di .env untuk mengaktifkan.');
+}
+
 app.use(express.json());
 
 // Initialize GoogleGenAI client according to official guidelines

@@ -603,7 +603,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
               className="w-full bg-transparent text-[11px] font-semibold text-slate-700 outline-none placeholder:text-slate-400"
             />
           </div>
-          <nav className="space-y-0.5">
+          <nav className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-col md:gap-0.5 md:overflow-visible">
             {filteredSections.map((section) => {
               const Icon = section.icon;
               const n = count(section.key);
@@ -616,7 +616,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                     setActive(section.key);
                     setOpenItem(null);
                   }}
-                  className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[11.5px] font-semibold transition-colors ${
+                  className={`flex w-auto shrink-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[11.5px] font-semibold transition-colors md:w-full ${
                     isActive ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
                   }`}
                 >

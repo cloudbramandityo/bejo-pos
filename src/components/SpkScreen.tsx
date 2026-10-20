@@ -1758,11 +1758,11 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3.5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           {/* Sub Navigation */}
-          <div className="flex items-center gap-1.5 overflow-x-auto text-xs font-bold">
+          <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden text-xs font-bold -mx-1 px-1">
             <button
               type="button"
               onClick={() => setActiveTab('kanban')}
-              className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
                 activeTab === 'kanban'
                   ? 'bg-slate-900 text-white shadow-xs font-bold'
                   : 'bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200'
@@ -1775,7 +1775,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('list')}
-              className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
                 activeTab === 'list'
                   ? 'bg-slate-900 text-white shadow-xs font-bold'
                   : 'bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200'
@@ -1790,7 +1790,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
               <button
                 type="button"
                 onClick={() => setActiveTab('machines')}
-                className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
                   activeTab === 'machines'
                     ? 'bg-slate-900 text-white shadow-xs font-bold'
                     : 'bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200'
@@ -1805,7 +1805,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
               <button
                 type="button"
                 onClick={() => setActiveTab('team_status')}
-                className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
                   activeTab === 'team_status'
                     ? 'bg-slate-900 text-white shadow-xs font-bold'
                     : 'bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200'
@@ -1820,7 +1820,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('reject_log')}
-              className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
                 activeTab === 'reject_log'
                   ? 'bg-rose-600 text-white shadow-xs font-bold'
                   : 'bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200/80'

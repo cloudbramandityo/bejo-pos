@@ -1315,12 +1315,12 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
       {isStoreOnline && (
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 w-full">
           {/* Tab Selector: Dashboard Analysis vs Penjualan Toko vs Pembelian Bahan vs Pengambilan Bahan */}
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-fit flex-wrap gap-1">
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-full lg:w-fit overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden gap-1">
             <button
               type="button"
               id="tab-laporan-analysis"
               onClick={() => setReportTab('analysis')}
-              className={`px-4 sm:px-5 py-2 rounded-lg font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+              className={`px-4 sm:px-5 py-2 rounded-lg font-bold text-xs flex items-center gap-2 shrink-0 whitespace-nowrap transition-all cursor-pointer ${
                 reportTab === 'analysis'
                   ? 'bg-slate-900 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
@@ -1333,7 +1333,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
               type="button"
               id="tab-laporan-penjualan"
               onClick={() => setReportTab('penjualan')}
-              className={`px-4 sm:px-5 py-2 rounded-lg font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+              className={`px-4 sm:px-5 py-2 rounded-lg font-bold text-xs flex items-center gap-2 shrink-0 whitespace-nowrap transition-all cursor-pointer ${
                 reportTab === 'penjualan'
                   ? 'bg-slate-900 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
@@ -1346,7 +1346,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
               type="button"
               id="tab-laporan-pembelian"
               onClick={() => setReportTab('pembelian_bahan')}
-              className={`px-4 sm:px-5 py-2 rounded-lg font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+              className={`px-4 sm:px-5 py-2 rounded-lg font-bold text-xs flex items-center gap-2 shrink-0 whitespace-nowrap transition-all cursor-pointer ${
                 reportTab === 'pembelian_bahan'
                   ? 'bg-slate-900 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
@@ -1360,7 +1360,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
                 type="button"
                 id="tab-laporan-pengambilan"
                 onClick={() => setReportTab('pengambilan_bahan')}
-                className={`px-4 sm:px-5 py-2 rounded-lg font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                className={`px-4 sm:px-5 py-2 rounded-lg font-bold text-xs flex items-center gap-2 shrink-0 whitespace-nowrap transition-all cursor-pointer ${
                   reportTab === 'pengambilan_bahan'
                     ? 'bg-slate-900 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
@@ -1396,11 +1396,11 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 sm:p-5 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
           {/* Period Tabs: Harian, Mingguan, Bulanan, Semua */}
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200/80 max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <button
               type="button"
               onClick={() => setPeriodType('HARIAN')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
                 periodType === 'HARIAN'
                   ? 'bg-slate-900 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -1413,7 +1413,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
             <button
               type="button"
               onClick={() => setPeriodType('MINGGUAN')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
                 periodType === 'MINGGUAN'
                   ? 'bg-slate-900 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -1426,7 +1426,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
             <button
               type="button"
               onClick={() => setPeriodType('BULANAN')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
                 periodType === 'BULANAN'
                   ? 'bg-slate-900 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -1439,7 +1439,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
             <button
               type="button"
               onClick={() => setPeriodType('SEMUA')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
                 periodType === 'SEMUA'
                   ? 'bg-slate-900 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'

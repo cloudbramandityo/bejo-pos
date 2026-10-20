@@ -26,6 +26,25 @@
   .bejo-landing {
     --tw-border-style: solid;
   }
+
+  /* Di smartphone, area yang bisa digeser horizontal diberi scrollbar tipis
+     agar pengguna tahu masih ada konten di sebelah kanan. */
+  @media (max-width: 1023px) {
+    .overflow-x-auto {
+      scrollbar-width: thin;
+      scrollbar-color: #cbd5e1 transparent;
+    }
+    .overflow-x-auto::-webkit-scrollbar {
+      height: 6px;
+    }
+    .overflow-x-auto::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .overflow-x-auto::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+  }
 }
 
 /* =========================================================================

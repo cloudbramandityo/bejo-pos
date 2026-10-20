@@ -297,7 +297,10 @@ const Header: React.FC<{
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 
-  const menu = config.menu.filter((m) => m.isActive);
+  const activeMenu = config.menu.filter((m) => m.isActive);
+  const sideOf = (m: LandingMenuItem) => m.position ?? (m.type === 'link' ? 'right' : 'left');
+  const leftMenu = activeMenu.filter((m) => sideOf(m) === 'left');
+  const rightMenu = activeMenu.filter((m) => sideOf(m) === 'right');
 
   const handleMegaLink = (link: { page?: LandingPageKey; categoryKey?: string }) => {
     setOpenMenu(null);
@@ -356,7 +359,7 @@ const Header: React.FC<{
             </button>
 
             <nav className="hidden items-center gap-4 md:flex lg:gap-5">
-              {menu.slice(0, 3).map((item) => (
+              {leftMenu.map((item) => (
                 <div
                   key={item.id}
                   className="relative"
@@ -400,7 +403,7 @@ const Header: React.FC<{
           {/* Kanan: nav + search */}
           <div className="flex items-center justify-end gap-4">
             <nav className="hidden items-center gap-3 md:flex lg:gap-4">
-              {menu.slice(3).map((item) => (
+              {rightMenu.map((item) => (
                 <div
                   key={item.id}
                   className="relative"
@@ -444,7 +447,7 @@ const Header: React.FC<{
         </div>
 
         {/* Mega menu panel */}
-        {menu
+        {activeMenu
           .filter((m) => m.type === 'mega' && m.columns && m.columns.length > 0)
           .map((item) => (
             <div
@@ -484,7 +487,7 @@ const Header: React.FC<{
       {mobileOpen && (
         <div className="border-b border-slate-200 bg-white md:hidden">
           <div className="max-h-[70vh] overflow-y-auto px-4 py-2">
-            {menu.map((item) => (
+            {activeMenu.map((item) => (
               <div key={item.id} className="border-b border-slate-100 py-1">
                 <button
                   type="button"

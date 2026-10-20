@@ -761,6 +761,8 @@ export interface LandingMenuItem {
   id: string;
   label: string;
   type: 'mega' | 'link';
+  /** posisi di header: kiri (3 menu pertama) atau kanan */
+  position: 'left' | 'right';
   page?: LandingPageKey; // tujuan bila type = 'link'
   columns?: LandingMenuColumn[]; // dipakai bila type = 'mega'
   isActive: boolean;

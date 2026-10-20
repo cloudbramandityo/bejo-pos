@@ -76,6 +76,7 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
       id: 'menu_cetak_custom',
       label: 'CETAK CUSTOM',
       type: 'mega',
+      position: 'left',
       isActive: true,
       columns: [
         {
@@ -132,6 +133,7 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
       id: 'menu_template',
       label: 'TEMPLATE DESIGN',
       type: 'mega',
+      position: 'left',
       isActive: true,
       columns: [
         {
@@ -176,6 +178,7 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
       id: 'menu_events',
       label: 'EVENTS',
       type: 'mega',
+      position: 'left',
       isActive: true,
       columns: [
         {
@@ -190,12 +193,13 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
         }
       ]
     },
-    { id: 'menu_inspirasi', label: 'INSPIRASI CETAK', type: 'link', page: 'blog', isActive: true },
-    { id: 'menu_portfolio', label: 'PORTFOLIO', type: 'link', page: 'clients', isActive: true },
+    { id: 'menu_inspirasi', label: 'INSPIRASI CETAK', type: 'link', position: 'right', page: 'blog', isActive: true },
+    { id: 'menu_portfolio', label: 'PORTFOLIO', type: 'link', position: 'right', page: 'clients', isActive: true },
     {
       id: 'menu_tentang',
       label: 'TENTANG KAMI',
       type: 'mega',
+      position: 'right',
       isActive: true,
       columns: [
         {
@@ -712,6 +716,17 @@ function migrateConfig(parsed: unknown): LandingPageConfig {
       }))
     : defaults.categories;
 
+  /* menu lama belum punya `position` (kiri/kanan di header) */
+  const menu = Array.isArray(clean.menu) && clean.menu.length > 0
+    ? (clean.menu as any[]).map((m) => ({
+        ...m,
+        position:
+          m?.position === 'right' || m?.position === 'left'
+            ? m.position
+            : defaults.menu.find((d) => d.id === m?.id)?.position ?? (m?.type === 'link' ? 'right' : 'left')
+      }))
+    : defaults.menu;
+
   return {
     ...defaults,
     ...clean,
@@ -721,7 +736,7 @@ function migrateConfig(parsed: unknown): LandingPageConfig {
     contact,
     slides,
     categories,
-    menu: Array.isArray(clean.menu) && clean.menu.length > 0 ? clean.menu : defaults.menu,
+    menu,
     templatePromos: Array.isArray(clean.templatePromos) && clean.templatePromos.length > 0
       ? clean.templatePromos
       : defaults.templatePromos,

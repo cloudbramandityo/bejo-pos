@@ -141,12 +141,17 @@ const Toggle: React.FC<{ active: boolean; onChange: (v: boolean) => void; label?
   <button
     type="button"
     onClick={() => onChange(!active)}
-    className={`flex items-center gap-2 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide transition-colors ${
-      active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
-    }`}
+    aria-pressed={active}
+    className="flex items-center gap-2"
   >
-    <span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-    {label || (active ? 'Aktif' : 'Nonaktif')}
+    <span className={`relative h-[18px] w-8 shrink-0 rounded-full transition-colors ${active ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+      <span
+        className={`absolute top-[2px] h-[14px] w-[14px] rounded-full bg-white shadow transition-all ${active ? 'left-[16px]' : 'left-[2px]'}`}
+      />
+    </span>
+    <span className={`text-[10px] font-bold uppercase tracking-wide ${active ? 'text-emerald-600' : 'text-slate-400'}`}>
+      {label || (active ? 'Aktif' : 'Nonaktif')}
+    </span>
   </button>
 );
 
@@ -443,6 +448,12 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
 
   const isDirty = useMemo(() => JSON.stringify(config) !== savedJson, [config, savedJson]);
 
+  /* simpan config terbaru agar klik "Simpan" tidak menyimpan state basi */
+  const configRef = useRef<LandingPageConfig>(config);
+  useEffect(() => {
+    configRef.current = config;
+  }, [config]);
+
   const notify = (msg: string) => {
     setNotice(msg);
     window.setTimeout(() => setNotice(null), 4000);
@@ -548,12 +559,24 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
           >
             <X size={12} /> Batal
           </button>
-          <button type="button" disabled={!isDirty} onClick={() => commit(config, 'Perubahan berhasil disimpan.')} className={btnPrimary}>
+          <button
+            type="button"
+            disabled={!isDirty}
+            onClick={() => commit(configRef.current, 'Perubahan berhasil disimpan.')}
+            className={btnPrimary}
+          >
             <Save size={12} /> Simpan
           </button>
           <button
             type="button"
-            onClick={() => commit({ ...config, isPublished: !config.isPublished }, config.isPublished ? 'Landing page dinonaktifkan (On Hold).' : 'Landing page dipublikasikan.')}
+            onClick={() =>
+              commit(
+                { ...configRef.current, isPublished: !configRef.current.isPublished },
+                configRef.current.isPublished
+                  ? 'Landing page dinonaktifkan (On Hold).'
+                  : 'Landing page dipublikasikan.'
+              )
+            }
             className={`${btnPrimary} ${config.isPublished ? '!bg-emerald-600 hover:!bg-emerald-500' : '!bg-amber-500 hover:!bg-amber-400'}`}
           >
             {config.isPublished ? <Check size={12} /> : <CircleAlert size={12} />}
@@ -737,12 +760,19 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
           {active === 'menu' && (
             <SectionCard
               title={`Menu Navigasi (${config.menu.length})`}
-              description="Menu header. Tipe 'mega' menampilkan dropdown kolom."
+              description="Aktifkan / nonaktifkan menu utama dan atur posisinya di header halaman publik."
               aside={
                 <button
                   type="button"
                   onClick={() => {
-                    const item: LandingMenuItem = { id: newId('menu'), label: 'MENU BARU', type: 'link', page: 'home', isActive: true };
+                    const item: LandingMenuItem = {
+                      id: newId('menu'),
+                      label: 'MENU BARU',
+                      type: 'link',
+                      position: 'left',
+                      page: 'home',
+                      isActive: true
+                    };
                     updateList('menu', [...config.menu, item]);
                     setOpenItem(item.id);
                   }}
@@ -752,13 +782,84 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                 </button>
               }
             >
+              {/* Panel cepat: hidup/mati tiap menu utama */}
+              <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[12px] font-bold uppercase tracking-wide text-slate-800">Tampilkan Menu Utama</p>
+                    <p className="mt-0.5 text-[10.5px] font-medium text-slate-500">
+                      Menu yang dinonaktifkan tidak muncul di navigasi halaman publik.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => updateList('menu', config.menu.map((m) => ({ ...m, isActive: true })))}
+                      className={btnGhost}
+                    >
+                      Aktifkan Semua
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateList('menu', config.menu.map((m) => ({ ...m, isActive: false })))}
+                      className={btnGhost}
+                    >
+                      Matikan Semua
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {config.menu.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5"
+                    >
+                      <span className="min-w-[140px] flex-1">
+                        <span className="block truncate text-[11.5px] font-bold text-slate-800">{item.label}</span>
+                        <span className="block text-[10px] font-medium text-slate-400">
+                          {item.type === 'mega'
+                            ? `Mega menu · ${item.columns?.length || 0} kolom`
+                            : `Tautan → ${PAGE_OPTIONS.find((p) => p.value === item.page)?.label || 'Beranda'}`}
+                        </span>
+                      </span>
+
+                      <select
+                        value={item.position === 'right' ? 'right' : 'left'}
+                        onChange={(e) =>
+                          updateList(
+                            'menu',
+                            config.menu.map((m) =>
+                              m.id === item.id ? { ...m, position: e.target.value as 'left' | 'right' } : m
+                            )
+                          )
+                        }
+                        className={`${inputCls} !w-[104px] !py-1.5`}
+                        title="Posisi di header"
+                      >
+                        <option value="left">Kiri</option>
+                        <option value="right">Kanan</option>
+                      </select>
+
+                      <Toggle
+                        active={item.isActive}
+                        onChange={(v) =>
+                          updateList('menu', config.menu.map((m) => (m.id === item.id ? { ...m, isActive: v } : m)))
+                        }
+                      />
+                    </div>
+                  ))}
+                  {config.menu.length === 0 && <Empty text="Belum ada menu. Tambahkan lewat tombol Tambah." />}
+                </div>
+              </div>
+
               <div className="space-y-2.5">
                 {config.menu.map((item, i) => (
                   <ItemAccordion
                     key={item.id}
                     id={item.id}
                     title={item.label}
-                    subtitle={`${item.type === 'mega' ? `Mega menu · ${item.columns?.length || 0} kolom` : `Tautan · ${item.page || '-'}`}`}
+                    subtitle={`${item.type === 'mega' ? `Mega menu · ${item.columns?.length || 0} kolom` : `Tautan · ${item.page || '-'}`} · ${item.position === 'right' ? 'Kanan' : 'Kiri'}`}
                     open={openItem === item.id}
                     onToggle={() => setOpenItem(openItem === item.id ? null : item.id)}
                     onDelete={() => updateList('menu', config.menu.filter((m) => m.id !== item.id))}
@@ -766,7 +867,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                     onDown={i < config.menu.length - 1 ? () => updateList('menu', moveItem(config.menu, i, i + 1)) : undefined}
                     right={<Toggle active={item.isActive} onChange={(v) => updateList('menu', config.menu.map((m) => (m.id === item.id ? { ...m, isActive: v } : m)))} />}
                   >
-                    <div className="grid gap-3 md:grid-cols-3">
+                    <div className="grid gap-3 md:grid-cols-4">
                       <Field label="Label Menu">
                         <input
                           value={item.label}
@@ -795,6 +896,23 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                         >
                           <option value="link">Tautan langsung</option>
                           <option value="mega">Mega menu</option>
+                        </select>
+                      </Field>
+                      <Field label="Posisi di Header">
+                        <select
+                          value={item.position === 'right' ? 'right' : 'left'}
+                          onChange={(e) =>
+                            updateList(
+                              'menu',
+                              config.menu.map((m) =>
+                                m.id === item.id ? { ...m, position: e.target.value as 'left' | 'right' } : m
+                              )
+                            )
+                          }
+                          className={inputCls}
+                        >
+                          <option value="left">Kiri</option>
+                          <option value="right">Kanan</option>
                         </select>
                       </Field>
                       {item.type === 'link' && (

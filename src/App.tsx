@@ -104,8 +104,6 @@ import {
   saveStoredMachines,
   getStoredStockTransactions,
   saveStoredStockTransactions,
-  getStoredThemeMode,
-  saveStoredThemeMode,
   getStoredActivityLogs,
   saveStoredActivityLogs,
   addActivityLogRecord,
@@ -216,10 +214,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Theme Mode State (Dark Mode vs Light Mode)
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    return getStoredThemeMode() === 'dark';
-  });
+  // NOTE: Mode Terang / Gelap (dark mode) telah dihapus — aplikasi selalu memakai tema terang.
 
   // Heartbeat to update current logged in user's online presence in Firestore
   // Optimized to 5 minutes (300,000ms) to conserve Firestore daily read/write quota
@@ -263,19 +258,6 @@ export default function App() {
     }, 30000); // Check every 30 seconds
     return () => clearInterval(timer);
   }, []);
-
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-    saveStoredThemeMode(isDarkMode ? 'dark' : 'light');
-  }, [isDarkMode]);
-
-  const handleToggleTheme = () => {
-    setIsDarkMode((prev) => !prev);
-  };
 
   const [landingConfig, setLandingConfig] = useState(() => getStoredLandingConfig());
   const [isViewingPublicLanding, setIsViewingPublicLanding] = useState<boolean>(false);
@@ -2015,13 +1997,14 @@ export default function App() {
   }
 
   return (
-    <div className={`min-h-screen ${isDarkMode ? 'dark bg-[#1f1f1f] text-[#e3e3e3]' : 'bg-slate-100 text-slate-900'} flex flex-col font-sans selection:bg-blue-600 selection:text-white pb-20 md:pb-10 print:pb-0 print:p-0 print:bg-white transition-colors duration-250`}>
+    <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans selection:bg-blue-600 selection:text-white pb-20 md:pb-10 print:pb-0 print:p-0 print:m-0 print:bg-white transition-colors duration-250">
       {/* Top Navbar */}
       <Navbar
         currentTab={currentTab}
         setCurrentTab={setCurrentTab}
         activeShift={computedActiveShift}
         storeName={computedActiveShift?.storeName || storeInfo.storeName}
+        appTitle={storeInfo.appTitle}
         logoUrl={storeInfo.logoUrl}
         isCloudConnected={isCloudConnected}
         onOpenShiftModal={() => setIsShiftModalOpen(true)}
@@ -2029,7 +2012,6 @@ export default function App() {
         currentUser={currentUser}
         onLogout={handleLogout}
         onOpenUserManagement={() => setIsUserManagementModalOpen(true)}
-        isStoreOnline={storeInfo.storeStatus === 'ONLINE'}
         onViewLandingPage={() => setIsViewingPublicLanding(true)}
       />
 
@@ -2092,7 +2074,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'stock' && (userRole === 'DEVELOPER' || userRole === 'OWNER' || userRole === 'ADMIN') && storeInfo.storeStatus === 'ONLINE' && (
+        {currentTab === 'stock' && (userRole === 'DEVELOPER' || userRole === 'OWNER' || userRole === 'ADMIN') && (
           <StockScreen
             products={products}
             suppliers={suppliers}
@@ -2138,8 +2120,6 @@ export default function App() {
             onSaveCustomRole={handleSaveCustomRole}
             onDeleteCustomRole={handleDeleteCustomRole}
             onOpenBackendDiagnostics={() => setIsBackendDiagnosticsModalOpen(true)}
-            isDarkMode={isDarkMode}
-            onToggleTheme={handleToggleTheme}
             currentUserId={currentUser.id}
           />
         )}
@@ -2149,7 +2129,6 @@ export default function App() {
             transactions={transactions}
             stockTransactions={stockTransactions}
             invoices={invoices}
-            isStoreOnline={storeInfo.storeStatus === 'ONLINE'}
             storeName={storeInfo.storeName}
             onPrintReceipt={handlePrintReceiptDirect}
             products={products}

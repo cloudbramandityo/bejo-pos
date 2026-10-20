@@ -202,6 +202,8 @@ export function saveStoredProductCategories(categories: ProductCategoryItem[]): 
 
 export interface StoreInfo {
   storeName: string;
+  /** Judul aplikasi pada header (dapat diedit manual di tab Pengaturan) */
+  appTitle?: string;
   branch: string;
   address: string;
   phone: string;
@@ -213,6 +215,7 @@ export interface StoreInfo {
 
 export const DEFAULT_STORE_INFO: StoreInfo = {
   storeName: 'BEJO STIKER',
+  appTitle: 'Point of Sales',
   branch: 'Pelsek',
   address: 'Jl. Raya Utama No. 45 (Sebelah Polsek), Kota',
   phone: '0812-3456-7890',
@@ -554,6 +557,9 @@ export function getStoredStoreInfo(): StoreInfo {
     const parsed: StoreInfo = JSON.parse(raw);
     if (!parsed.logoUrl && defaultLogo) {
       parsed.logoUrl = defaultLogo;
+    }
+    if (!parsed.appTitle) {
+      parsed.appTitle = DEFAULT_STORE_INFO.appTitle;
     }
     parsed.isMaster = activeProf.isMaster ?? (activeProf.id === 'bejo_polsek');
     return parsed;

@@ -104,7 +104,7 @@ const ALL_TABS: TabDef[] = [
   { id: 'invoices', label: 'Invoice B2B', nav: 'Invoice', short: 'Invoice', icon: FileText, tone: 'blue', group: 'Laporan & Keuangan', badge: 'B2B' },
   { id: 'tax', label: 'Pajak', nav: 'Pajak', short: 'Pajak', icon: Calculator, tone: 'rose', group: 'Laporan & Keuangan', badge: 'DEV' },
   { id: 'customers', label: 'Pengaturan Toko', nav: 'Pengaturan', short: 'Toko', icon: Users, tone: 'slate', group: 'Pengaturan' },
-  { id: 'landing_editor', label: 'Landing Page CMS', nav: 'Landing', short: 'Landing', icon: Globe, tone: 'emerald', group: 'Developer', badge: 'DEV' },
+  { id: 'landing_editor', label: 'Website', nav: 'Website', short: 'Website', icon: Globe, tone: 'emerald', group: 'Developer', badge: 'DEV' },
 ];
 
 /* urutan prioritas tab pada bottom bar (mobile) */
@@ -127,6 +127,8 @@ interface NavbarProps {
   setCurrentTab: (tab: TabId) => void;
   activeShift: Shift | null;
   storeName?: string;
+  /** Judul aplikasi (dapat diedit manual di tab Pengaturan) */
+  appTitle?: string;
   logoUrl?: string;
   isCloudConnected?: boolean;
   onOpenShiftModal: () => void;
@@ -143,6 +145,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   setCurrentTab,
   activeShift,
   storeName,
+  appTitle,
   logoUrl,
   isCloudConnected = true,
   onOpenShiftModal,
@@ -150,7 +153,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   onOpenUserManagement,
   onOpenDatabaseModal,
-  isStoreOnline = false,
+  isStoreOnline = true,
   onViewLandingPage,
 }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -314,7 +317,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <StoreLogo size="md" rounded="rounded-xl" customLogoUrl={logoUrl} storeName={displayStoreName} />
           <div className="min-w-0 text-left">
             <h1 className="text-sm sm:text-base font-bold tracking-tight text-slate-900 leading-tight truncate whitespace-nowrap">
-              {isSpk ? 'SPK Cetak Digital' : isAgent ? 'Portal Toko Agen' : 'Point of Sales'}
+              {isSpk ? 'SPK Cetak Digital' : isAgent ? 'Portal Toko Agen' : appTitle || 'Point of Sales'}
             </h1>
             <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider truncate whitespace-nowrap hidden sm:block">
               {displayStoreName}
@@ -516,7 +519,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <StoreLogo size="md" rounded="rounded-xl" customLogoUrl={logoUrl} storeName={displayStoreName} />
                 <div className="min-w-0">
                   <p className="text-[13px] font-bold text-slate-900 leading-tight truncate">
-                    {isSpk ? 'SPK Cetak Digital' : isAgent ? 'Portal Toko Agen' : 'Point of Sales'}
+                    {isSpk ? 'SPK Cetak Digital' : isAgent ? 'Portal Toko Agen' : appTitle || 'Point of Sales'}
                   </p>
                   <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider truncate">
                     {displayStoreName}

@@ -15,6 +15,7 @@ import {
   X,
   History,
   Store,
+  Type,
   Save,
   Building2,
   PhoneCall,
@@ -63,7 +64,6 @@ import { DeveloperJokerIcon } from './DeveloperJokerIcon';
 import { StoreLogo } from './StoreLogo';
 import { isReservedDeveloperUsername } from '../utils/authSecurity';
 import { runBackendAutoFix, triggerSimulatedBackendError } from '../utils/backendDiagnostics';
-import { ThemeToggleSwitch } from './ThemeToggleSwitch';
 import { GoogleDriveUrlConverter } from './GoogleDriveUrlConverter';
 
 interface CustomerScreenProps {
@@ -95,8 +95,6 @@ interface CustomerScreenProps {
   onSaveCustomRole?: (role: CustomRole) => void;
   onDeleteCustomRole?: (roleId: string) => void;
   onOpenBackendDiagnostics?: () => void;
-  isDarkMode?: boolean;
-  onToggleTheme?: () => void;
   currentUserId?: string;
   stockTransactions?: StockTransaction[];
   products?: Product[];
@@ -132,8 +130,6 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
   onSaveCustomRole,
   onDeleteCustomRole,
   onOpenBackendDiagnostics,
-  isDarkMode = false,
-  onToggleTheme,
   currentUserId,
   stockTransactions = [],
   products = [],
@@ -141,7 +137,6 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
 }) => {
   const isDeveloper = userRole === 'DEVELOPER';
   const isAdminOrDev = userRole === 'DEVELOPER' || userRole === 'ADMIN';
-  const isStoreOnline = storeInfo?.storeStatus === 'ONLINE' || !storeInfo?.storeStatus;
   const [isFixingBackend, setIsFixingBackend] = useState(false);
   const [quickFixMsg, setQuickFixMsg] = useState<string | null>(null);
 
@@ -200,11 +195,6 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
     }, 150);
   };
 
-  useEffect(() => {
-    if (!isStoreOnline && (activeTab === 'suppliers' || activeTab === 'agents')) {
-      setActiveTab('customers');
-    }
-  }, [isStoreOnline, activeTab]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [supplierSearchQuery, setSupplierSearchQuery] = useState('');
@@ -606,27 +596,6 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
     }
   };
 
-  // Store status change password confirmation state
-  const [pendingStoreStatus, setPendingStoreStatus] = useState<'OFFLINE' | 'ONLINE' | null>(null);
-  const [statusPasswordInput, setStatusPasswordInput] = useState('');
-  const [statusPasswordError, setStatusPasswordError] = useState(false);
-
-  const handleConfirmStatusChange = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (statusPasswordInput === 'n1neismine') {
-      if (pendingStoreStatus) {
-        const updated = { ...storeForm, storeStatus: pendingStoreStatus };
-        setStoreForm(updated);
-        onSaveStoreInfo(updated);
-      }
-      setPendingStoreStatus(null);
-      setStatusPasswordInput('');
-      setStatusPasswordError(false);
-    } else {
-      setStatusPasswordError(true);
-    }
-  };
-
   useEffect(() => {
     setStoreForm(storeInfo);
   }, [storeInfo]);
@@ -742,12 +711,13 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
     }
     onSaveStoreInfo({
       storeName: storeForm.storeName.trim(),
+      appTitle: (storeForm.appTitle || '').trim() || 'Point of Sales',
       branch: storeForm.branch.trim(),
       address: storeForm.address.trim(),
       phone: storeForm.phone.trim(),
       receiptFooter: storeForm.receiptFooter.trim(),
       logoUrl: storeForm.logoUrl || '',
-      storeStatus: storeForm.storeStatus || 'ONLINE'
+      storeStatus: 'ONLINE'
     });
     setStoreSavedToast(true);
     setTimeout(() => setStoreSavedToast(false), 3000);
@@ -968,7 +938,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
               Tambah Pelanggan Baru
             </button>
           )}
-          {activeTab === 'agents' && isStoreOnline && (
+          {activeTab === 'agents' && (
             <button
               type="button"
               onClick={openAddAgent}
@@ -978,7 +948,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
               Tambah Agen Baru
             </button>
           )}
-          {activeTab === 'suppliers' && isStoreOnline && (
+          {activeTab === 'suppliers' && (
             <button
               type="button"
               onClick={openAddSupplier}
@@ -1075,7 +1045,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
         </button>
 
         {/* 2. Agen */}
-        {isStoreOnline && (
+        {(
           <button
             type="button"
             onClick={() => setActiveTab('agents')}
@@ -1091,7 +1061,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
         )}
 
         {/* 3. Supplier */}
-        {isStoreOnline && (
+        {(
           <button
             type="button"
             onClick={() => setActiveTab('suppliers')}
@@ -1286,7 +1256,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
       )}
 
       {/* Tab: Agents List */}
-      {activeTab === 'agents' && isStoreOnline && (
+      {activeTab === 'agents' && (
         <div className="bg-white rounded-b-2xl border border-slate-200 shadow-xs overflow-hidden p-4 space-y-4 animate-in fade-in duration-200">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="relative w-full sm:max-w-sm">
@@ -1929,6 +1899,23 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                 </span>
               </div>
 
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center gap-2">
+                  <Type className="w-3.5 h-3.5 text-blue-600" />
+                  Judul Aplikasi (Header)
+                </label>
+                <input
+                  type="text"
+                  value={storeForm.appTitle || ''}
+                  onChange={(e) => setStoreForm({ ...storeForm, appTitle: e.target.value })}
+                  placeholder="misal: Point of Sales"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
+                />
+                <span className="text-[11px] text-slate-500 mt-1 block">
+                  Teks besar di sebelah logo pada header aplikasi (dapat diedit manual, misal: &ldquo;Point of Sales&rdquo;).
+                </span>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center gap-2">
@@ -1995,44 +1982,6 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                   <Save className="w-4 h-4" />
                   Simpan Perubahan Profil Toko
                 </button>
-
-                {isDeveloper && (
-                  <div className="ml-auto flex items-center gap-3 bg-slate-100 p-2 rounded-xl border border-slate-300">
-                    <span className="text-xs font-bold text-slate-700">Status Toko:</span>
-                    <div className="inline-flex items-center p-0.5 bg-white rounded-lg border border-slate-300 shadow-inner">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPendingStoreStatus('OFFLINE');
-                          setStatusPasswordInput('');
-                          setStatusPasswordError(false);
-                        }}
-                        className={`px-3 py-1 rounded-md text-xs font-black transition-all cursor-pointer ${
-                          storeForm.storeStatus === 'OFFLINE'
-                            ? 'bg-amber-600 text-white shadow-sm'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        OFFLINE
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPendingStoreStatus('ONLINE');
-                          setStatusPasswordInput('');
-                          setStatusPasswordError(false);
-                        }}
-                        className={`px-3 py-1 rounded-md text-xs font-black transition-all cursor-pointer ${
-                          storeForm.storeStatus === 'ONLINE' || !storeForm.storeStatus
-                            ? 'bg-emerald-600 text-white shadow-sm'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        ONLINE
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             </form>
 
@@ -2096,147 +2045,6 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                       WA: {storeForm.phone}
                     </div>
                   )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Pengaturan Tema Tampilan Aplikasi (Light & Dark Mode) */}
-          <div className="mt-8 pt-6 border-t border-slate-200 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 rounded-xl border border-amber-200/80">
-                  <Palette className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
-                    Tema Tampilan Aplikasi (Light & Dark Mode)
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Pilih mode visual warna aplikasi kasir POS sesuai preferensi dan kenyamanan mata Anda.
-                  </p>
-                </div>
-              </div>
-
-              {onToggleTheme && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-600 dark:text-slate-400 hidden sm:inline">
-                    Status: <strong className="text-slate-900 dark:text-white">{isDarkMode ? 'Dark Mode' : 'Light Mode'}</strong>
-                  </span>
-                  <ThemeToggleSwitch
-                    isDarkMode={isDarkMode}
-                    onToggle={onToggleTheme}
-                    variant="compact"
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Visual Interactive Theme Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-              {/* Card 1: Light Mode */}
-              <div
-                onClick={() => {
-                  if (isDarkMode && onToggleTheme) {
-                    onToggleTheme();
-                  }
-                }}
-                className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between select-none ${
-                  !isDarkMode
-                    ? 'bg-gradient-to-br from-amber-50/70 via-white to-sky-50/60 border-amber-500 shadow-md ring-2 ring-amber-400/30'
-                    : 'bg-white hover:bg-slate-50 border-slate-200 opacity-75 hover:opacity-100'
-                }`}
-              >
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200 text-amber-600 flex items-center justify-center shadow-2xs">
-                        <Sun className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-black text-slate-900">Mode Terang (Light)</div>
-                        <div className="text-[11px] font-semibold text-slate-500">Standar Klasik Bersih</div>
-                      </div>
-                    </div>
-
-                    {!isDarkMode ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-500 text-white shadow-2xs">
-                        <Check className="w-3.5 h-3.5" />
-                        AKTIF
-                      </span>
-                    ) : (
-                      <span className="text-[11px] font-bold text-slate-400 hover:text-slate-600">
-                        Klik untuk Terapkan
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    Latar putih bersih dan cerah dengan kontras tinggi. Sangat optimal untuk penggunaan kasir di area toko dengan pencahayaan terang.
-                  </p>
-                </div>
-
-                {/* Mockup Mini Preview Light */}
-                <div className="mt-4 p-2.5 bg-slate-100 rounded-xl border border-slate-200/80 flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-md bg-blue-600"></div>
-                  <div className="flex-1 space-y-1">
-                    <div className="w-20 h-2 bg-slate-300 rounded-full"></div>
-                    <div className="w-12 h-1.5 bg-slate-200 rounded-full"></div>
-                  </div>
-                  <div className="w-8 h-4 rounded-md bg-emerald-500"></div>
-                </div>
-              </div>
-
-              {/* Card 2: Dark Mode */}
-              <div
-                onClick={() => {
-                  if (!isDarkMode && onToggleTheme) {
-                    onToggleTheme();
-                  }
-                }}
-                className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between select-none ${
-                  isDarkMode
-                    ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 border-indigo-500 text-white shadow-lg ring-2 ring-indigo-500/40'
-                    : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-700 opacity-75 hover:opacity-100'
-                }`}
-              >
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-indigo-900/60 border border-indigo-400/40 text-indigo-300 flex items-center justify-center shadow-2xs">
-                        <Moon className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-black text-white">Mode Gelap (Dark / Abu Tua)</div>
-                        <div className="text-[11px] font-semibold text-slate-400">Elegan & Nyaman di Mata</div>
-                      </div>
-                    </div>
-
-                    {isDarkMode ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-indigo-600 text-white shadow-2xs">
-                        <Check className="w-3.5 h-3.5" />
-                        AKTIF
-                      </span>
-                    ) : (
-                      <span className="text-[11px] font-bold text-slate-400 hover:text-white">
-                        Klik untuk Terapkan
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="text-xs text-slate-300 leading-relaxed">
-                    Latar gelap bernuansa abu tua yang teduh. Mengurangi silau layar kasir, menghemat konsumsi daya baterai, dan nyaman untuk mata.
-                  </p>
-                </div>
-
-                {/* Mockup Mini Preview Dark */}
-                <div className="mt-4 p-2.5 bg-slate-950 rounded-xl border border-slate-800 flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-md bg-indigo-500"></div>
-                  <div className="flex-1 space-y-1">
-                    <div className="w-20 h-2 bg-slate-700 rounded-full"></div>
-                    <div className="w-12 h-1.5 bg-slate-800 rounded-full"></div>
-                  </div>
-                  <div className="w-8 h-4 rounded-md bg-teal-500"></div>
                 </div>
               </div>
             </div>
@@ -4357,95 +4165,6 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                 >
                   <Save className="w-4 h-4" />
                   {editingAgent ? 'Simpan Perubahan' : 'Simpan Agen'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Store Status Password Confirmation Modal (Light Gray) */}
-      {pendingStoreStatus && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-100 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-300">
-            <div className="bg-gradient-to-r from-slate-700 to-slate-800 text-white px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-1.5 bg-white/10 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-amber-300" />
-                </div>
-                <div>
-                  <h2 className="text-base font-black tracking-tight uppercase">
-                    PERINGATAN
-                  </h2>
-                  <p className="text-[11px] text-slate-300">
-                    Konfirmasi Perubahan Status Toko ({pendingStoreStatus})
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPendingStoreStatus(null)}
-                className="text-white/80 hover:text-white p-1 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleConfirmStatusChange} className="p-6 space-y-4 bg-slate-100">
-              <p className="text-xs font-bold text-slate-800">
-                Anda akan merubah status toko, apakah anda ingin melanjutkan?
-              </p>
-
-              <div className="bg-white p-3.5 rounded-xl border border-slate-300 space-y-2.5 text-xs text-slate-700 shadow-inner">
-                <div className="flex items-start gap-2">
-                  <span className="font-extrabold text-amber-700 shrink-0">• OFFLINE:</span>
-                  <span>Toko berada dalam fase TRIAL, seluruh stok produk dalam Inventory dalam status <strong>Selalu Tersedia</strong>.</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="font-extrabold text-emerald-700 shrink-0">• ONLINE:</span>
-                  <span>Seluruh fitur toko akan aktif, anda dapat menambahkan stok produk secara manual dan fitur lainnya.</span>
-                </div>
-              </div>
-
-              {statusPasswordError && (
-                <div className="p-3 bg-red-100 border border-red-300 text-red-800 text-xs rounded-xl flex items-center gap-2 font-bold animate-shake">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
-                  <span>Password salah! Gunakan password yang benar.</span>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Password:
-                </label>
-                <input
-                  type="password"
-                  value={statusPasswordInput}
-                  onChange={(e) => {
-                    setStatusPasswordInput(e.target.value);
-                    setStatusPasswordError(false);
-                  }}
-                  placeholder="Masukkan password..."
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-slate-500"
-                  autoFocus
-                  required
-                />
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-300">
-                <button
-                  type="button"
-                  onClick={() => setPendingStoreStatus(null)}
-                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <Check className="w-4 h-4" />
-                  Lanjutkan
                 </button>
               </div>
             </form>

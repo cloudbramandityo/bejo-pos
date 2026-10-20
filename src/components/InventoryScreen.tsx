@@ -67,7 +67,6 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
   storeInfo,
 }) => {
   const isDeveloper = userRole === 'DEVELOPER';
-  const isOffline = storeInfo?.storeStatus === 'OFFLINE';
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -697,7 +696,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                     ? (product.hargaPaketUmum ?? product.hargaUmum ?? product.price ?? 0)
                     : (product.hargaUmum ?? product.price ?? 0);
 
-                  const isZeroStock = !isOffline && !(isDigitalPrintingProduct(product, categoriesList) && !product.isAssetToko) && !isPaketProduct(product, categoriesList) && (product.stock ?? 0) <= 0;
+                  const isZeroStock = !(isDigitalPrintingProduct(product, categoriesList) && !product.isAssetToko) && !isPaketProduct(product, categoriesList) && (product.stock ?? 0) <= 0;
 
                   return (
                     <tr key={product.id} className={`transition-colors ${isZeroStock ? 'bg-red-50/70 hover:bg-red-100/60' : 'hover:bg-slate-50/80'}`}>
@@ -825,7 +824,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
 
                       {/* Status Ketersediaan */}
                       <td className="py-3.5 px-4 text-center">
-                        {isOffline || (isDigitalPrintingProduct(product, categoriesList) && !product.isAssetToko) || isPaketProduct(product, categoriesList) ? (
+                        {(isDigitalPrintingProduct(product, categoriesList) && !product.isAssetToko) || isPaketProduct(product, categoriesList) ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                             <Check className="w-3.5 h-3.5 text-emerald-600" />
                             Selalu Tersedia
@@ -1580,7 +1579,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                       </p>
                     </div>
                   </div>
-                  {isOffline && (
+                  {isCategoryDigitalPrinting && (
                     <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1">
                       <Check className="w-3 h-3 text-emerald-600" />
                       Selalu Tersedia
@@ -1889,22 +1888,12 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                     <Package className="w-3.5 h-3.5 text-emerald-600" />
                     Manajemen Stok & Batas Minimum
                   </span>
-                  {isOffline ? (
-                    <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded font-bold">
-                      Status Toko OFFLINE
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded font-bold">
-                      Status Toko ONLINE
-                    </span>
-                  )}
+                  <span className="text-[10px] text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded font-bold">
+                    Toko Aktif
+                  </span>
                 </div>
 
-                {isOffline ? (
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
-                    Status toko saat ini <strong>OFFLINE</strong>. Seluruh stok produk otomatis menjadi <strong>Selalu Tersedia</strong>.
-                  </div>
-                ) : (isCategoryDigitalPrinting && !formIsAssetToko) || isCategoryPaket ? (
+                {(isCategoryDigitalPrinting && !formIsAssetToko) || isCategoryPaket ? (
                   <div className="space-y-3">
                     <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs text-emerald-950 flex items-start gap-3">
                       <div className="p-2 bg-emerald-100 rounded-lg text-emerald-700 shrink-0">

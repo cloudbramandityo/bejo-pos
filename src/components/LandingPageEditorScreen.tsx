@@ -1886,7 +1886,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                 <Field label="Alamat Kantor">
                   <textarea rows={2} value={config.contact.storeAddress} onChange={(e) => patchSub('contact', { storeAddress: e.target.value })} className={areaCls} />
                 </Field>
-                <Field label="Alamat Pabrik / Workshop">
+                <Field label="Alamat Workshop">
                   <textarea rows={2} value={config.contact.factoryAddress || ''} onChange={(e) => patchSub('contact', { factoryAddress: e.target.value })} className={areaCls} />
                 </Field>
                 <Field label="URL Google Maps" className="md:col-span-2">

@@ -20,7 +20,7 @@ import {
   Download,
   ExternalLink,
   Facebook,
-  Factory,
+  Warehouse,
   Image as ImageIcon,
   Instagram,
   Mail,
@@ -1067,9 +1067,9 @@ const Footer: React.FC<{
             </div>
           </div>
           <div className="flex items-start gap-3">
-            <Factory size={18} className="mt-0.5 shrink-0 text-sky-600" />
+            <Warehouse size={18} className="mt-0.5 shrink-0 text-sky-600" />
             <div>
-              <p className="text-[12px] font-bold text-[#111]">Pabrik</p>
+              <p className="text-[12px] font-bold text-[#111]">Workshop</p>
               <p className="mt-0.5 text-[11.5px] leading-snug text-[#7A7A7A]">
                 {config.contact.factoryAddress || config.contact.storeAddress}
               </p>
@@ -1595,7 +1595,7 @@ const ContactPage: React.FC<{
               ))}
               {contact.factoryAddress && (
                 <div className="rounded-xl border border-slate-100 p-4">
-                  <p className="text-[13px] font-bold text-[#111]">Pabrik / Workshop Produksi</p>
+                  <p className="text-[13px] font-bold text-[#111]">Workshop Produksi</p>
                   <p className="mt-1 text-[12px] leading-relaxed text-[#7A7A7A]">{contact.factoryAddress}</p>
                 </div>
               )}

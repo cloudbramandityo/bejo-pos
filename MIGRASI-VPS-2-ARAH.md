@@ -1,162 +1,140 @@
-# MIGRASI KE VPS — PANDUAN 2 ARAH (Rumah Web → bejodigitalprint.com)
+# MIGRASI KE VPS WINDOWS — PANDUAN 2 ARAH (Rumah Web → bejodigitalprint.com)
 
-Panduan **langkah demi langkah**, dipisah menjadi:
-
-- **BAGIAN A — Sisi Dashboard VPS (panel Rumah Web)** → yang Anda klik di browser panel.
-- **BAGIAN B — Sisi Aplikasi (PC Anda)** → yang Anda jalankan di komputer ini + terminal VPS.
-- **BAGIAN C — Checklist, troubleshooting, dan rollback.**
-
-> Nama menu di panel Rumah Web (SolusVM/Virtualizor) berbeda-beda tiap versi. Kalau nama tidak persis, cari menu yang **mengg likened**: *Virtual Server / VPS / Instance / Server*, *Firewall / Security Group*, *Console / VNC*, *DNS / Zone Editor*.
+> **Target:** VPS **Windows Server** di Rumah Web, domain `bejodigitalprint.com`.
+> Semua langkah Panel VPS (SolusVM/Virtualizor) dipisahkan dari langkah Terminal/PC.
 
 ---
 
 ## 🎯 Gambaran Besar
 
-| # | Dilakukan DI (panel Rumah Web) | Dilakukan DI (PC Anda / terminal VPS) |
+```
+Internet ──https──> Caddy (service Windows, port 80/443, TLS otomatis)
+                         │ reverse_proxy 127.0.0.1:3000
+                         ▼
+             Node.js 22 (service "BejoStikerPOS", port 3000)
+                         │
+                         ├──> Firestore (data cloud, tidak dimigrasi)
+                         └──> Gemini API
+```
+
+| Lapisan | Technology Windows | Service |
 |---|---|---|
-| 1 | Pesan VPS + pilih OS Ubuntu | Siapkan build & paket source |
-| 2 | Masukkan SSH public key | Generate SSH key (kalau belum ada) |
-| 3 | Buka firewall 22/80/443 | Pasang Node 22, PM2, Caddy |
-| 4 | Arahkan DNS domain → IP VPS | Upload source + jalankan deploy |
-| 5 | Pantau status/console VPS | Isi `.env`, aktifkan HTTPS, verifikasi |
-| 6 | (Opsional) Snapshot berkala | Matikan server lokal (cutover) |
+| Web server | Node.js 22 LTS (`dist/server.cjs`) | `BejoStikerPOS` (NSSM) |
+| Reverse proxy + TLS | Caddy for Windows | `Caddy` (NSSM) |
+| Auto start | Windows Service | keduanya `SERVICE_AUTO_START` |
+| Auto restart | NSSM `AppExit = Restart` | throttling 5 detik |
+| Firewall | Windows Defender Firewall | 80, 443 terbuka; 3009 diblokir |
 
 ---
 
-# BAGIAN A — Sisi Dashboard VPS (Rumah Web)
+# BAGIAN A — Sisi Dashboard VPS (panel Rumah Web)
 
-### A1. Login ke panel Rumah Web
-Buka panel VPS Anda (biasanya `https://vps.rumahweb.co.id/...` atau subdomain dari akun Anda) → **Login**.
+### A1. Login ke panel VPS
+Buka panel **VPS** Rumah Web (bukan cPanel/DirectAdmin) → **Login**.
 
-> Panel ini **berbeda** dari panel hosting cPanel/DirectAdmin. Semua yang menyangkut **sistem operasi** (install, firewall, SSH) dilakukan di panel **VPS**, bukan cPanel.
+> Semua pengaturan sistem operasi dilakukan di panel **VPS** atau lewat **Remote Desktop**, bukan lewat cPanel.
 
----
+### A2. Pastikan VPS|Windows siap
+Menu **Virtual Servers / VPS**:
 
-### A2. Pastikan paket VPS sudah ada
-Menu **Virtual Servers / VPS** → daftar server.
-
-| Yang harus ada | Keterangan |
+| Yang harus ada | Nilai |
 |---|---|
 | Status | **Running** |
-| OS | Ubuntu 22.04 LTS atau 24.04 LTS |
+| OS | **Windows Server 2019 / 2022 (Datacenter, 64-bit)** |
+| Resources | minimal **2 vCPU / 4 GB RAM / 60 GB SSD** (Windows butuh RAM lebih besar dari Linux) |
 | IPv4 | 1 IP publik (catat!) |
-| RAM | minimal 2 GB (1 GB bisa, tapi disarankan 2 GB) |
-| Disk | minimal 30 GB |
-| User SSH | `root` (umumnya) |
+| RDP | port default **3389** |
 
-> **Catatan:** beberapa panel hanya menampilkan OS saat **memesan** server. Kalau server sudah ada dengan OS lain, buat **snapshot** dulu, lalu **reinstall** dengan Ubuntu 22.04/24.04 (data hilang — pastikan backup lokal Anda sudah aman).
+> Kalau OS-nya belum Windows: buat **snapshot**, lalu **reinstall** dengan Windows Server (⚠️ data hilang).
+> Kalau panel menyediakan "Windows Server" lain (mis. 2012/2016), pilih **2019 atau 2022**.
 
----
+### A3. Kredensial & data akses
+| Item | Nilai |
+|---|---|
+| IP VPS | `x.x.x.x` |
+| Port RDP | `3389` |
+| User | `Administrator` (atau `bejo` bila dibuat) |
+| Password | (dari panel / yang Anda tentukan saat membuat VPS) |
+| Hostname | `vps.bejodigitalprint.com` |
 
-### A3. Catat & simpan data akses
-Tempel di catatan Anda:
-
-```
-IP VPS        : x.x.x.x
-Port SSH      : 22
-User          : root
-Hostname      : vps.bejodigitalprint.com
-```
-
----
-
-### A4. Tambahkan SSH Public Key (opsional tapi disarankan)
-Menu **SSH Keys** (atau **Add SSH Key**) → **New Key** → Name: `bejo-pc` → Paste public key dari PC Anda.
-
-Public key PC Anda ada di:
-```
-C:\Users\DESKTOP\.ssh\id_ed25519.pub
-```
-(kalau belum ada, buat di BAGIAN B langkah B1).
-
-> Gunanya: tidak perlu password root, dan login VPS jauh lebih aman.
-
----
-
-### A5. Buka Firewall di Panel VPS
-Menu **Firewall** (pada beberapa panel: **Config Firewall** / **Security Group**) → **Add rule**:
+### A4. Firewall di panel VPS
+Menu **Firewall / Security Group** → tambah rule:
 
 | Port | Protocol | Source | Keterangan |
 |---|---|---|---|
-| 22 | TCP | Semua (atau IP Anda saja) | SSH |
-| 80 | TCP | Semua | HTTP (untuk penerbitan sertifikat SSL) |
+| 3389 | TCP | IP Anda (atau semua bila perlu) | Remote Desktop |
+| 22 | TCP | IP Anda | SSH (untuk deploy otomatis; opsional) |
+| 80 | TCP | Semua | HTTP → penerbitan sertifikat SSL |
 | 443 | TCP | Semua | HTTPS |
-| 3000 | TCP | **IP PC Anda saja** (sementara) | Tes aplikasi tanpa proxy — hapus setelah Caddy aktif |
 
-> **Penting:** port **3000 tidak boleh** dibuka ke semua pihak setelah migrasi selesai (aplikasi diakses lewat Caddy di 443).
+> Port **3000 tidak boleh** dibuka (aplikasi hanya diakses lewat Caddy di 443).
 
-Firewall **lapis sistem** (ufw) akan kita atur sendiri di terminal (BAGIAN B, B6).
+### A5. Snapshot & console
+| Fitur panel | Kegunaan |
+|---|---|
+| **Snapshot / Image** | Ambil snapshot sebelum deploy besar atau sebelum reinstall |
+| **Console / VNC / HTML5** | Alternatif masuk VPS tanpa RDP (dipakai kalau RDP terblokir) |
+| **Reboot / Restart** | Restart bersih |
+| **Reinstall** | Reset ke Windows Server 2022 |
 
----
-
-### A6. Arahkan DNS Domain → IP VPS
-Di **panel domain / registrar** tempat `bejodigitalprint.com` dibeli (bisa juga lewat **Zone Editor** di panel Rumah Web bila domain-nya dikelola di sana):
+### A6. DNS domain → IP VPS
+Di panel domain / registrar:
 
 | Type | Name | Value | TTL |
 |---|---|---|---|
-| A | `@` | `<IP VPS>` | Auto / 300 |
-| A | `www` | `<IP VPS>` | Auto / 300 |
-| A | `vps` | `<IP VPS>` | Auto / 300 |
+| A | `@` | `<IP VPS>` | Auto |
+| A | `www` | `<IP VPS>` | Auto |
+| A | `vps` | `<IP VPS>` | Auto |
 
-Tambahkan juga (untuk email & keamanan):
-| Type | Name | Value |
-|---|---|---|
-| MX | `@` | `mx1.rumahweb.co.id` (sesuaikan) |
-| TXT | `@` | `v=spf1 include:... -all` (opsional) |
-
-**Cek propagasi dari PC Anda:**
-```powershell
-nslookup bejodigitalprint.com
-ping bejodigitalprint.com
-```
-Harus sudah menunjuk IP VPS sebelum lanjut ke BAGIAN B (sertifikat SSL butuh DNS hidup).
+Cek dari PC: `nslookup bejodigitalprint.com` → **harus sudah menunjuk IP VPS** sebelum lanjut (sertifikat SSL butuh DNS hidup).
 
 ---
 
-### A7. Cek fitur panel yang berguna
-| Fitur | Kegunaan |
-|---|---|
-| **Console / VNC** | Akses terminal kalau SSH gagal (mis. kunci SSH publik salah) |
-| **Reboot / Restart** | Restart bersih bila macet |
-| **Snapshot / Backup** | Ambil snapshot sebelum deploy besar |
-| **Bandwidth / Monitoring** | Pantau pemakaian CPU/RAM |
-| **Reinstall / OS Change** | Reset ke Ubuntu 22.04 bila perlu |
+# BAGIAN B - Sisi Aplikasi (PC Anda + VPS Windows)
 
----
-
-# BAGIAN B — Sisi Aplikasi (PC Anda)
-
-## B1. Pastikan PC siap & buat SSH key (bila belum)
+## B1. PC siap: Node, SSH key
 ```powershell
-node -v            # harus v20+ (v22 disarankan)
-npm -v
-ssh -V             # harus ada (OpenSSH Client)
-
-# Buat key kalau belum ada
+node -v     # v20+ (v22 disarankan)
+ssh -V      # OpenSSH Client harus ada
 if (-not (Test-Path "$env:USERPROFILE\.ssh\id_ed25519")) {
   ssh-keygen -t ed25519 -C "bejo-pc" -f "$env:USERPROFILE\.ssh\id_ed25519"
 }
-Get-Content "$env:USERPROFILE\.ssh\id_ed25519.pub"   # copy ini ke panel Rumah Web (langkah A4)
+Get-Content "$env:USERPROFILE\.ssh\id_ed25519.pub"
 ```
+> Public key ini bisa ditambahkan di panel VPS (menu **SSH Keys**) bila tersedia. Jika tidak, Anda tetap bisa masuk via RDP (langkah B3) — deploy cukup dilakukan manual dari RDP.
 
-## B2. Uji koneksi ke VPS
+## B2. Masuk ke VPS lewat Remote Desktop (RDP)
+Di PC: tekan `Win + R` → ketik `mstsc` → isi `IP_VPS` → login sebagai `Administrator`.
+
+> Tips: klik kanan file `.ps1` di desktop VPS → **Run with PowerShell** (jalankan sebagai Administrator).
+
+## B3. Aktifkan OpenSSH Server di VPS (untuk deploy otomatis via SCP/SSH)
+Di **PowerShell sebagai Administrator** di dalam VPS:
 ```powershell
-ssh -i "$env:USERPROFILE\.ssh\id_ed25519" root@<IP_VPS>
-```
-Kalau `Permission denied`:
-- public key belum di-paste ke panel (A4) → ulangi
-- pakai password root dulu: `ssh root@<IP_VPS>` (kalau panel mengizinkan)
+# cek dulu
+Get-Service sshd -ErrorAction SilentlyContinue
 
-## B3. Build produksi di PC & cek hasilnya
+# bila belum ada
+Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+Start-Service sshd
+Set-Service -Name sshd -StartupType Automatic
+New-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -DisplayName "OpenSSH Server (sshd)" `
+  -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
+```
+Kembali ke PC, tes:
+```powershell
+ssh Administrator@<IP_VPS>
+```
+
+## B4. Build produksi di PC
 ```powershell
 cd "D:\DOCUMENTS\Default Project"
 npm install
-npm run build
+npm run build     # menghasilkan dist\index.html, dist\assets, dist\server.cjs
 ```
-Harus menghasilkan `dist\index.html` + `dist\assets\...` + `dist\server.cjs`.
 
-## B4. Siapkan nilai environment untuk server
-Buat file `env-server.txt` (jangan commit!) berisi:
+## B5. Siapkan environment variable untuk server
+Buat `env-server.txt` (jangan commit):
 ```
 APP_URL=https://bejodigitalprint.com
 GEMINI_API_KEY=<API_KEY_ANDA>
@@ -164,190 +142,177 @@ REMOTE_ACCESS_USER=bejo
 REMOTE_ACCESS_PASS=<PASSWORD_KUAT>
 PORT=3000
 ```
-> Password ini = **login Basic Auth browser** untuk pengunjung luar. Tab POS memakai login sendiri. Pilih password kuat, jangan sama dengan password akun Developer.
+> `REMOTE_ACCESS_*` = login **Basic Auth browser** untuk pengunjung luar (beda dengan login aplikasi).
 
-## B5. Kemas source (tanpa node_modules, dist, .env)
+## B6. Pasang Node + Caddy + NSSM + Service di VPS
+Di **PowerShell Administrator di VPS** (lewat RDP), copy file `deploy/install-vps-windows.ps1` ke VPS lalu jalankan:
 ```powershell
-cd "D:\DOCUMENTS\Default Project"
-tar -czf "$env:TEMP\bejo-deploy.tar.gz" `
-  --exclude=node_modules --exclude=dist --exclude=.git --exclude=.env `
-  --exclude=logs --exclude=dev-server.log --exclude=URL-INTERNET.txt .
-```
+# cara 1: file sudah ada di VPS (mis. di folder download)
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\deploy\install-vps-windows.ps1
 
-## B6. Upload ke VPS
-**Cara 1 — SCP (cepat):**
+# cara 2: paste manual isi skrip ke PowerShell VPS lalu:
+#   .\install-vps-windows.ps1
+```
+Yang dilakukan skrip:
+1. Node.js 22 LTS terpasang otomatis (diam, bila belum ada)
+2. Caddy diunduh ke `C:\caddy`
+3. NSSM diunduh ke `C:\nssm`
+4. Folder `C:\bejo-pos`, `C:\caddy\logs`, `C:\backups\bejo-pos` dibuat
+5. Firewall Windows: 80 & 443 dibuka, 3000 diblokir
+6. Service `BejoStikerPOS` & `Caddy` terdaftar (auto start + auto restart)
+7. `Caddyfile` awal dibuat untuk `bejodigitalprint.com`
+
+Cek:
 ```powershell
-scp -i "$env:USERPROFILE\.ssh\id_ed25519" "$env:TEMP\bejo-deploy.tar.gz" root@<IP_VPS>:/tmp/
+Get-Service BejoStikerPOS, Caddy
+& C:\caddy\caddy.exe version
 ```
 
-**Cara 2 — FileZilla/WinSCP (GUI):**
-- Protokol: **SFTP**
-- Host: `<IP_VPS>`, Port: 22, User: `root`, Auth: key/password
-- Upload `bejo-deploy.tar.gz` ke `/tmp/`
+## B7. Upload source ke VPS
+**Cara 1 — lewat RDP + FileZilla/Windows Explorer (paling sederhana)**
+- Copy folder project (tanpa `node_modules`, `dist`, `.env`) ke `C:\bejo-pos` di VPS lewat RDP drive sharing / FileZilla SFTP.
 
-**Cara 3 — sekali jalan (paket + deploy):**
+**Cara 2 — otomatis dari PC (kalau OpenSSH sudah aktif)**
 ```powershell
-.\deploy\deploy-vps.ps1 -Host <IP_VPS> -User root -KeyPath "$env:USERPROFILE\.ssh\id_ed25519"
+.\deploy\deploy-vps.ps1 -Host <IP_VPS> -User Administrator -KeyPath "$env:USERPROFILE\.ssh\id_ed25519"
 ```
+Skrip ini: build lokal → paket source → SCP → jalankan `remote-run.ps1` di VPS → ekstrak → `deploy-vps-windows.ps1` → backup → `npm ci` → build → **restart service** → **health check** → rollback bila gagal.
 
-## B7. Bootstrap VPS (Node 22, PM2, Caddy, firewall)
-Di terminal VPS:
-```bash
-mkdir -p /root/deploy && tar -xzf /tmp/bejo-deploy.tar.gz -C /root/deploy
-cp /root/deploy/deploy/install-vps.sh /root/
-bash /root/install-vps.sh
-```
-Yang terjadi: Node 22 terpasang, PM2 + Caddy terpasang, ufw menyalakan 22/80/443, user `bejo` dibuat, `/srv/bejo-pos` disiapkan, PM2 daftarkan auto-start saat boot.
-
-## B8. Extract source & jalankan deploy
-```bash
-mkdir -p /srv/bejo-pos
-tar -xzf /tmp/bejo-deploy.tar.gz -C /srv/bejo-pos
-cd /srv/bejo-pos
-chown -R bejo:bejo /srv/bejo-pos
-bash deploy/deploy-vps.sh
-```
-Yang terjadi: `npm ci` → `npm run build` → `pm2 reload` → `pm2 save` → **health check otomatis**.
-
-## B9. Isi .env di VPS
-```bash
-cd /srv/bejo-pos
-nano .env          # isi sesuai B4
-chmod 600 .env
-chown bejo:bejo .env
-sudo -u bejo -H pm2 restart bejo-pos --update-env
-```
-Alternatif tanpa nano (pakai file dari PC):
+## B8. Jalankan deploy (di VPS)
 ```powershell
-scp -i "$env:USERPROFILE\.ssh\id_ed25519" env-server.txt root@<IP_VPS>:/srv/bejo-pos/.env
-ssh -i "$env:USERPROFILE\.ssh\id_ed25519" root@<IP_VPS> "chmod 600 /srv/bejo-pos/.env && chown bejo:bejo /srv/bejo-pos/.env && cd /srv/bejo-pos && sudo -u bejo -H pm2 restart bejo-pos --update-env"
+cd C:\bejo-pos
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\bejo-pos\deploy\deploy-vps-windows.ps1
+```
+Output: backup build lama → `npm ci` → build → `Restart-Service BejoStikerPOS` → health check.
+
+## B9. Isi `.env` di VPS
+```powershell
+notepad C:\bejo-pos\.env
+# isi sesuai langkah B5
+```
+```powershell
+Restart-Service BejoStikerPOS
 ```
 
-## B10. Aktifkan HTTPS (Caddy)
-```bash
-cp /srv/bejo-pos/deploy/Caddyfile /etc/caddy/Caddyfile
-caddy fmt --overwrite /etc/caddy/Caddyfile
-systemctl reload caddy
-systemctl status caddy
+## B10. HTTPS otomatis oleh Caddy
+Caddy sudah dikonfigurasi oleh `install-vps-windows.ps1` (Caddyfile di `C:\caddy\Caddyfile`).
+Setelah deploy selesai, Caddy membaca Caddyfile terbaru:
+```powershell
+# refresh Caddyfile dari project (punya domain + header keamanan)
+Copy-Item C:\bejo-pos\deploy\Caddyfile C:\caddy\Caddyfile -Force
+& C:\caddy\caddy.exe fmt --overwrite C:\caddy\Caddyfile
+Restart-Service Caddy
 ```
-Caddy otomatis meminta sertifikat Let's Encrypt. Cek:
-```bash
-curl -I https://bejodigitalprint.com
-curl -s https://bejodigitalprint.com/api/health
+Cek:
+```powershell
+curl.exe -I https://bejodigitalprint.com
+curl.exe -s https://bejodigitalprint.com/api/health
 ```
 
-## B11. Firebase: aktifkan Anonymous + deploy rules
-1. Browser → Firebase Console → project `noted-segment-9xjsq` → **Authentication** → **Sign-in method** → **Anonymous** → **Enable** → Save
-2. **Firestore Database** → **Rules** → tempel isi file `firestore.rules` (di repo) → **Publish**
-
-Alternatif CLI:
-```bash
-npm i -g firebase-tools
-firebase login
-firebase use noted-segment-9xjsq
-firebase deploy --only firestore:rules
-```
+## B11. Firebase (WAJIB, urut)
+1. Firebase Console → project `noted-segment-9xjsq` → **Authentication → Sign-in method → Anonymous → Enable**
+2. **Firestore Database → Rules** → tempel isi `firestore.rules` → **Publish**
 
 ## B12. Verifikasi menyeluruh
-```bash
-# 1. proses
-sudo -u bejo -H pm2 status
-# 2. health lokal
-curl -s http://127.0.0.1:3000/api/health
-# 3. health publik
-curl -s https://bejodigitalprint.com/api/health
-# 4. log error
-sudo -u bejo -H pm2 logs bejo-pos --lines 50 --nostream
-# 5. port terbuka
-ss -ltnp | grep -E '3000|80|443'
+Di VPS:
+```powershell
+Get-Service BejoStikerPOS, Caddy
+Get-Content C:\bejo-pos\logs\stderr.log -Tail 30
+curl.exe -s http://127.0.0.1:3000/api/health
+curl.exe -s https://bejodigitalprint.com/api/health
+netstat -ano | findstr ":3000 :80 :443"
 ```
-Lalu dari browser (HP, data seluler — **matikan WiFi**):
+Dari browser (HP, **data seluler, WiFi dimatikan**):
+
 | Uji | Harapan |
 |---|---|
 | `https://bejodigitalprint.com` | 401 Basic Auth (popup login browser) |
 | Masuk dengan user/pass | Halaman landing publik tampil |
-| Masuk ke aplikasi | Tab POS, Katalog, Laporan, Website normal |
-| F12 → Console | Tidak ada `permission-denied` / error auth |
-| Tab Website → pratinjau | Pratinjau live + favicon + judul tab sesuai |
+| Masuk ke aplikasi | Semua tab normal (POS, Katalog, Laporan, Website) |
+| F12 → Console | Tidak ada `permission-denied` |
+| Tab Website → pratinjau | Pratinjau live, favicon & judul tab sesuai |
 
-## B13. Cutover (matikan server lokal)
-Setelah semuanya stabil:
+## B13. Cutover
+Setelah stabil:
 ```powershell
-# hentikan supervisor always-on di PC
+# di PC: matikan server lokal (always-on)
 Set-Content "D:\DOCUMENTS\Default Project\.stop-supervisor" "stop"
-# atau matikan service/tunnel di VPS bila masih dipakai
 ```
-> Simpan dulu **URL terowongan** di `URL-INTERNET.txt` sebagai cadangan kalau domain bermasalah.
 
-## B14. Update aplikasi berikutnya (rutinitas)
+## B14. Update berikutnya
 ```powershell
-# ubah kode di PC
-.\deploy\deploy-vps.ps1 -Host <IP_VPS> -User root -KeyPath "$env:USERPROFILE\.ssh\id_ed25519"
+# di PC: ubah kode lalu
+.\deploy\deploy-vps.ps1 -Host <IP_VPS> -User Administrator
 ```
-Rollback bila bermasalah:
-```bash
-ls -lt /var/backups/bejo-pos/
-cd /srv/bejo-pos && tar -xzf /var/backups/bejo-pos/dist-<STAMP>.tar.gz && sudo -u bejo -H pm2 restart bejo-pos
+Rollback (di VPS):
+```powershell
+Get-ChildItem C:\backups\bejo-pos -Directory | Sort-Object Name -Descending
+Remove-Item C:\bejo-pos\dist -Recurse -Force
+Copy-Item C:\backups\bejo-pos\dist-<STAMP> C:\bejo-pos\dist -Recurse
+Restart-Service BejoStikerPOS
 ```
 
 ---
 
-# BAGIAN C — Checklist & Troubleshooting
+# BAGIAN C — Checklist, Troubleshooting, Operasional
 
-## C1. Checklist final sebelum annon luncur
-- [ ] DNS `@` & `www` → IP VPS, propagasi selesai
-- [ ] HTTPS aktif, `http://` → `https://` otomatis, sertifikat valid
+## C1. Checklist final sebelumdomain diumumkan
+- [ ] DNS `@` & `www` → IP VPS, propagasi selesai (`nslookup`)
+- [ ] HTTPS aktif, `http://` → `https://`, sertifikat valid
 - [ ] `www` → domain utama (redirect permanen)
 - [ ] `REMOTE_ACCESS_PASS` kuat & berbeda dari password aplikasi
 - [ ] Firebase **Anonymous aktif** + `firestore.rules` ter-deploy (`request.auth != null`)
-- [ ] `APP_URL=https://bejodigitalprint.com` di `.env` server
+- [ ] `APP_URL=https://bejodigitalprint.com` di `C:\bejo-pos\.env`
 - [ ] `GEMINI_API_KEY` valid (uji AI Assistant di tab Website)
-- [ ] Uji dari HP via data seluler (bukan WiFi)
-- [ ] Port 3000 **tidak** terbuka di firewall panel
-- [ ] Backup JSON data aplikasi (tab Pengaturan → Pencadangan) sudah diunduh
-- [ ] Snapshot VPS dibuat (panel Rumah Web)
-- [ ] Server lokal dimatikan setelah domain terbukti stabil
+- [ ] Uji dari HP via data seluler (WiFi mati)
+- [ ] Port 3000 **tidak** terbuka (panel + Windows Firewall)
+- [ ] Snapshot VPS diambil (panel Rumah Web)
+- [ ] Backup JSON data aplikasi (tab Pengaturan → Pencadangan) diunduh
+- [ ] Server lokal dimatikan setelah domain stabil
 
-## C2. Troubleshooting
+## C2. Troubleshooting (Windows)
 | Gejala | Penyebab | Solusi |
 |---|---|---|
-| `Permission denied (publickey)` | Public key belum terdaftar / salah | Paste ulang `.pub` di panel (A4), ulangi `ssh -i ...` |
-| Timeout saat SSH | Firewall panelPort 22 tertutup | Buka 22 di panel + `ufw allow 22` |
-| `curl: (7) Failed to connect` | PM2 mati / port beda | `pm2 logs bejo-pos`, pastikan `PORT=3000` di `.env` |
-| `502 Bad Gateway` di domain | Caddy tidak menemukan app | `systemctl status caddy`, `pm2 status`, cek `curl 127.0.0.1:3000` |
-| Sertifikat SSL gagal terbit | DNS belum propagasi / port 80 tertutup | Tunggu propagasi, buka 80 di panel, `caddy fmt` lalu reload |
-| Halaman terbuka tanpa login Basic Auth | `REMOTE_ACCESS_PASS` kosong | Isi `.env` → `pm2 restart bejo-pos --update-env` |
-| `permission-denied` di Firestore | Anonymous belum aktif atau rules lama | Aktifkan Anonymous, deploy ulang rules |
-| `API key should be set` | `GEMINI_API_KEY` kosong | Isi di `.env` → restart |
-| Halaman kosong / asset 404 | `dist/` tidak ikut ter-build di VPS | `cd /srv/bejo-pos && npm run build && pm2 reload` |
-| Lambat / OOM | RAM kurang | `free -h` di VPS, upgrade paket, `max_memory_restart` di ecosystem |
-| Nginx/Apache bawaan panel bentrok dengan Caddy | Port 80/443 dipakai | Nonaktifkan web server bawaan panel/hosting |
-| Update kode tidak berubah | Cache browser | `Ctrl+F5` / hard reload |
+| Tidak bisa RDP | Port 3389 tertutup di panel | Buka 3389 (source IP Anda) di firewall panel |
+| `Permission denied (publickey)` | Public key tidak terdaftar | Tempel `.pub` ke C:\Users\Administrator\.ssh\authorized_keys di VPS, atau pakai RDP |
+| `Get-Service` → service `Stopped` | Build gagal / belum ada `dist` | `Get-Content C:\bejo-pos\logs\stderr.log -Tail 50`, jalankan deploy ulang |
+| `502 Bad Gateway` di domain | Caddy jalan, app mati (atau Caddy mati) | `Get-Service Caddy, BejoStikerPOS`; `curl 127.0.0.1:3000/api/health` |
+| Sertifikat SSL gagal terbit | DNS belum propagasi / port 80 tertutup | Cek `nslookup`, buka 80 di panel, `Caddyfile` → `Restart-Service Caddy` |
+| Halaman terbuka tanpa login Basic Auth | `REMOTE_ACCESS_PASS` kosong | Isi `.env` → `Restart-Service BejoStikerPOS` |
+| `permission-denied` Firestore | Anonymous belum aktif / rules lama | Aktifkan Anonymous, deploy ulang rules |
+| `API key should be set` | `GEMINI_API_KEY` kosong | Isi `.env` → restart service |
+| Halaman kosong / asset 404 | `dist` tidak ter-build di VPS | `cd C:\bejo-pos; npm run build; Restart-Service BejoStikerPOS` |
+| Lambat / service restart sendiri | RAM kurang | `Get-CimInstance Win32_OperatingSystem` → naikkan paket VPS (minimal 4 GB) |
+| `The system cannot find the path specified` saat deploy | Path `C:\bejo-pos` belum ada | Jalankan `install-vps-windows.ps1` lebih dulu |
+| Deploy lama tak berefek | Browser cache | `Ctrl+F5` / hard reload |
 
-## C3. Perintah harian yang paling sering dipakai
-```bash
-cd /srv/bejo-pos
-sudo -u bejo -H pm2 status                  # status
-sudo -u bejo -H pm2 logs bejo-pos --lines 100 --nostream   # log
-sudo -u bejo -H pm2 restart bejo-pos        # restart
-sudo -u bejo -H pm2 reload ecosystem.config.cjs --update-env
-sudo -u bejo -H pm2 monit                   # monitor real-time
-systemctl status caddy                      # status reverse proxy
-ufw status                                 # status firewall
+## C3. Perintah harian (di VPS)
+```powershell
+Get-Service BejoStikerPOS, Caddy                    # status
+Get-Content C:\bejo-pos\logs\stderr.log -Tail 100  # log error
+Get-Content C:\bejo-pos\logs\stdout.log -Tail 100  # log output
+Restart-Service BejoStikerPOS                       # restart aplikasi
+Restart-Service Caddy                               # restart proxy
+curl.exe -s http://127.0.0.1:3000/api/health        # health check
+Get-NetTCPConnection -State Listen | Where-Object { $_.LocalPort -in 80,443,3000 }
 ```
 
-## C4.-who-owns-what (ringkas)
-| Tugas | Panel Rumah Web | PC Anda | Terminal VPS |
-|---|---|---|---|
-| Pesan VPS & pilih OS | ✅ | | |
-| Tambah SSH key | ✅ | ✅ (generate) | |
-| Buka/tutup port | ✅ | | ✅ (ufw) |
-| Arahkan DNS | ✅ | | |
-| Build aplikasi | | ✅ | ✅ (build di VPS oleh deploy script) |
-| Upload source | | ✅ | |
-| Install Node/PM2/Caddy | | | ✅ |
-| Isi .env | | ✅ (siapkan) | ✅ (tulis) |
+## C4. Update melalui panel (opsional)
+Beberapa panel Rumah Web menyediakan tombol **"Restart"**/**"Console"** untuk VPS Windows — berguna saat service tidak merespons.
+
+---
+
+## 🎯 Ringkasan siapa melakukan apa
+| Tugas | Panel Rumah Web | PC Anda | VPS (RDP/PowerShell) |
+|---|:--:|:--:|:--:|
+| Pilih Windows Server + sumber daya | ✅ | | |
+| Password Administrator & RDP | ✅ | | |
+| Buka port 3389/80/443 | ✅ | | ✅ (firewall Windows) |
+| DNS | ✅ | | |
+| Install Node/Caddy/NSSM + service | | | ✅ |
+| Build & upload source | | ✅ | ✅ |
+| Isi `.env` | | ✅ siapkan | ✅ |
 | HTTPS + sertifikat | | | ✅ |
 | Firebase rules | ✅ (console) | | |
-| Verifikasi | | ✅ (browser/HP) | ✅ (curl/pm2) |
-| Update berikutnya | | ✅ | ✅ |
+| Verifikasi | | ✅ (browser/HP) | ✅ (curl/Get-Service) |
+| Update berikutnya | | ✅ | ✅ (otomatis) |

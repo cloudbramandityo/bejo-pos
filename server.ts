@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import http from "http";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 
@@ -9,7 +8,27 @@ dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
-const PORT = 3000;
+
+// Port bebas diatur lewat environment variable (PaaS/VPS), default 3000.
+const PORT = Number(process.env.PORT) || 3000;
+
+// Hostname aplikasi (untuk log & tautan absolut). Contoh: https://bejodigitalprint.com
+const APP_URL = (process.env.APP_URL || '').replace(/\/+$/, '');
+
+// Di belakang reverse proxy (Caddy/Nginx/Cloudflare) forwarded-for adalah
+// sumber IP asli. Tanpa ini semua request terlihat berasal dari 127.0.0.1
+// sehingga deteksi "akses dari luar" pada lapisan proteksi menjadi tidak akurat.
+app.set('trust proxy', 1);
+
+// Header keamanan dasar (layer tambahan dari Caddy).
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  next();
+});
 
 // =========================================================================
 // PROTEKSI AKSES JARINGAN LUAR (Cloudflare Tunnel / akses dari internet)
@@ -228,6 +247,11 @@ function logBackendError(
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
+    app: "Bejo Stiker POS",
+    version: "1.0.0",
+    mode: process.env.NODE_ENV === "production" ? "production" : "development",
+    publicUrl: APP_URL || null,
+    node: process.version,
     uptimeSeconds: Math.floor((Date.now() - SERVER_START_TIME) / 1000),
     timestamp: Date.now()
   });
@@ -1634,6 +1658,9 @@ app.post("/api/invoices/store-identity", (req, res) => {
 async function setupVite() {
   if (process.env.NODE_ENV !== "production") {
     const isHmrDisabled = process.env.DISABLE_HMR === 'true';
+    // Impor dinamis: 'vite' hanya ada di devDependencies sehingga image
+    // produksi tidak perlu memasang paket development.
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { 
         middlewareMode: true,
@@ -1644,7 +1671,17 @@ async function setupVite() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      maxAge: "1h",
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith(".html")) {
+          res.setHeader("Cache-Control", "no-cache");
+        } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+          // Aset ber-hash: aman disimpan lama di cache browser/CDN
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+      }
+    }));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
@@ -1652,7 +1689,38 @@ async function setupVite() {
 
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);
+    if (APP_URL) console.log(`Public URL  : ${APP_URL}`);
+    console.log(`Mode        : ${process.env.NODE_ENV === 'production' ? 'production (dist/)' : 'development'}`);
   });
 }
+
+// =========================================================================
+// SHUTDOWN HALUS (SIGTERM/SIGINT) — penting agar PM2/systemd bisa
+// melakukan restart dengan rapi tanpa meninggalkan koneksi menggantung.
+// =========================================================================
+let shuttingDown = false;
+function gracefulShutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[Server] Menerima ${signal}, menutup server dengan rapi...`);
+  server.close(() => {
+    console.log('[Server] Server ditutup.');
+    process.exit(0);
+  });
+  // Paksa keluar bila ada koneksi yang menggantung (max 10 detik)
+  setTimeout(() => {
+    console.log('[Server] Timeout shutdown, keluar paksa.');
+    process.exit(0);
+  }, 10000).unref();
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('unhandledRejection', (reason) => {
+  console.error('[Server] Unhandled rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[Server] Uncaught exception:', err);
+});
 
 setupVite();

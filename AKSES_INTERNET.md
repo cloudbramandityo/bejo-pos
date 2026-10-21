@@ -1,7 +1,9 @@
 # AKSES APLIKASI DARI INTERNET
 ## Bejo Stiker POS — Cloudflare Tunnel + Proteksi Login
 
-Dokumen ini menjelaskan cara membuka Bejo Stiker POS agar bisa diakses dari komputer/HP lain **di luar jaringan lokal** (lewat internet), beserta batasan dan risiko yang perlu diketahui.
+> **📌 Sedang menyiapkan hosting VPS + domain `bejodigitalprint.com`?**
+> Panduan migrasi lengkap ada di **[MIGRASI-VPS.md](./MIGRASI-VPS.md)** — berisi setup DNS, VPS, PM2, Caddy/HTTPS, environment variable, Firebase rules, checklist verifikasi, sampai rollback.
+> Dokumen ini menjelaskan cara *sementara* membuka aplikasi dari komputer/HP lain **di luar jaringan lokal** (lewat internet), beserta batasan dan risikonya.
 
 ---
 

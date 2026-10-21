@@ -2,7 +2,7 @@
  * Coded by Langgo Bramandityo. Please guys, jangan diutak-atik coding-nya ya. Thanks!
  */
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, signInAnonymously } from 'firebase/auth';
 import {
   getFirestore,
   doc,
@@ -85,6 +85,30 @@ try {
 
 export const db = firestoreInstance;
 export const auth = getAuth(app);
+
+/**
+ * Autentikasi anonim untuk Firestore.
+ *
+ * Security rules dikunci dengan `request.auth != null` agar basis data tidak
+ * bisa dibaca/diubah siapa pun yang mengetahui API key proyek. Firestore
+ * mewajibkan request terautentikasi, sehingga aplikasi masuk sebagai user
+ * anonim lebih dulu; seluruh operasi cloud menunggu `authReady`.
+ *
+ * PENTING: aktifkan metode "Anonymous" pada
+ * Firebase Console > Authentication > Sign-in method.
+ */
+export const authReady: Promise<void> = (async () => {
+  try {
+    if (auth.currentUser) return;
+    await signInAnonymously(auth);
+    console.log('[Firebase Auth] Berhasil masuk sebagai anonim.');
+  } catch (err) {
+    console.warn(
+      '[Firebase Auth] Gagal masuk anonim. Aktifkan metode "Anonymous" di Firebase Console > Authentication > Sign-in method. Detail:',
+      err
+    );
+  }
+})();
 
 export enum OperationType {
   CREATE = 'create',
@@ -274,6 +298,8 @@ export function sanitizeForFirestore<T>(obj: T): T {
 export async function safeCloudWrite(operation: () => Promise<void>, opType: OperationType, path: string): Promise<void> {
   if (isQuotaExceededFlag) return;
   try {
+    // Tunggu autentikasi anonim siap agar tidak ditolak rules.
+    await authReady;
     await operation();
   } catch (err: any) {
     if (err?.message?.includes('Quota exceeded') || err?.message?.includes('quota')) {
@@ -305,14 +331,22 @@ function createSafeSubscription(
     }
   };
 
+  // Listener baru dibuat setelah autentikasi anonim selesai (rules butuh auth).
+  let cancelled = false;
   try {
-    unsub = setupListener(onError);
+    authReady
+      .then(() => {
+        if (cancelled) return;
+        unsub = setupListener(onError);
+      })
+      .catch((err) => onError(err));
   } catch (err) {
     onError(err);
     return () => {};
   }
 
   return () => {
+    cancelled = true;
     if (unsub) {
       try {
         unsub();

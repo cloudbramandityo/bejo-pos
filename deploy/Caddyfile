@@ -1,0 +1,50 @@
+# =====================================================================
+#  BEJO STIKER POS - Caddyfile (reverse proxy + HTTPS otomatis)
+#  Lokasi: /etc/caddy/Caddyfile
+#  Reload: sudo systemctl reload caddy
+# =====================================================================
+
+# --- www dialihkan ke domain utama ---
+www.bejodigitalprint.com {
+    redir https://bejodigitalprint.com{uri} permanent
+}
+
+# --- domain utama ---
+bejodigitalprint.com {
+    encode zstd gzip
+
+    # Header keamanan (HSTS otomatis setelah HTTPS aktif)
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+        -Server
+    }
+
+    # Batasi ukuran body (upload gambar besar mungkin perlu dilebihkan)
+    request_body {
+        max_size 25MB
+    }
+
+    # Teruskan ke aplikasi Node (port internal, tidak dibuka ke publik)
+    reverse_proxy 127.0.0.1:3000 {
+        # IP asli diteruskan (X-Forwarded-For) agar lapisan proteksi
+        # login pada aplikasi tetap bekerja dengan benar.
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    log {
+        output file /var/log/caddy/bejo-access.log {
+            roll_size 10MiB
+            roll_keep 5
+        }
+        format json
+    }
+}
+
+# --- akses lokal ke aplikasi tanpa lewat Caddy (opsional) ---
+# http://127.0.0.1:3000 {
+#     reverse_proxy 127.0.0.1:3000
+# }

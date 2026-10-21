@@ -1,0 +1,17 @@
+node_modules
+dist
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+logs
+*.log
+dev-server.log
+URL-INTERNET.txt
+backups
+.vscode
+.idea
+PANDUAN_MIGRASI_AI_STUDIO.md
+PROMPT_AI_STUDIO.md
+docs

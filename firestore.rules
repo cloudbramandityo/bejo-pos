@@ -1,144 +1,158 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // =======================================================================
+    //  KEAMANAN: Akses hanya untuk request yang SUDAH terautentikasi
+    //  (aplikasi masuk otomatis sebagai user anonim — lihat src/firebase.ts).
+    //  ---------------------------------------------------------------------
+    //  WAJIB: aktifkan metode sign-in "Anonymous" pada
+    //         Firebase Console > Authentication > Sign-in method > Anonymous
+    //
+    //  Jika rules ini terlalu ketat untuk alur tertentu, 규칙 ketat
+    //  dapat dikembalikan dari firestore.rules.legacy-open (tidak disarankan).
+    // =======================================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
     // Connection test document
     match /test/{docId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // POS store products inventory
     match /products/{productId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Product categories
     match /product_categories/{categoryId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Customer tier categories
     match /customer_categories/{categoryId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Customers directory
     match /customers/{customerId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Completed transactions
     match /transactions/{transactionId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Cashier shifts
     match /shifts/{shiftId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Cashiers list & shift settings
     match /cashiers/{cashierId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // App Users (Developer, Admin, Kasir)
     match /users/{userId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Global settings & store metadata
     match /settings/{settingId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Stock Transactions rekap
     match /stock_transactions/{transactionId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Suppliers directory
     match /suppliers/{supplierId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Sales & Marketing Agents
     match /agents/{agentId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Multi-store profiles
     match /store_profiles/{profileId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Custom user roles
     match /custom_roles/{roleId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Agent orders real-time notifications
     match /agent_notifications/{notificationId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // User login session and activity logs
     match /activity_logs/{logId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // SPK Orders Cetak Digital
     match /spk_orders/{orderId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Machines configuration & status
     match /machines/{machineId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // AI Internal Chat Messages
     match /ai_chat_messages/{messageId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // User Mentions Notifications (@userX)
-    match /user_mentions/{mentionId} {
-      allow read, write: if true;
+    match /user_mentions/{notificationId} {
+      allow read, write: if isSignedIn();
     }
 
     // Direct 1-on-1 Private Chat Messages
     match /private_chat_messages/{messageId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Personal Printing Reject Records
     match /printing_rejects/{rejectId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Proforma & Commercial Invoices
     match /invoices/{invoiceId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Invoice Store Identity & Settings
     match /invoice_settings/{settingId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Taxpayer profile & tax configurations
     match /taxpayer_profile/{profileId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // SPT Tahunan returns (Formulir 1770)
     match /tax_annual_returns/{returnId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Monthly tax billing records
     match /tax_monthly_billings/{yearId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Default safety deny-all

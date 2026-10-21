@@ -1,5 +1,7 @@
 # MIGRASI KE VPS — BEJO STIKER POS
 
+> 📌 **Panduan paling lengkap & praktis:** **[MIGRASI-VPS-2-ARAH.md](./MIGRASI-VPS-2-ARAH.md)** — dipecah jelas antara **sisi Dashboard VPS (panel Rumah Web)** dan **sisi Aplikasi (PC Anda)**, lengkap dengan perintah, urutan, checklist, dan troubleshooting.
+
 Panduan lengkap memindahkan aplikasi ke VPS hosting dengan domain
 **bejodigitalprint.com** (VPS: `vps.bejodigitalprint.com`).
 

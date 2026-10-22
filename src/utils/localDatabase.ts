@@ -4,7 +4,7 @@
  * Coded by Langgo Bramandityo.
  * 
  * Mengelola Database Lokal (IndexedDB & Local Directory LAN) dan Sinkronisasi Real-Time
- * dengan Cloud Firestore. Memungkinkan user memilih lokasi database lokal dan bertransaksi 100% offline.
+ * dengan Cloud PocketBase. Memungkinkan user memilih lokasi database lokal dan bertransaksi 100% offline.
  */
 
 import {

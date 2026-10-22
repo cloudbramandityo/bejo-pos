@@ -6,7 +6,7 @@
  */
 
 import { getStoredSpkOrders, saveStoredSpkOrders } from './storage';
-import { deleteSpkOrderCloud } from '../firebase';
+import { deleteSpkOrderCloud } from '../backend/pocketbaseBackend';
 import { SpkOrder } from '../types';
 
 export interface WibTimeInfo {

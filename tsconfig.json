@@ -24,5 +24,11 @@
     "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "backups",
+    "deploy"
+  ]
 }

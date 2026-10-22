@@ -1,6 +1,7 @@
 __MACOSX/
 node_modules/
 dist/
+backups/
 .env
 *.log
 dev-server.log

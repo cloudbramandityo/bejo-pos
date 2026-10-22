@@ -1,50 +1,48 @@
 # =====================================================================
-#  BEJO STIKER POS - Caddyfile (reverse proxy + HTTPS otomatis)
-#  Lokasi: /etc/caddy/Caddyfile
-#  Reload: sudo systemctl reload caddy
+#  BEJO STIKER POS - Caddyfile (Windows VPS)
+#  Lokasi : C:\caddy\Caddyfile
+#  Reload : Restart-Service Caddy
 # =====================================================================
 
-# --- www dialihkan ke domain utama ---
-www.bejodigitalprint.com {
-    redir https://bejodigitalprint.com{uri} permanent
-}
-
-# --- domain utama ---
 bejodigitalprint.com {
     encode zstd gzip
 
-    # Header keamanan (HSTS otomatis setelah HTTPS aktif)
     header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
         X-Content-Type-Options "nosniff"
         Referrer-Policy "strict-origin-when-cross-origin"
         Permissions-Policy "geolocation=(), microphone=(), camera=()"
         -Server
     }
 
-    # Batasi ukuran body (upload gambar besar mungkin perlu dilebihkan)
     request_body {
         max_size 25MB
     }
 
-    # Teruskan ke aplikasi Node (port internal, tidak dibuka ke publik)
-    reverse_proxy 127.0.0.1:3000 {
-        # IP asli diteruskan (X-Forwarded-For) agar lapisan proteksi
-        # login pada aplikasi tetap bekerja dengan benar.
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-Proto {scheme}
+    # -----------------------------------------------------------------
+    # PocketBase (database + realtime SSE + auth)
+    # Di-proxy LANGSUNG ke PocketBase (bukan lewat Node) agar streaming
+    # realtime & WebSocket tidak ter-buffer.
+    # -----------------------------------------------------------------
+    handle /api/pb/* {
+        reverse_proxy 127.0.0.1:8090
+    }
+
+    # -----------------------------------------------------------------
+    # Aplikasi Bejo Stiker POS (Express/Node)
+    # -----------------------------------------------------------------
+    handle {
+        reverse_proxy 127.0.0.1:3000 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
     }
 
     log {
-        output file /var/log/caddy/bejo-access.log {
+        output file C:\caddy\logs\access.log {
             roll_size 10MiB
             roll_keep 5
         }
         format json
     }
 }
-
-# --- akses lokal ke aplikasi tanpa lewat Caddy (opsional) ---
-# http://127.0.0.1:3000 {
-#     reverse_proxy 127.0.0.1:3000
-# }

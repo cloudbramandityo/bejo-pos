@@ -26,7 +26,7 @@ import {
 import { Product } from '../types';
 import { formatRupiah } from '../utils/formatters';
 import { getStoredProducts, saveStoredProducts } from '../utils/storage';
-import { saveProductCloud } from '../firebase';
+import { saveProductCloud } from '../backend/pocketbaseBackend';
 
 export interface GoogleDriveUrlConverterProps {
   products?: Product[];
@@ -295,7 +295,7 @@ export const GoogleDriveUrlConverter: React.FC<GoogleDriveUrlConverterProps> = (
       });
     }
 
-    // 2. Selalu sinkronisasi ke Cloud Firestore & LocalStorage secara aman
+    // 2. Selalu sinkronisasi ke Cloud PocketBase & LocalStorage secara aman
     try {
       const currentList = getStoredProducts();
       const updatedList = currentList.map((p) => (p.id === updatedProduct.id ? updatedProduct : p));
@@ -887,7 +887,7 @@ export const GoogleDriveUrlConverter: React.FC<GoogleDriveUrlConverterProps> = (
             {/* Modal Footer */}
             <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
               <span className="text-slate-500 text-[11px] text-center sm:text-left">
-                💡 Foto produk yang diterapkan akan langsung diperbarui di <strong>Katalog Produk</strong>, <strong>POS Kasir</strong>, dan tersinkronisasi ke server cloud.
+                ðŸ’¡ Foto produk yang diterapkan akan langsung diperbarui di <strong>Katalog Produk</strong>, <strong>POS Kasir</strong>, dan tersinkronisasi ke server cloud.
               </span>
               <button
                 type="button"

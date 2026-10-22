@@ -238,7 +238,7 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 font-medium truncate mt-0.5">
-                Penyimpanan ganda real-time (IndexedDB lokal & Google Firebase) tanpa perlu upload/download manual
+                Penyimpanan ganda real-time (IndexedDB lokal & Google PocketBase) tanpa perlu upload/download manual
               </p>
             </div>
           </div>
@@ -327,12 +327,12 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
               </div>
             </div>
 
-            {/* Cloud Firestore Card */}
+            {/* Cloud PocketBase Card */}
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-300 space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 font-black text-slate-900 text-xs">
                   <Cloud className="w-4 h-4 text-indigo-600" />
-                  <span>Cloud Database (Firebase)</span>
+                  <span>Cloud Database (PocketBase)</span>
                 </div>
                 <span
                   className={`font-bold text-[10px] px-2 py-0.5 rounded-full border flex items-center gap-1 ${
@@ -493,7 +493,7 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-slate-500" />
                 <span className="font-bold text-slate-700 text-xs">
-                  Alat Arsip Eksternal Manual (.json ke Flashdisk) — <span className="text-slate-500 font-normal">Opsional</span>
+                  Alat Arsip Eksternal Manual (.json ke Flashdisk) â€” <span className="text-slate-500 font-normal">Opsional</span>
                 </span>
               </div>
               {showManualTools ? (

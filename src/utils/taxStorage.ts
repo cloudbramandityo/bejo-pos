@@ -17,7 +17,7 @@ import {
   saveTaxpayerProfileCloud,
   saveAllTaxAnnualReturnsCloud,
   saveTaxMonthlyBillingsCloud
-} from '../firebase';
+} from '../backend/pocketbaseBackend';
 
 const STORAGE_KEY_TAXPAYER = 'bejo_taxpayer_profile';
 const STORAGE_KEY_ANNUAL_RETURNS = 'bejo_annual_tax_returns';
@@ -313,7 +313,7 @@ export const saveStoredTaxpayerProfile = (profile: TaxpayerProfile): void => {
   } catch (e) {
     console.error('Failed to save taxpayer profile', e);
   }
-  // Realtime Cloud Firestore persistence & cross-tab / user update broadcast
+  // Realtime Cloud PocketBase persistence & cross-tab / user update broadcast
   saveTaxpayerProfileCloud(profile).catch((err) => console.error('[Tax Cloud] Error saving taxpayer profile:', err));
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('bejo_taxpayer_profile_updated', { detail: profile }));
@@ -478,7 +478,7 @@ export const saveStoredMonthlyBillings = (data: MonthlyBillingsByYear): void => 
   } catch (e) {
     console.error('Failed to save monthly billings', e);
   }
-  // Realtime Cloud Firestore persistence
+  // Realtime Cloud PocketBase persistence
   saveTaxMonthlyBillingsCloud(data).catch((err) => console.error('[Tax Cloud] Error saving monthly billings:', err));
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('bejo_tax_monthly_billings_updated', { detail: data }));

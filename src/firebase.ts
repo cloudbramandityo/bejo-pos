@@ -99,7 +99,10 @@ export const auth = getAuth(app);
  */
 export const authReady: Promise<void> = (async () => {
   try {
-    if (auth.currentUser) return;
+    if (auth.currentUser) {
+      console.log('[Firebase Auth] User sudah login:', auth.currentUser.isAnonymous ? 'anonim' : auth.currentUser.email);
+      return;
+    }
     await signInAnonymously(auth);
     console.log('[Firebase Auth] Berhasil masuk sebagai anonim.');
   } catch (err) {
@@ -107,6 +110,8 @@ export const authReady: Promise<void> = (async () => {
       '[Firebase Auth] Gagal masuk anonim. Aktifkan metode "Anonymous" di Firebase Console > Authentication > Sign-in method. Detail:',
       err
     );
+    // Re-throw to let callers handle
+    throw err;
   }
 })();
 

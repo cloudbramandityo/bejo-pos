@@ -66,14 +66,14 @@ export const BackendErrorBanner: React.FC<BackendErrorBannerProps> = ({
     dismissActiveBackendNotification();
   };
 
-  const isCriticalFirestoreQuotaErr = 
-    activeError?.code === 'ERR_FIRESTORE_QUOTA_EXCEEDED' || 
+  const isCriticalPocketBaseQuotaErr = 
+    activeError?.code === 'ERR_POCKETBASE_QUOTA_EXCEEDED' || 
     activeError?.message?.includes('Quota exceeded') || 
     activeError?.message?.includes('quota') || 
     activeError?.message?.includes('resource-exhausted') ||
     activeError?.message?.includes('RESOURCE_EXHAUSTED');
 
-  if (userRole !== 'DEVELOPER' && !isCriticalFirestoreQuotaErr) {
+  if (userRole !== 'DEVELOPER' && !isCriticalPocketBaseQuotaErr) {
     return null;
   }
 
@@ -96,10 +96,10 @@ export const BackendErrorBanner: React.FC<BackendErrorBannerProps> = ({
             <Sparkles className="w-3 h-3" /> Gemini AI Engine
           </span>
         );
-      case 'FIRESTORE':
+      case 'POCKETBASE':
         return (
           <span className="inline-flex items-center gap-1 bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border border-amber-300/80">
-            <Database className="w-3 h-3" /> Cloud Firestore
+            <Database className="w-3 h-3" /> Cloud PocketBase
           </span>
         );
       default:

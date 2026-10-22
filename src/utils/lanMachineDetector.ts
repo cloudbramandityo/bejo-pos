@@ -6,7 +6,7 @@
  */
 import { MachineItem, SpkPrintFileAttachment } from '../types';
 import { getStoredMachines, saveStoredMachines } from './storage';
-import { saveMachineCloud } from '../firebase';
+import { saveMachineCloud } from '../backend/pocketbaseBackend';
 
 export interface LanScanResult {
   totalMachines: number;
@@ -78,7 +78,7 @@ export async function pingLanMachine(machine: MachineItem): Promise<{
 
 /**
  * Scans all registered printing & cutting machines on the LAN in parallel.
- * Updates local state, localStorage, dispatches window event, and optionally syncs to Firebase Cloud.
+ * Updates local state, localStorage, dispatches window event, and optionally syncs to PocketBase Cloud.
  */
 export async function scanAllLanMachines(
   currentMachines?: MachineItem[],
@@ -109,7 +109,7 @@ export async function scanAllLanMachines(
   const updatedMachines = await Promise.all(pingPromises);
   saveStoredMachines(updatedMachines);
 
-  // Sync to Firebase Cloud if requested
+  // Sync to PocketBase Cloud if requested
   if (syncCloud) {
     updatedMachines.forEach((m) => {
       saveMachineCloud(m).catch(() => {});

@@ -145,7 +145,7 @@ import {
   subscribePrintingRejects,
   savePrintingRejectCloud,
   deletePrintingRejectCloud
-} from '../firebase';
+} from '../backend/pocketbaseBackend';
 import { PrintingRejectView } from './PrintingRejectView';
 import { LanNetworkFolderModal } from './modals/LanNetworkFolderModal';
 import {
@@ -1327,7 +1327,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
             minute: '2-digit'
           }),
           changedBy: currentUser?.name || 'Developer',
-          note: `Input SPK baru (${convertedItems.length} Produk: ${convertedItems.map((c) => `${c.jobName} - ${c.materialName}`).join(' | ')})${finalPrintFiles.length > 0 ? ` • ${finalPrintFiles.length} File: ${finalPrintFiles.map((f) => f.fileName).join(', ')}` : resolvedFileName ? ` • File: ${resolvedFileName}` : ''}`
+          note: `Input SPK baru (${convertedItems.length} Produk: ${convertedItems.map((c) => `${c.jobName} - ${c.materialName}`).join(' | ')})${finalPrintFiles.length > 0 ? ` â€¢ ${finalPrintFiles.length} File: ${finalPrintFiles.map((f) => f.fileName).join(', ')}` : resolvedFileName ? ` â€¢ File: ${resolvedFileName}` : ''}`
         }
       ]
     };
@@ -1336,7 +1336,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
     setOrders(updated);
     saveSpkOrderCloud(newOrder).catch(console.error);
 
-    // Auto-save Customer to Daftar Pelanggan & Cloud Firestore Real-time
+    // Auto-save Customer to Daftar Pelanggan & Cloud PocketBase Real-time
     const cleanName = newCustomerName.trim();
     const cleanPhone = newCustomerPhone.trim() || `08${Date.now().toString().slice(-8)}`;
 
@@ -1581,7 +1581,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
             <div className="flex items-center gap-2">
               <span className="bg-indigo-600/30 text-indigo-300 text-[10.5px] font-mono font-bold px-2.5 py-0.5 rounded-full border border-indigo-500/40 uppercase tracking-widest flex items-center gap-1.5">
                 <Sparkles className="w-3 h-3 text-indigo-400" />
-                TAHAP 1 • DEVELOPER PREVIEW
+                TAHAP 1 â€¢ DEVELOPER PREVIEW
               </span>
               <span className="bg-emerald-500/20 text-emerald-300 text-[10.5px] font-mono font-bold px-2.5 py-0.5 rounded-full border border-emerald-500/40">
                 Sistem Cetak Digital Terpadu
@@ -1592,7 +1592,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
               SPK & ALUR KERJA CETAK DIGITAL
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-              Monitoring alur kerja produksi: <strong className="text-white font-bold">1. File Masuk / Setting ➔ 2. Antrean Mesin ➔ 3. Finishing ➔ 4. Siap Ambil / Bayar di Kasir</strong>.
+              Monitoring alur kerja produksi: <strong className="text-white font-bold">1. File Masuk / Setting âž” 2. Antrean Mesin âž” 3. Finishing âž” 4. Siap Ambil / Bayar di Kasir</strong>.
             </p>
           </div>
 
@@ -1666,35 +1666,35 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
               <span className={`px-2.5 py-1 rounded-lg border flex items-center gap-1.5 ${
                 categoryOnlineCounts.DESAINER.online > 0 ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40' : 'bg-slate-800 text-slate-400 border-slate-700'
               }`}>
-                <span>🎨 Desainer:</span>
+                <span>ðŸŽ¨ Desainer:</span>
                 <span className="font-mono">{categoryOnlineCounts.DESAINER.online}/{categoryOnlineCounts.DESAINER.total}</span>
               </span>
 
               <span className={`px-2.5 py-1 rounded-lg border flex items-center gap-1.5 ${
                 categoryOnlineCounts.OPERATOR_CETAK.online > 0 ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40' : 'bg-slate-800 text-slate-400 border-slate-700'
               }`}>
-                <span>🖨️ Operator:</span>
+                <span>ðŸ–¨ï¸ Operator:</span>
                 <span className="font-mono">{categoryOnlineCounts.OPERATOR_CETAK.online}/{categoryOnlineCounts.OPERATOR_CETAK.total}</span>
               </span>
 
               <span className={`px-2.5 py-1 rounded-lg border flex items-center gap-1.5 ${
                 categoryOnlineCounts.FINISHING.online > 0 ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40' : 'bg-slate-800 text-slate-400 border-slate-700'
               }`}>
-                <span>✂️ Finishing:</span>
+                <span>âœ‚ï¸ Finishing:</span>
                 <span className="font-mono">{categoryOnlineCounts.FINISHING.online}/{categoryOnlineCounts.FINISHING.total}</span>
               </span>
 
               <span className={`px-2.5 py-1 rounded-lg border flex items-center gap-1.5 ${
                 categoryOnlineCounts.KASIR_ADMIN.online > 0 ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40' : 'bg-slate-800 text-slate-400 border-slate-700'
               }`}>
-                <span>💰 Kasir/Admin:</span>
+                <span>ðŸ’° Kasir/Admin:</span>
                 <span className="font-mono">{categoryOnlineCounts.KASIR_ADMIN.online}/{categoryOnlineCounts.KASIR_ADMIN.total}</span>
               </span>
 
               <span className={`px-2.5 py-1 rounded-lg border flex items-center gap-1.5 ${
                 categoryOnlineCounts.SUPERVISOR.online > 0 ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40' : 'bg-slate-800 text-slate-400 border-slate-700'
               }`}>
-                <span>🛡️ Supervisor:</span>
+                <span>ðŸ›¡ï¸ Supervisor:</span>
                 <span className="font-mono">{categoryOnlineCounts.SUPERVISOR.online}/{categoryOnlineCounts.SUPERVISOR.total}</span>
               </span>
             </div>
@@ -1891,7 +1891,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
               <option value="ALL">Semua Prioritas</option>
               <option value="NORMAL">Normal</option>
               <option value="HIGH">High Priority</option>
-              <option value="URGENT">🔥 Urgent / Ditunggu</option>
+              <option value="URGENT">ðŸ”¥ Urgent / Ditunggu</option>
             </select>
 
             {(selectedStatusFilter !== 'ALL' || selectedMachineFilter !== 'ALL' || selectedPriorityFilter !== 'ALL' || searchQuery) && (
@@ -1939,9 +1939,9 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                       setIsDetailModalOpen(true);
                     }}
                     onQuickAdvance={() => handleUpdateStatus(order.id, 'SEDANG_CETAK')}
-                    advanceLabel="➔ Kirim ke Mesin"
+                    advanceLabel="âž” Kirim ke Mesin"
                     onSendToPos={() => handleSendSpkToPos(order)}
-                    sendToPosLabel="🛒 POS"
+                    sendToPosLabel="ðŸ›’ POS"
                     onDelete={currentUser?.role === 'DEVELOPER' ? () => handleDeleteSpk(order.id) : undefined}
                   />
                 ))}
@@ -1972,9 +1972,9 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                       setIsDetailModalOpen(true);
                     }}
                     onQuickAdvance={() => handleUpdateStatus(order.id, 'FINISHING')}
-                    advanceLabel="➔ Kirim ke Finishing"
+                    advanceLabel="âž” Kirim ke Finishing"
                     onSendToPos={() => handleSendSpkToPos(order)}
-                    sendToPosLabel="🛒 POS"
+                    sendToPosLabel="ðŸ›’ POS"
                     onDelete={currentUser?.role === 'DEVELOPER' ? () => handleDeleteSpk(order.id) : undefined}
                   />
                 ))}
@@ -2005,9 +2005,9 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                       setIsDetailModalOpen(true);
                     }}
                     onQuickAdvance={() => handleUpdateStatus(order.id, 'SIAP_AMBIL')}
-                    advanceLabel="➔ Tandai Siap Ambil"
+                    advanceLabel="âž” Tandai Siap Ambil"
                     onSendToPos={() => handleSendSpkToPos(order)}
-                    sendToPosLabel="🛒 POS"
+                    sendToPosLabel="ðŸ›’ POS"
                     onDelete={currentUser?.role === 'DEVELOPER' ? () => handleDeleteSpk(order.id) : undefined}
                   />
                 ))}
@@ -2038,9 +2038,9 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                       setIsDetailModalOpen(true);
                     }}
                     onQuickAdvance={() => handleUpdateStatus(order.id, 'SELESAI_LUNAS')}
-                    advanceLabel="✓ Lunas"
+                    advanceLabel="âœ“ Lunas"
                     onSendToPos={() => handleSendSpkToPos(order)}
-                    sendToPosLabel="🛒 Tarik ke POS"
+                    sendToPosLabel="ðŸ›’ Tarik ke POS"
                     onOpenAccount={() => handleUpdateStatus(order.id, 'OPEN_ACCOUNT')}
                     onDelete={currentUser?.role === 'DEVELOPER' ? () => handleDeleteSpk(order.id) : undefined}
                   />
@@ -2187,7 +2187,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                       <tr key={order.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3.5 px-4">
                           <div className="font-mono font-black text-slate-950 text-xs">{order.orderNumber}</div>
-                          <div className="text-[11px] text-slate-600 font-medium">{order.date} • {order.time}</div>
+                          <div className="text-[11px] text-slate-600 font-medium">{order.date} â€¢ {order.time}</div>
                           {order.priority === 'URGENT' && (
                             <span className="inline-flex items-center gap-1 bg-red-100 text-red-800 text-[9.5px] font-black px-1.5 py-0.2 rounded mt-1 border border-red-300">
                               <Flame className="w-2.5 h-2.5 text-red-600" /> URGENT
@@ -2206,12 +2206,12 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                             <div key={idx} className="space-y-0.5">
                               <div className="font-bold text-slate-950">{it.jobName}</div>
                               <div className="text-[11px] text-slate-700 font-medium">
-                                {it.materialName} •{' '}
+                                {it.materialName} â€¢{' '}
                                 {it.saleMode === 'lembar' ? (
                                   <strong className="text-slate-950 font-bold">{it.qty} Lembar</strong>
                                 ) : (
                                   <>
-                                    <strong className="text-slate-950 font-bold">{it.lengthMeters}x{it.widthMeters}m</strong> ({it.qty} pcs = {it.areaM2} m²)
+                                    <strong className="text-slate-950 font-bold">{it.lengthMeters}x{it.widthMeters}m</strong> ({it.qty} pcs = {it.areaM2} mÂ²)
                                   </>
                                 )}
                               </div>
@@ -2293,7 +2293,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                 className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10.5px] font-black rounded-lg cursor-pointer transition-all active:scale-95 shadow-xs flex items-center gap-1"
                                 title="Tarik ke Kasir POS untuk Pembayaran Langsung"
                               >
-                                <span>🛒 POS</span>
+                                <span>ðŸ›’ POS</span>
                               </button>
                             )}
                             <button
@@ -2601,10 +2601,10 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                               {index + 1}
                             </span>
                             <span className="font-semibold text-xs text-slate-900">
-                              Item #{index + 1} {item.materialName ? `• ${item.materialName}` : ''}
+                              Item #{index + 1} {item.materialName ? `â€¢ ${item.materialName}` : ''}
                             </span>
                             <span className="text-[10.5px] font-medium px-2 py-0.5 rounded-md border bg-slate-100 text-slate-700 border-slate-200">
-                              {item.saleMode === 'meter' ? 'Hitung per Meter (P × L)' : 'Hitung per Lembar (Qty)'}
+                              {item.saleMode === 'meter' ? 'Hitung per Meter (P Ã— L)' : 'Hitung per Lembar (Qty)'}
                             </span>
                           </div>
 
@@ -2660,7 +2660,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                 }`}
                               >
                                 <Maximize2 className="w-3 h-3" />
-                                <span>Meter (P×L)</span>
+                                <span>Meter (PÃ—L)</span>
                               </button>
                               <button
                                 type="button"
@@ -2717,7 +2717,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                 const price = computePriceForSpkProduct(p, newCustomerCategory, item.saleMode);
                                 return (
                                   <option key={p.id} value={p.id} className="text-slate-900 font-medium py-1">
-                                    {p.name} [{catLabel}] — {formatRupiah(price)} / {item.saleMode === 'meter' ? (p.unit || 'm²') : 'lembar'}
+                                    {p.name} [{catLabel}] â€” {formatRupiah(price)} / {item.saleMode === 'meter' ? (p.unit || 'mÂ²') : 'lembar'}
                                   </option>
                                 );
                               })}
@@ -2735,10 +2735,10 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                               </div>
                               <div className="flex items-center gap-2 font-mono flex-wrap">
                                 <span className="text-[11px] text-slate-500 font-sans">
-                                  {item.saleMode === 'meter' ? 'Hitung per Meter (m²)' : 'Hitung per Lembar (Qty)'}
+                                  {item.saleMode === 'meter' ? 'Hitung per Meter (mÂ²)' : 'Hitung per Lembar (Qty)'}
                                 </span>
                                 <span className="bg-indigo-50 text-indigo-900 border border-indigo-200 font-semibold px-2.5 py-1 rounded-md text-xs">
-                                  Tarif {newCustomerCategory}: {formatRupiah(item.unitPrice)} / {item.saleMode === 'meter' ? (itemProductObj.unit || 'm²') : 'lembar'}
+                                  Tarif {newCustomerCategory}: {formatRupiah(item.unitPrice)} / {item.saleMode === 'meter' ? (itemProductObj.unit || 'mÂ²') : 'lembar'}
                                 </span>
                               </div>
                             </div>
@@ -2786,7 +2786,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                               />
                             </div>
                             <div>
-                              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Tarif / m² (Rp)</label>
+                              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Tarif / mÂ² (Rp)</label>
                               <input
                                 type="number"
                                 min="0"
@@ -2826,7 +2826,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                           {item.saleMode === 'meter' ? (
                             <>
                               <span>
-                                Ukuran: <strong className="text-slate-900 font-semibold">{item.lengthMeters} × {item.widthMeters} m</strong> ({item.qty} Pcs = <strong className="text-slate-900 font-mono font-semibold">{item.areaM2} m²</strong>)
+                                Ukuran: <strong className="text-slate-900 font-semibold">{item.lengthMeters} Ã— {item.widthMeters} m</strong> ({item.qty} Pcs = <strong className="text-slate-900 font-mono font-semibold">{item.areaM2} mÂ²</strong>)
                               </span>
                               <span>
                                 Subtotal: <strong className="text-slate-900 font-bold font-mono text-xs">{formatRupiah(item.totalPrice)}</strong>
@@ -3036,7 +3036,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
                     <span className="text-slate-600 font-normal">
-                      Rincian Order: <strong className="text-slate-900 font-semibold">{orderItems.length} Produk</strong> ({calculatedTotalItems.totalQty} Pcs, {calculatedTotalItems.totalArea} m²)
+                      Rincian Order: <strong className="text-slate-900 font-semibold">{orderItems.length} Produk</strong> ({calculatedTotalItems.totalQty} Pcs, {calculatedTotalItems.totalArea} mÂ²)
                     </span>
                   </div>
                   <div className="text-xs font-bold text-slate-900 font-mono">
@@ -3174,7 +3174,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                       }`}
                     >
                       <Flame className="w-3.5 h-3.5" />
-                      🔥 Urgent
+                      ðŸ”¥ Urgent
                     </button>
                   </div>
                 </div>
@@ -3279,7 +3279,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                       {fileObj.fileSize ? (
                                         <>
                                           <span>Ukuran: <strong className="text-slate-700 font-medium">{formatBytes(fileObj.fileSize)}</strong></span>
-                                          <span>•</span>
+                                          <span>â€¢</span>
                                         </>
                                       ) : null}
                                       <span className="text-emerald-700 font-medium flex items-center gap-0.5">
@@ -3483,7 +3483,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                 <div className="space-y-2 border-b border-slate-200 pb-3">
                   <div className="flex justify-between text-xs text-slate-500 font-normal">
                     <span>
-                      Rincian ({orderItems.length} Produk • {calculatedTotalItems.totalQty} Pcs • {calculatedTotalItems.totalArea} m²)
+                      Rincian ({orderItems.length} Produk â€¢ {calculatedTotalItems.totalQty} Pcs â€¢ {calculatedTotalItems.totalArea} mÂ²)
                     </span>
                     <span className="font-semibold text-slate-700 font-mono">{formatRupiah(calculatedTotalSpk)}</span>
                   </div>
@@ -3696,7 +3696,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                         }`}
                         title="Ubah status kesiapan mesin"
                       >
-                        {isReady ? '➔ Set Maintenance' : '➔ Set Ready'}
+                        {isReady ? 'âž” Set Maintenance' : 'âž” Set Ready'}
                       </button>
 
                       <button
@@ -3781,11 +3781,11 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
               </span>
               {[
                 { id: 'ALL', label: 'Semua Posisi SPK' },
-                { id: 'DESAINER', label: '🎨 Desainer & Setting' },
-                { id: 'OPERATOR_CETAK', label: '🖨️ Operator Cetak' },
-                { id: 'FINISHING', label: '✂️ Finishing & Potong' },
-                { id: 'KASIR_ADMIN', label: '💰 Kasir & Admin' },
-                { id: 'SUPERVISOR', label: '🛡️ Supervisor & Dev' }
+                { id: 'DESAINER', label: 'ðŸŽ¨ Desainer & Setting' },
+                { id: 'OPERATOR_CETAK', label: 'ðŸ–¨ï¸ Operator Cetak' },
+                { id: 'FINISHING', label: 'âœ‚ï¸ Finishing & Potong' },
+                { id: 'KASIR_ADMIN', label: 'ðŸ’° Kasir & Admin' },
+                { id: 'SUPERVISOR', label: 'ðŸ›¡ï¸ Supervisor & Dev' }
               ].map((f) => (
                 <button
                   key={f.id}
@@ -3818,31 +3818,31 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
           {[
             {
               id: 'DESAINER',
-              title: '🎨 1. DESAINER & SETTING FILE',
+              title: 'ðŸŽ¨ 1. DESAINER & SETTING FILE',
               desc: 'Tugas: Penyiapan file cetak, layouting, proofing ke pelanggan, & approval cetak.',
               bgHeader: 'bg-amber-500/10 border-amber-300 text-amber-950'
             },
             {
               id: 'OPERATOR_CETAK',
-              title: '🖨️ 2. OPERATOR CETAK MESIN',
+              title: 'ðŸ–¨ï¸ 2. OPERATOR CETAK MESIN',
               desc: 'Tugas: Pengoperasian mesin cetak Outdoor, Indoor, UV, DTF, & Plotter.',
               bgHeader: 'bg-indigo-500/10 border-indigo-300 text-indigo-950'
             },
             {
               id: 'FINISHING',
-              title: '✂️ 3. OPERATOR FINISHING & POTONG',
+              title: 'âœ‚ï¸ 3. OPERATOR FINISHING & POTONG',
               desc: 'Tugas: Laminasi, cutting presisi, laser acrylic, klem mata ayam, & packing.',
               bgHeader: 'bg-purple-500/10 border-purple-300 text-purple-950'
             },
             {
               id: 'KASIR_ADMIN',
-              title: '💰 4. KASIR & ADMINISTRASI SPK',
+              title: 'ðŸ’° 4. KASIR & ADMINISTRASI SPK',
               desc: 'Tugas: Terima order SPK, pencatatan DP, pelunasan POS, & pendaftaran pelanggan.',
               bgHeader: 'bg-emerald-500/10 border-emerald-300 text-emerald-950'
             },
             {
               id: 'SUPERVISOR',
-              title: '🛡️ 5. SUPERVISOR & DEVELOPER OPERASIONAL',
+              title: 'ðŸ›¡ï¸ 5. SUPERVISOR & DEVELOPER OPERASIONAL',
               desc: 'Tugas: Kontrol kelancaran sistem, penugasan mesin, & manajemen alur produksi.',
               bgHeader: 'bg-slate-800/10 border-slate-300 text-slate-950'
             }
@@ -3880,7 +3880,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                           ? 'bg-emerald-100 text-emerald-950 border-emerald-300'
                           : 'bg-rose-100 text-rose-950 border-rose-300'
                       }`}>
-                        {onlineCount > 0 ? `🟢 ${onlineCount} Terhubung & Ready` : '🔴 Belum Ada User Login'}
+                        {onlineCount > 0 ? `ðŸŸ¢ ${onlineCount} Terhubung & Ready` : 'ðŸ”´ Belum Ada User Login'}
                       </span>
                     </div>
                   </div>
@@ -3949,7 +3949,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                     <h4 className="font-black text-xs sm:text-sm text-slate-950 line-clamp-1">{userItem.name}</h4>
                                     <div className="text-[11px] font-mono text-slate-500 font-semibold flex items-center gap-1">
                                       <span>@{userItem.username}</span>
-                                      <span>•</span>
+                                      <span>â€¢</span>
                                       <span className="font-bold text-slate-700 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200 text-[10px]">
                                         {userItem.role}
                                       </span>
@@ -4024,11 +4024,11 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                     className="text-[10px] font-bold bg-white border border-slate-300 rounded-lg px-1.5 py-1 text-slate-800 cursor-pointer focus:ring-2 focus:ring-indigo-500"
                                     title="Ganti posisi alur SPK"
                                   >
-                                    <option value="DESAINER">🎨 Desainer</option>
-                                    <option value="OPERATOR_CETAK">🖨️ Operator</option>
-                                    <option value="FINISHING">✂️ Finishing</option>
-                                    <option value="KASIR_ADMIN">💰 Kasir/Admin</option>
-                                    <option value="SUPERVISOR">🛡️ Supervisor</option>
+                                    <option value="DESAINER">ðŸŽ¨ Desainer</option>
+                                    <option value="OPERATOR_CETAK">ðŸ–¨ï¸ Operator</option>
+                                    <option value="FINISHING">âœ‚ï¸ Finishing</option>
+                                    <option value="KASIR_ADMIN">ðŸ’° Kasir/Admin</option>
+                                    <option value="SUPERVISOR">ðŸ›¡ï¸ Supervisor</option>
                                   </select>
 
                                   {currentUser?.role === 'DEVELOPER' && userItem.id !== 'sys_core_developer' && (
@@ -4128,8 +4128,8 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                     onChange={(e) => setMStatus(e.target.value as any)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-600 cursor-pointer"
                   >
-                    <option value="READY">✓ READY (Bisa Dipilih di SPK)</option>
-                    <option value="UNDER_MAINTENANCE">⚠️ UNDER MAINTENANCE (Terkunci)</option>
+                    <option value="READY">âœ“ READY (Bisa Dipilih di SPK)</option>
+                    <option value="UNDER_MAINTENANCE">âš ï¸ UNDER MAINTENANCE (Terkunci)</option>
                   </select>
                 </div>
               </div>
@@ -4152,7 +4152,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                     type="text"
                     value={mSpeed}
                     onChange={(e) => setMSpeed(e.target.value)}
-                    placeholder="misal: 18 m²/jam / 1000 mm/s"
+                    placeholder="misal: 18 mÂ²/jam / 1000 mm/s"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 focus:bg-white"
                   />
                 </div>
@@ -4463,7 +4463,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                       {fileObj?.fileSize ? (
                                         <>
                                           <span>Ukuran: <strong className="text-slate-900 font-bold">{formatBytes(fileObj.fileSize)}</strong></span>
-                                          <span>•</span>
+                                          <span>â€¢</span>
                                         </>
                                       ) : null}
                                       <span>Untuk: <strong className="text-slate-900 font-bold">{forJob || 'Pesanan Cetak'}</strong></span>
@@ -4609,12 +4609,12 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                       <div>
                         <div className="font-black text-sm text-slate-950">{it.jobName}</div>
                         <div className="text-[11.5px] text-slate-700 font-medium mt-0.5">
-                          Detail: <strong className="text-slate-950 font-bold">{it.materialName}</strong> • Ukuran: <strong className="text-slate-950 font-bold">{it.lengthMeters}x{it.widthMeters}m</strong> ({it.qty} pcs = {it.areaM2} m²)
+                          Detail: <strong className="text-slate-950 font-bold">{it.materialName}</strong> â€¢ Ukuran: <strong className="text-slate-950 font-bold">{it.lengthMeters}x{it.widthMeters}m</strong> ({it.qty} pcs = {it.areaM2} mÂ²)
                         </div>
                       </div>
                       <div className="text-right">
                         <div className="font-black text-slate-950 text-sm">{formatRupiah(it.totalPrice)}</div>
-                        <div className="text-[10.5px] text-slate-600 font-semibold">Tarif: {formatRupiah(it.unitPrice)}/m²</div>
+                        <div className="text-[10.5px] text-slate-600 font-semibold">Tarif: {formatRupiah(it.unitPrice)}/mÂ²</div>
                       </div>
                     </div>
 
@@ -4655,7 +4655,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                           <span className="text-slate-500 font-mono text-[10.5px] font-bold">{log.formattedTime}</span>
                         </div>
                         <div className="text-slate-700 font-medium mt-0.5">
-                          Oleh: <strong className="text-slate-950 font-bold">{log.changedBy}</strong> {log.note && `• ${log.note}`}
+                          Oleh: <strong className="text-slate-950 font-bold">{log.changedBy}</strong> {log.note && `â€¢ ${log.note}`}
                         </div>
                       </div>
                     </div>
@@ -4698,7 +4698,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-black rounded-xl flex items-center gap-1.5 cursor-pointer shadow-md transition-all active:scale-95"
                   >
                     <ShoppingCart className="w-4 h-4 text-white" />
-                    <span>🛒 Tarik ke POS Kasir</span>
+                    <span>ðŸ›’ Tarik ke POS Kasir</span>
                   </button>
                 )}
                 <button
@@ -4756,7 +4756,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                 <div key={idx} className="space-y-0.5 text-[10.5px]">
                   <div className="font-bold">{it.jobName}</div>
                   <div>
-                    Bahan: {it.materialName} ({it.lengthMeters}x{it.widthMeters}m • Qty: {it.qty} = {it.areaM2} m²)
+                    Bahan: {it.materialName} ({it.lengthMeters}x{it.widthMeters}m â€¢ Qty: {it.qty} = {it.areaM2} mÂ²)
                   </div>
                   {it.finishings.length > 0 && (
                     <div>Finishing: {it.finishings.map((f) => f.name).join(', ')}</div>
@@ -4887,11 +4887,11 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                     onChange={(e) => setNewUSpkCategory(e.target.value as SpkRoleCategory)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:bg-white cursor-pointer"
                   >
-                    <option value="DESAINER">🎨 Desainer & Setting</option>
-                    <option value="OPERATOR_CETAK">🖨️ Operator Cetak</option>
-                    <option value="FINISHING">✂️ Finishing & Potong</option>
-                    <option value="KASIR_ADMIN">💰 Kasir & Admin</option>
-                    <option value="SUPERVISOR">🛡️ Supervisor & Dev</option>
+                    <option value="DESAINER">ðŸŽ¨ Desainer & Setting</option>
+                    <option value="OPERATOR_CETAK">ðŸ–¨ï¸ Operator Cetak</option>
+                    <option value="FINISHING">âœ‚ï¸ Finishing & Potong</option>
+                    <option value="KASIR_ADMIN">ðŸ’° Kasir & Admin</option>
+                    <option value="SUPERVISOR">ðŸ›¡ï¸ Supervisor & Dev</option>
                   </select>
                 </div>
               </div>
@@ -4973,7 +4973,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                   className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all active:scale-[0.99]"
                 >
                   <FolderOpen className="w-4 h-4" />
-                  <span>📂 Buka File Explorer & Pilih Folder</span>
+                  <span>ðŸ“‚ Buka File Explorer & Pilih Folder</span>
                 </button>
               </div>
 
@@ -5125,7 +5125,7 @@ const SpkDeadlineTimerBadge: React.FC<{ order: SpkOrder }> = ({ order }) => {
     return (
       <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
         <CheckCircle2 className="w-3 h-3 text-slate-400 shrink-0" />
-        <span>Arsip Selesai • Timer Berhenti</span>
+        <span>Arsip Selesai â€¢ Timer Berhenti</span>
       </div>
     );
   }
@@ -5147,7 +5147,7 @@ const SpkDeadlineTimerBadge: React.FC<{ order: SpkOrder }> = ({ order }) => {
           <span className="truncate">Siap Ambil / Kasir</span>
         </div>
         <div className="font-mono font-black text-emerald-900 bg-white/90 px-1.5 py-0.5 rounded border border-emerald-300 text-[10px]">
-          ⏱ +{timeFormatted}
+          â± +{timeFormatted}
         </div>
       </div>
     );
@@ -5323,9 +5323,9 @@ const SpkKanbanCard: React.FC<SpkKanbanCardProps> = ({
         {order.items.length > 1 ? (
           <div className="text-[10.5px] text-slate-700 mt-1.5 bg-slate-50 p-2 rounded-lg border border-slate-200 space-y-1">
             <div className="flex items-center justify-between font-semibold text-slate-900 text-[11px]">
-              <span>📦 {order.items.length} Macam Produk</span>
+              <span>ðŸ“¦ {order.items.length} Macam Produk</span>
               <span className="font-mono text-slate-700 font-medium">
-                {order.totalQty || order.items.reduce((s, it) => s + (it.qty || 1), 0)} Pcs • {order.totalAreaM2 || order.items.reduce((s, it) => s + (it.areaM2 || 0), 0)} m²
+                {order.totalQty || order.items.reduce((s, it) => s + (it.qty || 1), 0)} Pcs â€¢ {order.totalAreaM2 || order.items.reduce((s, it) => s + (it.areaM2 || 0), 0)} mÂ²
               </span>
             </div>
             <div className="text-[10px] text-slate-500 line-clamp-2 font-normal">
@@ -5337,7 +5337,7 @@ const SpkKanbanCard: React.FC<SpkKanbanCardProps> = ({
             <div className="font-medium text-slate-800">{item?.materialName}</div>
             <div className="flex justify-between text-slate-600 mt-1 font-mono text-[10.5px]">
               <span>{item?.saleMode === 'lembar' ? `${item?.qty} Lembar` : `${item?.lengthMeters}x${item?.widthMeters}m (${item?.qty} pcs)`}</span>
-              <strong className="text-slate-900 font-semibold">{item?.saleMode === 'lembar' ? `${item?.qty} Lbr` : `${item?.areaM2} m²`}</strong>
+              <strong className="text-slate-900 font-semibold">{item?.saleMode === 'lembar' ? `${item?.qty} Lbr` : `${item?.areaM2} mÂ²`}</strong>
             </div>
           </div>
         )}
@@ -5460,7 +5460,7 @@ const SpkKanbanCard: React.FC<SpkKanbanCardProps> = ({
             className="w-full py-2 px-3 bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 text-black font-black text-xs rounded-xl border border-yellow-500 shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
             title="Pindahkan kartu ke kolom Open Account (Rekening Terbuka)"
           >
-            <span>⚡ Open Account</span>
+            <span>âš¡ Open Account</span>
           </button>
         </div>
       )}

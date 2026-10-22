@@ -360,7 +360,7 @@ export interface PrivateChatMessage {
 
 export interface BackendErrorItem {
   id: string;
-  source: 'SERVER' | 'AI_API' | 'FIRESTORE' | 'CLIENT_CACHE' | 'NETWORK';
+  source: 'SERVER' | 'AI_API' | 'POCKETBASE' | 'CLIENT_CACHE' | 'NETWORK';
   title: string;
   message: string;
   code?: string;
@@ -376,7 +376,7 @@ export interface BackendDiagnostics {
   memoryUsageMb: number;
   nodeVersion: string;
   aiApiStatus: 'ready' | 'degraded' | 'unavailable';
-  firestoreStatus: 'connected' | 'offline' | 'checking';
+  pocketbaseStatus: 'connected' | 'offline' | 'checking';
   activeErrors: BackendErrorItem[];
   recentFixLogs?: string[];
   lastChecked: number;
@@ -664,7 +664,7 @@ export interface LandingProductItem {
   name: string;
   brand: string;
   category: 'roll' | 'meteran' | 'print' | 'laser';
-  unit: string; // e.g. "per meter", "per roll (50m)", "per cm²"
+  unit: string; // e.g. "per meter", "per roll (50m)", "per cmÂ²"
   priceEstimated: string; // e.g. "Mulai Rp 25.000 / m" atau "Rp 850.000 / roll"
   specs: string;
   description: string;

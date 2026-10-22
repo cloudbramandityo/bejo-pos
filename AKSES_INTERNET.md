@@ -2,7 +2,7 @@
 ## Bejo Stiker POS — Cloudflare Tunnel + Proteksi Login
 
 > **📌 Sedang menyiapkan hosting VPS + domain `bejodigitalprint.com`?**
-> Panduan migrasi lengkap ada di **[MIGRASI-VPS.md](./MIGRASI-VPS.md)** — berisi setup DNS, VPS, PM2, Caddy/HTTPS, environment variable, Firebase rules, checklist verifikasi, sampai rollback.
+> Panduan migrasi lengkap ada di **[MIGRASI-VPS.md](./MIGRASI-VPS.md)** — berisi setup DNS, VPS, PM2/Caddy/HTTPS, environment variable, instalasi **PocketBase** (database + realtime + auth), checklist verifikasi, sampai rollback.
 > Dokumen ini menjelaskan cara *sementara* membuka aplikasi dari komputer/HP lain **di luar jaringan lokal** (lewat internet), beserta batasan dan risikonya.
 
 ---
@@ -124,7 +124,7 @@ Deteksi akses luar dilakukan lewat header `cf-connecting-ip`, `cf-ray`, `cf-visi
 
 | Data | Tersinkron? | Keterangan |
 |---|---|---|
-| Produk, pelanggan, transaksi, shift, SPK, invoice, pajak | **Ya** | Lewat Google Firestore (project `noted-segment-9xjsq`) |
+| Produk, pelanggan, transaksi, shift, SPK, invoice, pajak | **Ya** | Lewat **PocketBase** self-hosted di VPS (`https://bejodigitalprint.com/api/pb`) |
 | Invoice (database server) | **Ya** | Tersimpan di `data/invoices_db.json` di komputer ini |
 | Pengaturan landing page, laporan keuangan, preferensi | **Tidak** | Tersimpan di localStorage — hanya milik browser masing-masing |
 
@@ -142,22 +142,18 @@ Aplikasi berjalan di komputer ini. Kalau komputer dimatikan, sleep, atau koneksi
 
 ## 7. RISIKO KEAMANAN — Baca Sebelum Dipakai Serius
 
-### 7.1 Aturan Firestore terbuka
+### 7.1 Aturan akses database
 
-File `firestore.rules` saat ini berisi `allow read, write: if true` untuk **semua** koleksi:
+> ⚠️ **SUDAH DIPERBAIKI.** Sebelumnya aturan Firestore mengizinkan `read, write: if true`
+> sehingga siapa pun yang membuka aplikasi bisa membaca/menulis seluruh data toko.
+> Kini basis data adalah **PocketBase self-hosted** dengan API rules
+> `@request.auth.id != ""` (hanya request terautentikasi), plus dilindungi
+> **Basic Auth Caddy** + port 8090 yang hanya listen di localhost.
 
-```
-match /products/{productId} { allow read, write: if true; }
-match /customers/{customerId} { allow read, write: if true; }
-match /transactions/{transactionId} { allow read, write: if true; }
-... dan seterusnya untuk semua koleksi ...
-```
-
-Konfigurasi Firebase (project ID + API key) tertanam di kode klien yang dikirim ke browser, jadi **siapa pun yang pernah membuka aplikasi ini bisa membaca dan menulis seluruh data toko secara langsung** ke Firestore — tanpa perlu melewati proteksi tunnel.
-
-> Ini masalah **yang sudah ada sebelumnya**, bukan akibat dari pemasangan tunnel. Tapi jadi jauh lebih penting untuk segera diperbaiki.
-
-**Rekomendasi:** batasi aturan Firestore, misalnya hanya boleh diakses pengguna yang sudah terautentikasi.
+Pastikan di VPS:
+- PocketBase API rules tiap koleksi ≠ kosong (lihat `scripts/create-pocketbase-collections.mjs`)
+- Akun sinkronisasi `sync@bejo.local` memakai password kuat
+- `REMOTE_ACCESS_PASS` (Basic Auth) berbeda dari password aplikasi
 
 ### 7.2 Password developer tersimpan di kode klien
 
@@ -170,7 +166,7 @@ Konfigurasi Firebase (project ID + API key) tertanam di kode klien yang dikirim 
 ### 7.4 Rekomendasi bertahap
 
 1. **Sekarang:** gunakan password kuat di `.env` (sudah dilakukan), dan jangan sebarkan alamat publik ke sembarang orang.
-2. **Segera:** rapatkan `firestore.rules` agar tidak `if true`.
+2. **Sudah:** API rules PocketBase dikunci (hanya request terautentikasi) + Basic Auth Caddy.
 3. **Kalau dipakai rutin:** pindahkan kredensial keluar dari kode klien, tambahkan autentikasi token di API server.
 
 ---

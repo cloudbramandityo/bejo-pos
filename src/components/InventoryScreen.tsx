@@ -802,7 +802,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                           return (
                             <div className="mt-0.5">
                               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">
-                                💡 {formula.formulaText}
+                                ðŸ’¡ {formula.formulaText}
                               </span>
                             </div>
                           );
@@ -1551,11 +1551,11 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                       </div>
 
                       <div className="text-[10.5px] text-slate-600 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 flex items-start gap-1.5">
-                        <span className="font-bold text-blue-700 shrink-0">• Aturan:</span>
+                        <span className="font-bold text-blue-700 shrink-0">â€¢ Aturan:</span>
                         <span>
                           {formPrintSaleMode === 'meter'
-                            ? 'Ketika button METER dipilih, produk secara otomatis hanya muncul di TAMBAH PENJUALAN CETAK – Penjualan per Meter.'
-                            : 'Ketika button LEMBAR dipilih, produk secara otomatis hanya muncul di TAMBAH PENJUALAN CETAK – Penjualan per Lembar.'}
+                            ? 'Ketika button METER dipilih, produk secara otomatis hanya muncul di TAMBAH PENJUALAN CETAK â€“ Penjualan per Meter.'
+                            : 'Ketika button LEMBAR dipilih, produk secara otomatis hanya muncul di TAMBAH PENJUALAN CETAK â€“ Penjualan per Lembar.'}
                         </span>
                       </div>
                     </div>
@@ -1611,7 +1611,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-base">🌀</span>
+                        <span className="text-base">ðŸŒ€</span>
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                           formPackagingType === 'roll' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
                         }`}>
@@ -1644,7 +1644,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-base">📦</span>
+                        <span className="text-base">ðŸ“¦</span>
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                           formPackagingType === 'pak' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
                         }`}>
@@ -1676,7 +1676,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-base">🍾</span>
+                        <span className="text-base">ðŸ¾</span>
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                           formPackagingType === 'botol' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
                         }`}>
@@ -1820,7 +1820,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                         </div>
                         <div className="text-[11px] text-purple-200 flex items-center gap-2">
                           <span>Kemasan: <strong>{formPerRollPak || formula.kemasanText}</strong></span>
-                          <span>•</span>
+                          <span>â€¢</span>
                           <span>Satuan: <strong>{formUnit || formula.unit}</strong></span>
                         </div>
                       </div>
@@ -1837,7 +1837,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                   >
                     <span className="flex items-center gap-1.5">
                       <SlidersHorizontal className="w-3.5 h-3.5" />
-                      <span>⚙️ Pengaturan Satuan Kustom / Manual (Opsional)</span>
+                      <span>âš™ï¸ Pengaturan Satuan Kustom / Manual (Opsional)</span>
                     </span>
                     {showCustomPackaging ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                   </button>
@@ -1912,7 +1912,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                         </p>
                         {!isCategoryPaket && (
                           <p className="text-[10px] text-emerald-700 font-medium pt-0.5">
-                            💡 Jika produk ini merupakan persediaan/bahan baku fisik yang perlu dihitung stoknya dan dimasukkan ke dalam <strong>Total Aset Toko</strong>, silakan centang opsi <strong>Aset Toko</strong> di atas.
+                            ðŸ’¡ Jika produk ini merupakan persediaan/bahan baku fisik yang perlu dihitung stoknya dan dimasukkan ke dalam <strong>Total Aset Toko</strong>, silakan centang opsi <strong>Aset Toko</strong> di atas.
                           </p>
                         )}
                       </div>
@@ -2226,7 +2226,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                   <span className="font-mono font-bold text-slate-800">{productToDelete.code}</span>)?
                 </p>
                 <div className="mt-3 p-2.5 bg-red-100/70 border border-red-200 rounded-xl text-[11px] text-red-800 font-medium">
-                  Produk akan dihapus permanen dari inventori dan langsung terupdate di cloud database Firestore.
+                  Produk akan dihapus permanen dari inventori dan langsung terupdate di cloud database PocketBase.
                 </div>
               </div>
             </div>

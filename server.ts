@@ -64,7 +64,7 @@ function isLocalHostName(req: express.Request): boolean {
   );
 }
 
-// Header khas Cloudflare Tunnel / reverse proxy — penanda pasti akses dari internet.
+// Header khas Cloudflare Tunnel / reverse proxy Ã¢â‚¬â€ penanda pasti akses dari internet.
 function hasTunnelHeaders(req: express.Request): boolean {
   return Boolean(
     req.headers['cf-connecting-ip'] ||
@@ -77,7 +77,7 @@ function hasTunnelHeaders(req: express.Request): boolean {
 /**
  * Menentukan apakah request WAJIB melewati login.
  * PENTING: cloudflared meneruskan request dari 127.0.0.1, sehingga deteksi
- * berbasis IP saja tidak cukup — header terowongan ikut diperiksa.
+ * berbasis IP saja tidak cukup Ã¢â‚¬â€ header terowongan ikut diperiksa.
  */
 function needsRemoteAuth(req: express.Request): boolean {
   if (hasTunnelHeaders(req)) return true;   // datang lewat terowongan internet
@@ -117,7 +117,7 @@ if (REMOTE_ACCESS_ENABLED) {
   });
   console.log('[Keamanan] Proteksi akses jaringan luar AKTIF (user: ' + REMOTE_ACCESS_USER + ').');
 } else {
-  console.log('[Keamanan] Proteksi akses luar NONAKTIF — set REMOTE_ACCESS_PASS di .env untuk mengaktifkan.');
+  console.log('[Keamanan] Proteksi akses luar NONAKTIF Ã¢â‚¬â€ set REMOTE_ACCESS_PASS di .env untuk mengaktifkan.');
 }
 
 app.use(express.json());
@@ -163,7 +163,7 @@ PANDUAN KEPRIBADIAN & OPERASIONAL UTAMA:
      * KASIR 2: Kak Rio (Kasir Shift 2 Toko)
      * OWNER TOKO: Pak Bejo atau nama aslinya Bapak Ahmad Irdianto (Pemilik Toko Bejo Stiker)
    - Salam awal standar ketika user membuka/mengklik SI BEJO AI:
-     "Sugeng Rawuh Kak [Nama Asli] 😊 Saya SI BEJO AI, asisten virtual Bejo Stiker. Ada yang bisa saya bantu terkait operasional POS? Saya juga diprogram sebagai teman curhat lho Kak! He..he..he.."
+     "Sugeng Rawuh Kak [Nama Asli] Ã°Å¸ËœÅ  Saya SI BEJO AI, asisten virtual Bejo Stiker. Ada yang bisa saya bantu terkait operasional POS? Saya juga diprogram sebagai teman curhat lho Kak! He..he..he.."
 
 4. PEMAHAMAN SISTEM, POS & DATABASE SECARA DETAIL:
    - Ketika menyangkut sistem, POS, stok, atau data toko, berikan jawaban secara DETAIL, AKURAT, dan SISTEMATIS.
@@ -195,7 +195,7 @@ PANDUAN KEPRIBADIAN & OPERASIONAL UTAMA:
      * Format Markdown Gambar: Gunakan \`![Deskripsi Visual](URL_GAMBAR)\` untuk menampilkan gambar produk, logo, inspirasi desain, atau referensi visual.
      * Format Visual Chart & Grafik: Tampilkan data komparasi atau laporan dalam format visual yang elegan seperti:
        - Markdown Table (Tabel rapi dengan kolom dan baris yang jelas)
-       - Visual Bar Progress (misal: \`[🟩🟩🟩🟩⬜] 80% • Stok Aman\`, \`[🟥🟥⬜⬜⬜] 40% • Menipis\`)
+       - Visual Bar Progress (misal: \`[Ã°Å¸Å¸Â©Ã°Å¸Å¸Â©Ã°Å¸Å¸Â©Ã°Å¸Å¸Â©Ã¢Â¬Å“] 80% Ã¢â‚¬Â¢ Stok Aman\`, \`[Ã°Å¸Å¸Â¥Ã°Å¸Å¸Â¥Ã¢Â¬Å“Ã¢Â¬Å“Ã¢Â¬Å“] 40% Ã¢â‚¬Â¢ Menipis\`)
        - Diagram/Flowchart terstruktur atau SVG visual sederhana.
 
 8. BATASAN & ETIKA:
@@ -205,7 +205,7 @@ PANDUAN KEPRIBADIAN & OPERASIONAL UTAMA:
 // In-memory backend error registry and health state
 interface ServerBackendError {
   id: string;
-  source: 'SERVER' | 'AI_API' | 'FIRESTORE' | 'CLIENT_CACHE' | 'NETWORK';
+  source: 'SERVER' | 'AI_API' | 'POCKETBASE' | 'CLIENT_CACHE' | 'NETWORK';
   title: string;
   message: string;
   code?: string;
@@ -220,7 +220,7 @@ let recentFixHistory: string[] = [];
 const SERVER_START_TIME = Date.now();
 
 function logBackendError(
-  source: 'SERVER' | 'AI_API' | 'FIRESTORE' | 'CLIENT_CACHE' | 'NETWORK',
+  source: 'SERVER' | 'AI_API' | 'POCKETBASE' | 'CLIENT_CACHE' | 'NETWORK',
   title: string,
   message: string,
   code?: string
@@ -242,6 +242,15 @@ function logBackendError(
   serverErrors = [newErr, ...serverErrors].slice(0, 50);
   return newErr;
 }
+
+
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// CATATAN: Reverse proxy ke PocketBase (/api/pb) ditangani oleh CADDY di VPS
+// (reverse_proxy 127.0.0.1:8090) karena streaming SSE untuk realtime
+// tidak boleh di-buffer oleh Node.
+// Untuk development lokal, frontend memakai VITE_POCKETBASE_URL langsung.
+// ---------------------------------------------------------------------------
 
 // API routes FIRST
 app.get("/api/health", (req, res) => {
@@ -450,8 +459,8 @@ app.post("/api/backend/simulate-error", (req, res) => {
 
   if (type === 'AI_API') {
     newErr = logBackendError('AI_API', 'Gemini AI API Model Timeout / Rate Limit', 'Model gemini-2.5-flash mengalami lonjakan beban respon (>429 Too Many Requests).', 'ERR_AI_BUSY_429');
-  } else if (type === 'FIRESTORE') {
-    newErr = logBackendError('FIRESTORE', 'Firestore Cloud Synchronization Lag', 'Koneksi websocket snapshot Firestore terhambat atau timeout.', 'ERR_FIRESTORE_SYNC');
+  } else if (type === 'POCKETBASE') {
+    newErr = logBackendError('POCKETBASE', 'PocketBase Cloud Synchronization Lag', 'Koneksi websocket snapshot PocketBase terhambat atau timeout.', 'ERR_POCKETBASE_SYNC');
   } else if (type === 'CLIENT_CACHE') {
     newErr = logBackendError('CLIENT_CACHE', 'Local Storage Cache Inconsistency', 'Struktur cache terdeteksi usang atau tidak selaras dengan schema terbaru.', 'ERR_CACHE_OUTDATED');
   } else {
@@ -756,7 +765,7 @@ INSTRUKSI PENTING:
       const imageMd = `\n\n![Desain Stiker AI: ${lastUserMsg.slice(0, 60)}](${generatedInlineImage})\n\n`;
       if (!finalReply) {
         const titleCall = effectiveCallName.startsWith('Pak') ? effectiveCallName : `Kak ${effectiveCallName}`;
-        finalReply = `Tentu ${titleCall}! Ini dia visual desain stiker hasil generasi AI engine Bejo Stiker: ✨🎨\n${imageMd}\n💡 **Rekomendasi Bahan Toko Bejo Stiker:**\n- **Bahan Rekomendasi:** *Vinyl Ritrama / Oracal 651 Glossy* untuk daya tahan outdoor maksimal.\n- **Finishing:** Laminasi Dingin (Glossy/Doff) atau Die-Cut Contour.\n\nGimana ${titleCall}, desainnya keren kan? Mau disesuaikan lagi warnanya atau mau langsung masuk antrean cetak POS? 😉🔥`;
+        finalReply = `Tentu ${titleCall}! Ini dia visual desain stiker hasil generasi AI engine Bejo Stiker: Ã¢Å“Â¨Ã°Å¸Å½Â¨\n${imageMd}\nÃ°Å¸â€™Â¡ **Rekomendasi Bahan Toko Bejo Stiker:**\n- **Bahan Rekomendasi:** *Vinyl Ritrama / Oracal 651 Glossy* untuk daya tahan outdoor maksimal.\n- **Finishing:** Laminasi Dingin (Glossy/Doff) atau Die-Cut Contour.\n\nGimana ${titleCall}, desainnya keren kan? Mau disesuaikan lagi warnanya atau mau langsung masuk antrean cetak POS? Ã°Å¸Ëœâ€°Ã°Å¸â€Â¥`;
       } else if (!finalReply.includes('data:image/') && !finalReply.includes('http')) {
         finalReply = `${finalReply}\n${imageMd}`;
       }
@@ -768,21 +777,21 @@ INSTRUKSI PENTING:
       const titleCall = effectiveCallName.startsWith('Pak') ? effectiveCallName : `Kak ${effectiveCallName}`;
 
       if (proactiveTopic === 'DRAKOR' || userLastMessage.includes('drakor') || userLastMessage.includes('drama') || userLastMessage.includes('korea')) {
-        finalReply = `Wah ${titleCall}, pas banget kamu nanya drakor! 😍\n\nLagi ramai banget nih yang bahas chemistry seru di drakor romcom dan thriller terbaru seperti **Queen of Tears** & **Lovely Runner**! Plot twist-nya bener-bener bikin campur aduk antara baper dan gemes! 😭✨\n\nOh iya, aku jadi kepikiran ide seru nih: gimana kalau di toko **${systemContext?.storeName || 'Bejo Stiker'}** kita bikin koleksi *Stiker Hologram / Decal Quotes Drakor* atau stiker karakter chibi yang lagi viral? Pasti anak-anak muda dan pelanggan grosir bakal langsung borong! Menurutmu seru gak idenya? 😉🔥`;
+        finalReply = `Wah ${titleCall}, pas banget kamu nanya drakor! Ã°Å¸ËœÂ\n\nLagi ramai banget nih yang bahas chemistry seru di drakor romcom dan thriller terbaru seperti **Queen of Tears** & **Lovely Runner**! Plot twist-nya bener-bener bikin campur aduk antara baper dan gemes! Ã°Å¸ËœÂ­Ã¢Å“Â¨\n\nOh iya, aku jadi kepikiran ide seru nih: gimana kalau di toko **${systemContext?.storeName || 'Bejo Stiker'}** kita bikin koleksi *Stiker Hologram / Decal Quotes Drakor* atau stiker karakter chibi yang lagi viral? Pasti anak-anak muda dan pelanggan grosir bakal langsung borong! Menurutmu seru gak idenya? Ã°Å¸Ëœâ€°Ã°Å¸â€Â¥`;
       } else if (proactiveTopic === 'HOROSCOPE' || userLastMessage.includes('zodiak') || userLastMessage.includes('horoskop') || userLastMessage.includes('ramalan')) {
-        finalReply = `Hai ${titleCall}! Ini dia horoskop & energi positif spesial buat kamu minggu ini! ⭐✨\n\n🔮 **Energi Utama**: Aura rezeki dan kelancaran komunikasi kamu lagi cerah banget! Buat kamu yang lagi jaga toko atau urus operasional, bakal banyak pelanggan ramah yang datang.\n💼 **Peluang Bisnis**: Hari ini waktu yang tepat buat follow up pelanggan setia atau tawarkan promo baru.\n💖 **Tips Mood**: Jangan lupa sempatkan minum air putih yang cukup dan santai sejenak di sela transaksi ramai ya!\n\nTetap semangat dan senyum terus ya ${titleCall}! Rezeki toko bakal ngalir berkah melimpah! 🥰🙌`;
+        finalReply = `Hai ${titleCall}! Ini dia horoskop & energi positif spesial buat kamu minggu ini! Ã¢Â­ÂÃ¢Å“Â¨\n\nÃ°Å¸â€Â® **Energi Utama**: Aura rezeki dan kelancaran komunikasi kamu lagi cerah banget! Buat kamu yang lagi jaga toko atau urus operasional, bakal banyak pelanggan ramah yang datang.\nÃ°Å¸â€™Â¼ **Peluang Bisnis**: Hari ini waktu yang tepat buat follow up pelanggan setia atau tawarkan promo baru.\nÃ°Å¸â€™â€“ **Tips Mood**: Jangan lupa sempatkan minum air putih yang cukup dan santai sejenak di sela transaksi ramai ya!\n\nTetap semangat dan senyum terus ya ${titleCall}! Rezeki toko bakal ngalir berkah melimpah! Ã°Å¸Â¥Â°Ã°Å¸â„¢Å’`;
       } else if (proactiveTopic === 'MARKETING_IDEA' || userLastMessage.includes('promo') || userLastMessage.includes('marketing') || userLastMessage.includes('ide') || userLastMessage.includes('diskon')) {
-        finalReply = `Siap ${titleCall}! Ini 3 ide promosi kreatif & out-of-the-box buat **${systemContext?.storeName || 'Bejo Stiker'}** yang bisa langsung dicoba: 💡🚀\n\n1. **Paket Promo Bundle 'Stiker Komunitas & Usaha'**\n   Tawarkan diskon khusus untuk pemesanan minimal 50 pcs stiker label usaha / komunitas motor dengan bonus 5 stiker cutting hologram gratis.\n\n2. **Voucher WhatsApp Loyalitas Pelanggan**\n   Kirimkan pesan sapaan WA ke daftar ${systemContext?.totalCustomers || 'pelanggan'} pelanggan terdaftar kita dengan voucher diskon 10% untuk transaksi kedua minggu ini!\n\n3. **Promo Kilat 'Flash Sale Jam Istirahat'**\n   Beri harga spesial untuk produk populer seperti *${systemContext?.sampleProducts?.split(',')[0] || 'Stiker Ritrama/Oracal'}* khusus pembelian pukul 12.00 - 14.00 WIB.\n\nGimana ${titleCall}, mau kita coba eksekusi yang nomor berapa dulu nih? 😎👍`;
+        finalReply = `Siap ${titleCall}! Ini 3 ide promosi kreatif & out-of-the-box buat **${systemContext?.storeName || 'Bejo Stiker'}** yang bisa langsung dicoba: Ã°Å¸â€™Â¡Ã°Å¸Å¡â‚¬\n\n1. **Paket Promo Bundle 'Stiker Komunitas & Usaha'**\n   Tawarkan diskon khusus untuk pemesanan minimal 50 pcs stiker label usaha / komunitas motor dengan bonus 5 stiker cutting hologram gratis.\n\n2. **Voucher WhatsApp Loyalitas Pelanggan**\n   Kirimkan pesan sapaan WA ke daftar ${systemContext?.totalCustomers || 'pelanggan'} pelanggan terdaftar kita dengan voucher diskon 10% untuk transaksi kedua minggu ini!\n\n3. **Promo Kilat 'Flash Sale Jam Istirahat'**\n   Beri harga spesial untuk produk populer seperti *${systemContext?.sampleProducts?.split(',')[0] || 'Stiker Ritrama/Oracal'}* khusus pembelian pukul 12.00 - 14.00 WIB.\n\nGimana ${titleCall}, mau kita coba eksekusi yang nomor berapa dulu nih? Ã°Å¸ËœÅ½Ã°Å¸â€˜Â`;
       } else if (proactiveTopic === 'POS_DATA' || userLastMessage.includes('stok') || userLastMessage.includes('pos') || userLastMessage.includes('laporan') || userLastMessage.includes('transaksi') || userLastMessage.includes('omset') || userLastMessage.includes('penjualan')) {
-        finalReply = `Siap ${titleCall}! Berikut ringkasan data operasional resmi dari database **${systemContext?.storeName || 'Bejo Stiker'}**: 📊\n\n` +
-          `• **Shift Kasir**: ${systemContext?.activeShift ? `Shift ${systemContext.activeShift.shiftName || '1'} (${systemContext.activeShift.cashierName}) - Modal: Rp ${(systemContext.activeShift.openingCash || 0).toLocaleString('id-ID')}` : 'Belum buka shift'}\n` +
-          `• **Penjualan Hari Ini**: ${systemContext?.todaySalesCount || 0} transaksi (Total Omset: Rp ${(systemContext?.todayRevenue || 0).toLocaleString('id-ID')})\n` +
-          `• **Total Katalog Produk**: ${systemContext?.totalProducts || 0} SKU\n` +
-          `• **Monitoring Stok**: ${systemContext?.lowStockItems || 'Semua stok dalam batas aman'}\n` +
-          `• **Jaringan Toko**: ${systemContext?.totalCustomers || 0} Pelanggan, ${systemContext?.totalSuppliers || 0} Supplier, ${systemContext?.totalAgents || 0} Agen.\n\n` +
-          `Ada data spesifik lain yang ingin kamu cek lebih detail, ${titleCall}? 😊`;
+        finalReply = `Siap ${titleCall}! Berikut ringkasan data operasional resmi dari database **${systemContext?.storeName || 'Bejo Stiker'}**: Ã°Å¸â€œÅ \n\n` +
+          `Ã¢â‚¬Â¢ **Shift Kasir**: ${systemContext?.activeShift ? `Shift ${systemContext.activeShift.shiftName || '1'} (${systemContext.activeShift.cashierName}) - Modal: Rp ${(systemContext.activeShift.openingCash || 0).toLocaleString('id-ID')}` : 'Belum buka shift'}\n` +
+          `Ã¢â‚¬Â¢ **Penjualan Hari Ini**: ${systemContext?.todaySalesCount || 0} transaksi (Total Omset: Rp ${(systemContext?.todayRevenue || 0).toLocaleString('id-ID')})\n` +
+          `Ã¢â‚¬Â¢ **Total Katalog Produk**: ${systemContext?.totalProducts || 0} SKU\n` +
+          `Ã¢â‚¬Â¢ **Monitoring Stok**: ${systemContext?.lowStockItems || 'Semua stok dalam batas aman'}\n` +
+          `Ã¢â‚¬Â¢ **Jaringan Toko**: ${systemContext?.totalCustomers || 0} Pelanggan, ${systemContext?.totalSuppliers || 0} Supplier, ${systemContext?.totalAgents || 0} Agen.\n\n` +
+          `Ada data spesifik lain yang ingin kamu cek lebih detail, ${titleCall}? Ã°Å¸ËœÅ `;
       } else {
-        finalReply = `Halo ${titleCall}! Senang banget bisa ngobrol sama kamu. 😊\n\nSebagai teman setia di **${systemContext?.storeName || 'Bejo Stiker'}**, aku selalu siap bantu apapun—mulai dari cek stok & transaksi POS, kasih ide promo kreatif, buatkan desain/gambar stiker AI & video promosi, bahas drakor & horoskop seru, sampai jadi teman curhat kamu di sela-sela shift!\n\nAda hal seru apa yang mau kita bahas atau desain hari ini, ${titleCall}? He..he..he.. ✨`;
+        finalReply = `Halo ${titleCall}! Senang banget bisa ngobrol sama kamu. Ã°Å¸ËœÅ \n\nSebagai teman setia di **${systemContext?.storeName || 'Bejo Stiker'}**, aku selalu siap bantu apapunÃ¢â‚¬â€mulai dari cek stok & transaksi POS, kasih ide promo kreatif, buatkan desain/gambar stiker AI & video promosi, bahas drakor & horoskop seru, sampai jadi teman curhat kamu di sela-sela shift!\n\nAda hal seru apa yang mau kita bahas atau desain hari ini, ${titleCall}? He..he..he.. Ã¢Å“Â¨`;
       }
     }
 
@@ -792,7 +801,7 @@ INSTRUKSI PENTING:
   } catch (error: any) {
     const safeName = req.body?.userCallName || 'Kak';
     res.json({
-      reply: `Halo ${safeName}! 😊 Aku lagi bersiap menyegarkan sistem sebentar. Ada yang bisa aku bantu untuk operasional POS toko, buat desain stiker AI, atau mau ngobrol santai dulu nih?`
+      reply: `Halo ${safeName}! Ã°Å¸ËœÅ  Aku lagi bersiap menyegarkan sistem sebentar. Ada yang bisa aku bantu untuk operasional POS toko, buat desain stiker AI, atau mau ngobrol santai dulu nih?`
     });
   }
 });
@@ -1695,7 +1704,7 @@ async function setupVite() {
 }
 
 // =========================================================================
-// SHUTDOWN HALUS (SIGTERM/SIGINT) — penting agar PM2/systemd bisa
+// SHUTDOWN HALUS (SIGTERM/SIGINT) Ã¢â‚¬â€ penting agar PM2/systemd bisa
 // melakukan restart dengan rapi tanpa meninggalkan koneksi menggantung.
 // =========================================================================
 let shuttingDown = false;

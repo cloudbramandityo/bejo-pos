@@ -1,7 +1,9 @@
 # =====================================================================
-#  BEJO STIKER POS - Caddyfile (reverse proxy + HTTPS otomatis)
+#  BEJO STIKER POS - Caddyfile (Linux / Ubuntu VPS)
 #  Lokasi: /etc/caddy/Caddyfile
 #  Reload: sudo systemctl reload caddy
+#
+#  Untuk VPS Windows pakai: deploy/Caddyfile.windows
 # =====================================================================
 
 # --- www dialihkan ke domain utama ---
@@ -27,12 +29,23 @@ bejodigitalprint.com {
         max_size 25MB
     }
 
+    # -----------------------------------------------------------------
+    # PocketBase (database + realtime + auth)
+    # Di-proxy LANGSUNG ke PocketBase (bukan lewat Node) agar streaming
+    # SSE realtime & WebSocket tidak ter-buffer oleh proxy aplikasi.
+    # -----------------------------------------------------------------
+    handle /api/pb/* {
+        reverse_proxy 127.0.0.1:8090
+    }
+
     # Teruskan ke aplikasi Node (port internal, tidak dibuka ke publik)
-    reverse_proxy 127.0.0.1:3000 {
-        # IP asli diteruskan (X-Forwarded-For) agar lapisan proteksi
-        # login pada aplikasi tetap bekerja dengan benar.
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-Proto {scheme}
+    handle {
+        reverse_proxy 127.0.0.1:3000 {
+            # IP asli diteruskan (X-Forwarded-For) agar lapisan proteksi
+            # login pada aplikasi tetap bekerja dengan benar.
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
     }
 
     log {
@@ -43,8 +56,3 @@ bejodigitalprint.com {
         format json
     }
 }
-
-# --- akses lokal ke aplikasi tanpa lewat Caddy (opsional) ---
-# http://127.0.0.1:3000 {
-#     reverse_proxy 127.0.0.1:3000
-# }

@@ -3,7 +3,7 @@
  * Coded for Bejo Stiker POS System
  */
 import { BackendDiagnostics, BackendErrorItem, BackendFixReport } from '../types';
-import { testFirestoreConnection, seedDatabaseIfEmpty, isFirestoreQuotaExceeded } from '../firebase';
+import { testPocketBaseConnection, seedDatabaseIfEmpty, isPocketBaseUnavailable } from '../backend/pocketbaseBackend';
 import { getStoredProducts, saveStoredProducts } from './storage';
 
 type DiagnosticsListener = (diagnostics: BackendDiagnostics) => void;
@@ -18,7 +18,7 @@ let cachedDiagnostics: BackendDiagnostics = {
   memoryUsageMb: 0,
   nodeVersion: 'Node.js',
   aiApiStatus: 'ready',
-  firestoreStatus: 'connected',
+  pocketbaseStatus: 'connected',
   activeErrors: [],
   recentFixLogs: [],
   lastChecked: Date.now()
@@ -64,7 +64,7 @@ export function dismissActiveBackendNotification(): void {
 if (typeof window !== 'undefined') {
   window.addEventListener('app:backend-error', (event: Event) => {
     const customEvent = event as CustomEvent<{
-      source: 'SERVER' | 'AI_API' | 'FIRESTORE' | 'CLIENT_CACHE' | 'NETWORK';
+      source: 'SERVER' | 'AI_API' | 'POCKETBASE' | 'CLIENT_CACHE' | 'NETWORK';
       title: string;
       message: string;
       code?: string;
@@ -81,10 +81,10 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * Report a client-detected error (Firestore, Network, Cache) into the active diagnostics
+ * Report a client-detected error (PocketBase, Network, Cache) into the active diagnostics
  */
 export function reportClientBackendError(
-  source: 'SERVER' | 'AI_API' | 'FIRESTORE' | 'CLIENT_CACHE' | 'NETWORK',
+  source: 'SERVER' | 'AI_API' | 'POCKETBASE' | 'CLIENT_CACHE' | 'NETWORK',
   title: string,
   message: string,
   code?: string
@@ -122,7 +122,7 @@ export function reportClientBackendError(
 }
 
 /**
- * Fetch full server diagnostics and check Firestore/Client health
+ * Fetch full server diagnostics and check PocketBase/Client health
  */
 export async function fetchBackendDiagnostics(): Promise<BackendDiagnostics> {
   try {
@@ -140,12 +140,12 @@ export async function fetchBackendDiagnostics(): Promise<BackendDiagnostics> {
       reportClientBackendError('SERVER', 'Koneksi ke Backend Server Terputus', err.message || 'Tidak dapat terhubung ke endpoint /api/backend/diagnostics', 'CONN_REFUSED');
     }
 
-    // Test Firestore
+    // Test PocketBase
     let isDbConnected = true;
-    const isQuotaExceeded = isFirestoreQuotaExceeded();
+    const isQuotaExceeded = isPocketBaseUnavailable();
     if (!isQuotaExceeded) {
       try {
-        isDbConnected = await testFirestoreConnection();
+        isDbConnected = await testPocketBaseConnection();
       } catch {
         isDbConnected = false;
       }
@@ -177,7 +177,7 @@ export async function fetchBackendDiagnostics(): Promise<BackendDiagnostics> {
       memoryUsageMb: serverDiag.memoryUsageMb || 0,
       nodeVersion: serverDiag.nodeVersion || 'Node.js',
       aiApiStatus: serverDiag.aiApiStatus || 'ready',
-      firestoreStatus: isQuotaExceeded ? 'offline' : isDbConnected ? 'connected' : 'offline',
+      pocketbaseStatus: isQuotaExceeded ? 'offline' : isDbConnected ? 'connected' : 'offline',
       activeErrors: uniqueErrors,
       recentFixLogs: serverDiag.recentFixLogs || cachedDiagnostics.recentFixLogs || [],
       lastChecked: Date.now()
@@ -192,7 +192,7 @@ export async function fetchBackendDiagnostics(): Promise<BackendDiagnostics> {
 }
 
 /**
- * Run comprehensive automated repair across Backend Server, AI Engine, Firestore DB, and Local Cache
+ * Run comprehensive automated repair across Backend Server, AI Engine, PocketBase DB, and Local Cache
  */
 export async function runBackendAutoFix(): Promise<BackendFixReport> {
   const fixedIssues: string[] = [];
@@ -216,14 +216,14 @@ export async function runBackendAutoFix(): Promise<BackendFixReport> {
       fixedIssues.push('Me-refresh socket listener backend Express.');
     }
 
-    // 2. Self-repair Firestore Cloud DB & Collections / Local Fallback
-    if (isFirestoreQuotaExceeded()) {
+    // 2. Self-repair PocketBase Cloud DB & Collections / Local Fallback
+    if (isPocketBaseUnavailable()) {
       fixedIssues.push('Mode Penyimpanan Lokal (High-Speed Local Storage) diverifikasi aktif. Seluruh data transaksi, produk, dan shift tersimpan aman di peramban.');
     } else {
       try {
-        await testFirestoreConnection();
+        await testPocketBaseConnection();
         await seedDatabaseIfEmpty();
-        fixedIssues.push('Memverifikasi konektivitas Cloud Firestore & struktur koleksi database.');
+        fixedIssues.push('Memverifikasi konektivitas Cloud PocketBase & struktur koleksi database.');
       } catch (dbErr: any) {
         fixedIssues.push('Database dipulihkan dan menggunakan Mode Lokal berkecepatan tinggi.');
       }
@@ -245,7 +245,7 @@ export async function runBackendAutoFix(): Promise<BackendFixReport> {
     cachedDiagnostics = {
       ...cachedDiagnostics,
       status: 'healthy',
-      firestoreStatus: isFirestoreQuotaExceeded() ? 'offline' : 'connected',
+      pocketbaseStatus: isPocketBaseUnavailable() ? 'offline' : 'connected',
       activeErrors: [],
       recentFixLogs: [
         `[${new Date().toLocaleTimeString('id-ID')}] AutoFix Sukses: ${fixedIssues.length} perbaikan diterapkan.`,
@@ -284,7 +284,7 @@ export async function runBackendAutoFix(): Promise<BackendFixReport> {
 /**
  * Trigger simulated error for testing
  */
-export async function triggerSimulatedBackendError(type: 'SERVER' | 'AI_API' | 'FIRESTORE' | 'CLIENT_CACHE' = 'SERVER'): Promise<BackendErrorItem> {
+export async function triggerSimulatedBackendError(type: 'SERVER' | 'AI_API' | 'POCKETBASE' | 'CLIENT_CACHE' = 'SERVER'): Promise<BackendErrorItem> {
   try {
     const res = await fetch('/api/backend/simulate-error', {
       method: 'POST',

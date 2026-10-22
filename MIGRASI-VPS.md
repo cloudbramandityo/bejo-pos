@@ -18,20 +18,24 @@ Panduan lengkap memindahkan aplikasi ke VPS hosting dengan domain
 | Alias | `https://www.bejodigitalprint.com` (dialihkan otomatis) |
 | Server aplikasi | Node.js 22 + Express (`dist/server.cjs`), port internal **3000** |
 | Process manager | PM2 (auto-restart + auto-start saat boot) |
-| Reverse proxy + TLS | Caddy (HTTPS otomatis Let's Encrypt) |
-| Firewall | UFW — hanya 22, 80, 443 terbuka (3000 **tidak** dibuka) |
-| Basis data | Firestore (tetap sama, tidak perlu migrasi data) |
-| Data lokal | localStorage per browser (tidak ikut ter-deploy) |
+| Basis data | **PocketBase v0.28** (SQLite, self-hosted, port internal **8090**) |
+| Real-time & auth | PocketBase Realtime (SSE) + koleksi `users` |
+| Reverse proxy + TLS | Caddy (HTTPS otomatis Let's Encrypt) — route `/api/pb/*` → PocketBase |
+| Firewall | UFW — hanya 22, 80, 443 terbuka (3000 & 8090 **tidak** dibuka) |
+| Data lokal | localStorage per browser (fallback Mode Lokal bila server mati) |
 
 ```
 Internet ──https──> Caddy (80/443, TLS otomatis)
-                         │  reverse_proxy 127.0.0.1:3000
-                         ▼
-                  Node/Express (PM2, port 3000, 0.0.0.0 internal)
                          │
-                         ├──> Firestore (data cloud, sudah ada)
-                         └──> Gemini API (AI Assistant)
+                         ├──/api/pb/*──> PocketBase (127.0.0.1:8090)  ← DB + realtime + auth
+                         │
+                         └── /* ──────> Node/Express (PM2, port 3000)
+                                          │
+                                          └──> Gemini API (AI Assistant)
 ```
+
+> ✅ **Firebase sudah dihapus sepenuhnya** (Firestore + Auth). Basis data kini milik sendiri di VPS.
+> Aplikasi otomatis memakai **Mode Lokal** (localStorage) bila PocketBase tidak terjangkau.
 
 ---
 
@@ -139,6 +143,12 @@ GEMINI_API_KEY=<API_KEY_ANDA>
 REMOTE_ACCESS_USER=bejo
 REMOTE_ACCESS_PASS=<PASSWORD_KUAT>
 PORT=3000
+
+# --- PocketBase (database + realtime + auth) ---
+VITE_POCKETBASE_URL=https://bejodigitalprint.com/api/pb
+VITE_PB_SYNC_EMAIL=sync@bejo.local
+VITE_PB_SYNC_PASSWORD=<PASSWORD_SINKRONISASI_KUAT>
+POCKETBASE_UPSTREAM=http://127.0.0.1:8090
 ```
 
 ```bash
@@ -169,27 +179,85 @@ Cek: `curl -I https://bejodigitalprint.com` dan `https://bejodigitalprint.com/ap
 
 ---
 
-## 7. Firebase (WAJIB sebelum domain dipublikasikan)
+## 7. PocketBase — database + realtime + auth (WAJIB sebelum domain dipublikasikan)
 
-Aplikasi kini memakai **autentikasi anonim** dan `firestore.rules` dikunci `request.auth != null`.
+> Firebase **tidak lagi dipakai**. Semua data aplikasi kini disimpan di PocketBase (SQLite) di VPS sendiri.
 
-### 7.1 Aktifkan sign-in Anonymous
-1. Buka [Firebase Console](https://console.firebase.google.com) → project `noted-segment-9xjsq`
-2. **Authentication** → **Sign-in method** → **Anonymous** → **Enable** → Save
-
-### 7.2 Terapkan rules
-**Cara 1 — Console:** Firestore Database → **Rules** → tempel isi `firestore.rules` → **Publish**
-
-**Cara 2 — CLI:**
+### 7.1 Pasang & jalankan PocketBase
 ```bash
-npm i -g firebase-tools
-firebase login
-firebase use noted-segment-9xjsq
-firebase deploy --only firestore:rules
+cd /srv/bejo-pos
+sudo mkdir -p /opt/pocketbase/pb_data
+cd /opt/pocketbase
+sudo wget -q https://github.com/pocketbase/pocketbase/releases/download/v0.28.1/pocketbase_0.28.1_linux_amd64.zip
+sudo unzip -o pocketbase_0.28.1_linux_amd64.zip && sudo rm pocketbase_0.28.1_linux_amd64.zip
+sudo chmod +x pocketbase
+
+# service systemd
+sudo tee /etc/systemd/system/pocketbase.service > /dev/null <<'EOF'
+[Unit]
+Description=PocketBase (database + realtime + auth)
+After=network.target
+
+[Service]
+Type=simple
+User=bejo
+WorkingDirectory=/opt/pocketbase
+ExecStart=/opt/pocketbase/pocketbase serve --http=127.0.0.1:8090 --dir=/opt/pocketbase/pb_data
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now pocketbase
+curl -s http://127.0.0.1:8090/api/health
 ```
 
-> **Penting:** sebelum rules diperketat, aplikasi ini bisa dibaca/diubah siapa pun yang tahu API key proyek (API key ada di dalam bundle browser). Setelah rules aktif, hanya request terautentikasi (anonim dari aplikasi) yang bisa akses.
-> Rollback tersedia: `firestore.rules.legacy-open` (sangat tidak disarankan).
+### 7.2 Buat admin PocketBase (sekali saja)
+```bash
+sudo /opt/pocketbase/pocketbase admin create admin@bejodigitalprint.com "<PASSWORD_ADMIN>" --dir=/opt/pocketbase/pb_data
+```
+
+### 7.3 Buat koleksi + skema (dari komputer)
+```bash
+cd /path/ke/project
+export POCKETBASE_URL="http://<IP_VPS>:8090"
+export PB_ADMIN_EMAIL="admin@bejodigitalprint.com"
+export PB_ADMIN_PASSWORD="<PASSWORD_ADMIN>"
+node scripts/create-pocketbase-collections.mjs --drop
+```
+Membuat **27 koleksi** (`products`, `customers`, `transactions`, `users`, `settings`, `invoices`, …)
+beserta API rules `@request.auth.id != ""`.
+
+### 7.4 Akun sinkronisasi aplikasi
+```bash
+node -e "const PocketBase=require('pocketbase');(async()=>{const pb=new PocketBase(process.env.POCKETBASE_URL);await pb.admins.authWithPassword(process.env.PB_ADMIN_EMAIL,process.env.PB_ADMIN_PASSWORD);const r=await pb.collection('users').create({email:'sync@bejo.local',password:process.env.PB_SYNC_PASSWORD,passwordConfirm:process.env.PB_SYNC_PASSWORD,name:'Bejo Sync Service',role:'developer',isActive:true});console.log('Sync user OK:',r.id);})()"
+```
+> Password harus sama dengan `VITE_PB_SYNC_PASSWORD` di `.env`.
+
+### 7.5 Migrasi data lama (opsional)
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS="/path/service-account-key.json"
+export FIREBASE_PROJECT_ID="noted-segment-9xjsq"
+node scripts/migrate-firestore-to-pocketbase.mjs       # --dry-run untuk uji dulu
+```
+
+### 7.6 Route Caddy untuk realtime (WAJIB)
+`deploy/Caddyfile` sudah memuat:
+```
+handle /api/pb/* {
+    reverse_proxy 127.0.0.1:8090
+}
+```
+> Jangan lewat proxy Node — streaming SSE untuk realtime harus tidak di-buffer.
+
+```bash
+cp /srv/bejo-pos/deploy/Caddyfile /etc/caddy/Caddyfile
+caddy fmt --overwrite /etc/caddy/Caddyfile
+systemctl reload caddy
+```
 
 ---
 
@@ -199,14 +267,17 @@ firebase deploy --only firestore:rules
 |---|---|---|
 | 1 | `curl -s http://127.0.0.1:3000/api/health` | `status: ok`, `mode: production` |
 | 2 | `pm2 list` | `bejo-pos` status **online**, restart 0 |
-| 3 | `curl -I https://bejodigitalprint.com` | HTTP 200/301 + header `Strict-Transport-Security` |
-| 4 | Buka `https://bejodigitalprint.com` dari HP (data seluler) | Halaman landing tampil |
-| 5 | Tanpa login browser | **401** (Basic Auth) |
-| 6 | Dengan `REMOTE_ACCESS_USER/PASS` | Masuk → halaman aplikasi |
-| 7 | Login aplikasi (akun Developer/Admin) | Tab POS, Katalog, Laporan, Website terbuka |
-| 8 | Tab **Website** → pratinjau | Pratinjau live, favicon & judul tab sesuai |
-| 9 | Console browser (F12) | Tidak ada error `auth` / `permission-denied` |
-| 10 | `pm2 logs bejo-pos --lines 50` | Tidak ada error berulang |
+| 3 | `systemctl status pocketbase` | **active (running)** |
+| 4 | `curl -s http://127.0.0.1:8090/api/health` | `API is healthy` |
+| 5 | `curl -I https://bejodigitalprint.com` | HTTP 200/301 + header `Strict-Transport-Security` |
+| 6 | Buka `https://bejodigitalprint.com` dari HP (data seluler) | Halaman landing tampil |
+| 7 | Tanpa login browser | **401** (Basic Auth) |
+| 8 | Dengan `REMOTE_ACCESS_USER/PASS` | Masuk → halaman aplikasi |
+| 9 | Login aplikasi (akun Developer/Admin) | Tab POS, Katalog, Laporan, Website terbuka |
+| 10 | Tab **Website** → pratinjau | Pratinjau live, favicon & judul tab sesuai |
+| 11 | Console browser (F12) | `[PocketBase] Terhubung & terautentikasi.` (tanpa `permission-denied`) |
+| 12 | Ubah data di Admin UI PocketBase | Data berubah **live** di aplikasi (realtime) |
+| 13 | `pm2 logs bejo-pos --lines 50` | Tidak ada error berulang |
 
 ---
 
@@ -218,6 +289,8 @@ pm2 logs bejo-pos --lines 100     # log
 pm2 restart bejo-pos              # restart
 pm2 reload bejo-pos --update-env # reload + muat .env terbaru
 pm2 monit                         # monitor CPU/RAM real-time
+systemctl status pocketbase       # status database
+systemctl restart pocketbase      # restart database
 ```
 
 ### Update aplikasi (setelah ada perubahan kode)
@@ -232,7 +305,7 @@ cd /srv/bejo-pos && tar -xzf /var/backups/bejo-pos/dist-<STAMP>.tar.gz && pm2 re
 
 ### Backup
 - **Data aplikasi**: tab Pengaturan → *Pencadangan & Pemulihan Data Offline* → Unduh JSON
-- **Basis data**: export Firestore dari Firebase Console (Settings → Usage & billing → Export)
+- **Basis data**: salin folder `/opt/pocketbase/pb_data` (matikan service sebentar agar konsisten)
 - **Backup VPS**: `pm2 save` + snapshot disk dari provider
 
 ---
@@ -242,10 +315,12 @@ cd /srv/bejo-pos && tar -xzf /var/backups/bejo-pos/dist-<STAMP>.tar.gz && pm2 re
 | Gejala | Penyebab & Solusi |
 |---|---|
 | `502 Bad Gateway` | PM2 mati/port beda → `pm2 logs bejo-pos`, pastikan `PORT=3000` |
+| Console: "Server tidak terjangkau" / Mode Lokal | PocketBase mati | `systemctl status pocketbase`; `curl 127.0.0.1:8090/api/health` |
+| Console: 401 Unauthorized | Akun sinkronisasi belum dibuat / password beda | Buat user `sync@bejo.local`; samakan dengan `VITE_PB_SYNC_PASSWORD` → build ulang |
+| Realtime tidak berubah | Caddy tidak meneruskan SSE `/api/pb` | Pastikan `handle /api/pb/*` ada di Caddyfile → `systemctl reload caddy` |
 | Sertifikat TLS gagal | DNS belum mengarah / port 80 tertutup → cek `dig +short bejodigitalprint.com`, `ufw status` |
 | Halaman tanpa login Basic Auth | `REMOTE_ACCESS_PASS` kosong di `.env` → isi lalu `pm2 restart bejo-pos --update-env` |
 | Halaman publik terbuka tanpa login | Request dianggap lokal → pastikan Caddy meneruskan `X-Forwarded-For` (sudah di Caddyfile) & `trust proxy` aktif (sudah di server.ts) |
-| `permission-denied` di Firestore | Anonymous auth belum diaktifkan → aktifkan di Firebase Console, atau rules belum ter-deploy |
 | `API key should be set` | `GEMINI_API_KEY` kosong di `.env` |
 | Halaman kosong / 404 di sub-halaman | `dist/` belum ter-build → jalankan `npm run build` di VPS lalu `pm2 reload` |
 | Lambat / timeout | RAM kurang → `free -h`, naikkan size VPS; atau `pm2 restart` |
@@ -256,11 +331,15 @@ cd /srv/bejo-pos && tar -xzf /var/backups/bejo-pos/dist-<STAMP>.tar.gz && pm2 re
 
 - [ ] HTTPS aktif, `http://` otomatis jadi `https://` (Caddy)
 - [ ] `REMOTE_ACCESS_PASS` kuat & berbeda dari password aplikasi
-- [ ] `firestore.rules` sudah `request.auth != null` (data tidak bisa dibaca publik)
-- [ ] Metode sign-in **Anonymous** aktif di Firebase Console
+- [ ] Service `pocketbase` aktif (systemd, auto start + auto restart)
+- [ ] 27 koleksi PocketBase sudah dibuat + akun sinkronisasi `sync@bejo.local`
+- [ ] `.env` berisi `VITE_POCKETBASE_URL`, `VITE_PB_SYNC_EMAIL`, `VITE_PB_SYNC_PASSWORD`
+- [ ] Caddyfile punya route `handle /api/pb/*` (realtime SSE)
+- [ ] Port 3000 & 8090 **tidak** dibuka di `ufw`
 - [ ] `APP_URL` = `https://bejodigitalprint.com`
 - [ ] `GEMINI_API_KEY` valid (cek AI Assistant)
 - [ ] Uji dari HP dengan data seluler (bukan WiFi) — pastikan tidak 403/401
+- [ ] Uji realtime: ubah data di Admin UI PocketBase → aplikasi berubah live
 - [ ] Backup JSON data aplikasi sudah diunduh
 - [ ] Server lokal (PC) dimatikan setelah migrasi, atau tetap sebagai cadangan
 

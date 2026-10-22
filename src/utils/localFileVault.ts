@@ -154,7 +154,7 @@ export async function saveLocalPrintFile(
   // e.g. \\192.168.1.56\Faktur_Pembelian_PB-261001-9280.pdf
   const localShortcutPath = formatLocalShortcutPath(dir, file.name);
 
-  // Store in IndexedDB (handles gigabytes safely without touching localStorage or Firestore payload)
+  // Store in IndexedDB (handles gigabytes safely without touching localStorage or PocketBase payload)
   try {
     const db = await openFilesDB();
     const transaction = db.transaction([STORE_NAME], 'readwrite');

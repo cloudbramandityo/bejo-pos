@@ -96,7 +96,7 @@ export const BackendDiagnosticsModal: React.FC<BackendDiagnosticsModalProps> = (
     }
   };
 
-  const handleSimulate = async (type: 'SERVER' | 'AI_API' | 'FIRESTORE' | 'CLIENT_CACHE') => {
+  const handleSimulate = async (type: 'SERVER' | 'AI_API' | 'POCKETBASE' | 'CLIENT_CACHE') => {
     setSimulatingType(type);
     try {
       await triggerSimulatedBackendError(type);
@@ -137,7 +137,7 @@ export const BackendDiagnosticsModal: React.FC<BackendDiagnosticsModalProps> = (
                 )}
               </div>
               <p className="text-xs text-slate-600">
-                Pemantauan real-time status server Express, Gemini AI, Firestore DB, dan perbaikan otomatis.
+                Pemantauan real-time status server Express, Gemini AI, PocketBase DB, dan perbaikan otomatis.
               </p>
             </div>
           </div>
@@ -343,7 +343,7 @@ export const BackendDiagnosticsModal: React.FC<BackendDiagnosticsModalProps> = (
                   </div>
                 </div>
 
-                {/* 3. Cloud Firestore */}
+                {/* 3. Cloud PocketBase */}
                 <div className="bg-white p-4 rounded-2xl border border-slate-300 shadow-2xs space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="p-2 bg-amber-100 text-amber-700 rounded-xl">
@@ -351,16 +351,16 @@ export const BackendDiagnosticsModal: React.FC<BackendDiagnosticsModalProps> = (
                     </span>
                     <span
                       className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                        diagnostics?.firestoreStatus === 'connected'
+                        diagnostics?.pocketbaseStatus === 'connected'
                           ? 'bg-emerald-100 text-emerald-700'
                           : 'bg-rose-100 text-rose-700'
                       }`}
                     >
-                      {diagnostics?.firestoreStatus === 'connected' ? 'Tersambung' : 'Offline'}
+                      {diagnostics?.pocketbaseStatus === 'connected' ? 'Tersambung' : 'Offline'}
                     </span>
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-slate-600 uppercase">Cloud Firestore DB</div>
+                    <div className="text-xs font-bold text-slate-600 uppercase">Cloud PocketBase DB</div>
                     <div className="text-sm font-black text-slate-900 mt-0.5">
                       Real-time Sync
                     </div>
@@ -411,7 +411,7 @@ export const BackendDiagnosticsModal: React.FC<BackendDiagnosticsModalProps> = (
                   {diagnostics?.recentFixLogs && diagnostics.recentFixLogs.length > 0 ? (
                     diagnostics.recentFixLogs.map((log, idx) => (
                       <div key={idx} className="text-slate-300 text-[11px] leading-relaxed">
-                        <span className="text-emerald-400">✔</span> {log}
+                        <span className="text-emerald-400">âœ”</span> {log}
                       </div>
                     ))
                   ) : (
@@ -452,7 +452,7 @@ export const BackendDiagnosticsModal: React.FC<BackendDiagnosticsModalProps> = (
                     Tidak Ada Error Backend Aktif
                   </div>
                   <p className="text-xs text-slate-600 max-w-md mx-auto">
-                    Seluruh API service, endpoint Express, database Firestore, dan AI Engine beroperasi normal tanpa kegagalan.
+                    Seluruh API service, endpoint Express, database PocketBase, dan AI Engine beroperasi normal tanpa kegagalan.
                   </p>
                 </div>
               ) : (
@@ -554,18 +554,18 @@ export const BackendDiagnosticsModal: React.FC<BackendDiagnosticsModalProps> = (
 
                 <button
                   type="button"
-                  onClick={() => handleSimulate('FIRESTORE')}
+                  onClick={() => handleSimulate('POCKETBASE')}
                   disabled={Boolean(simulatingType)}
                   className="p-3.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-2xl text-left space-y-1 transition-all cursor-pointer"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                      <Database className="w-4 h-4 text-amber-500" /> Simulasi Firestore Sync Lag
+                      <Database className="w-4 h-4 text-amber-500" /> Simulasi PocketBase Sync Lag
                     </span>
                     <Play className="w-3.5 h-3.5 text-slate-400" />
                   </div>
                   <p className="text-[11px] text-slate-600">
-                    Memicu warning websocket lag pada database Firestore.
+                    Memicu warning websocket lag pada database PocketBase.
                   </p>
                 </button>
 

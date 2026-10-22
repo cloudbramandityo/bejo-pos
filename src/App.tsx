@@ -2130,6 +2130,7 @@ export default function App() {
             stockTransactions={stockTransactions}
             invoices={invoices}
             storeName={storeInfo.storeName}
+            isStoreOnline={storeInfo.storeStatus === 'ONLINE'}
             onPrintReceipt={handlePrintReceiptDirect}
             products={products}
             suppliers={suppliers}

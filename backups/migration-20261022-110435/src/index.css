@@ -1,0 +1,662 @@
+@import "tailwindcss";
+
+/* =========================================================================
+   TOKEN DESAIN GLOBAL — diselaraskan dengan tab "Website" (Landing Page)
+   Font  : Quicksand (sama dengan halaman publik)
+   Aksen : #00AAFF (main) · #FF4400 (secondary)
+   Netral: ink #111111 · muted #7A7A7A · cream #F1F2F2
+   Mengubah token di sini langsung berlaku ke seluruh tab aplikasi.
+   ========================================================================= */
+@theme {
+  --font-sans: 'Quicksand', 'Google Sans', 'Google Sans Text', 'Product Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* ---------- Skala tipografi (mengikuti proporsi tab Website) ---------- */
+  --text-2xs: 10px;
+  --text-2xs--line-height: 1.4;
+  --text-xs: 11px;
+  --text-xs--line-height: 1.5;
+  --text-sm: 12.5px;
+  --text-sm--line-height: 1.5;
+  --text-base: 13.5px;
+  --text-base--line-height: 1.6;
+  --text-lg: 15px;
+  --text-lg--line-height: 1.5;
+  --text-xl: 16.5px;
+  --text-xl--line-height: 1.45;
+  --text-2xl: 19px;
+  --text-2xl--line-height: 1.4;
+  --text-3xl: 23px;
+  --text-3xl--line-height: 1.3;
+  --text-4xl: 27px;
+  --text-4xl--line-height: 1.25;
+  --text-5xl: 32px;
+  --text-5xl--line-height: 1.2;
+
+  /* ---------- Netral: ink / muted / cream (identik dengan tab Website) ---------- */
+  --color-slate-50: #f7f8f8;
+  --color-slate-100: #f1f2f2;
+  --color-slate-200: #e3e5e5;
+  --color-slate-300: #d2d5d5;
+  --color-slate-400: #a3a3a3;
+  --color-slate-500: #7a7a7a;
+  --color-slate-600: #5c5c5c;
+  --color-slate-700: #3d3d3d;
+  --color-slate-800: #252525;
+  --color-slate-900: #111111;
+  --color-slate-950: #0a0a0a;
+
+  /* ---------- Aksen utama: #00AAFF (sama dengan halaman publik) ---------- */
+  --color-blue-50: #eaf7ff;
+  --color-blue-100: #d5efff;
+  --color-blue-200: #addfff;
+  --color-blue-300: #79cbff;
+  --color-blue-400: #3ab4ff;
+  --color-blue-500: #00aaff;
+  --color-blue-600: #0093d9;
+  --color-blue-700: #0078b5;
+  --color-blue-800: #005e92;
+  --color-blue-900: #00446c;
+  --color-blue-950: #002e45;
+
+  /* ---------- Aksen sekunder: #FF4400 ---------- */
+  --color-orange-50: #fff1ec;
+  --color-orange-100: #ffe0d4;
+  --color-orange-200: #ffc2ad;
+  --color-orange-300: #ff9b7d;
+  --color-orange-400: #ff704a;
+  --color-orange-500: #ff4400;
+  --color-orange-600: #e63b00;
+  --color-orange-700: #c13200;
+  --color-orange-800: #9c2800;
+  --color-orange-900: #7a1f00;
+  --color-orange-950: #400f00;
+
+  /* ---------- Biru-langit & sian: satu keluarga dengan aksen ---------- */
+  --color-sky-50: #eaf7ff;
+  --color-sky-100: #d5efff;
+  --color-sky-200: #addfff;
+  --color-sky-300: #79cbff;
+  --color-sky-400: #3ab4ff;
+  --color-sky-500: #00aaff;
+  --color-sky-600: #0093d9;
+  --color-sky-700: #0078b5;
+  --color-sky-800: #005e92;
+  --color-sky-900: #00446c;
+  --color-sky-950: #002e45;
+
+  --color-cyan-50: #ecfeff;
+  --color-cyan-100: #cffafe;
+  --color-cyan-200: #a5f3fc;
+  --color-cyan-300: #67e8f9;
+  --color-cyan-400: #22d3ee;
+  --color-cyan-500: #06b6d4;
+  --color-cyan-600: #0891b2;
+  --color-cyan-700: #0e7490;
+  --color-cyan-800: #155e75;
+  --color-cyan-900: #164e63;
+  --color-cyan-950: #083344;
+
+  /* ---------- Indigo: tetap sebagai warna modul SPK, diselaraskan lightness ---------- */
+  --color-indigo-50: #eef2ff;
+  --color-indigo-100: #e0e7ff;
+  --color-indigo-200: #c7d2fe;
+  --color-indigo-300: #a5b4fc;
+  --color-indigo-400: #818cf8;
+  --color-indigo-500: #6366f1;
+  --color-indigo-600: #4f46e5;
+  --color-indigo-700: #4338ca;
+  --color-indigo-800: #3730a3;
+  --color-indigo-900: #312e81;
+  --color-indigo-950: #1e1b4b;
+
+  /* ---------- Semantik: sukses / peringatan / bahaya (diseragamkan) ---------- */
+  --color-emerald-50: #ecfdf5;
+  --color-emerald-100: #d1fae5;
+  --color-emerald-200: #a7f3d0;
+  --color-emerald-300: #6ee7b7;
+  --color-emerald-400: #34d399;
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #059669;
+  --color-emerald-700: #047857;
+  --color-emerald-800: #065f46;
+  --color-emerald-900: #064e3b;
+  --color-emerald-950: #022c22;
+
+  --color-amber-50: #fffbeb;
+  --color-amber-100: #fef3c7;
+  --color-amber-200: #fde68a;
+  --color-amber-300: #fcd34d;
+  --color-amber-400: #fbbf24;
+  --color-amber-500: #f59e0b;
+  --color-amber-600: #d97706;
+  --color-amber-700: #b45309;
+  --color-amber-800: #92400e;
+  --color-amber-900: #78350f;
+  --color-amber-950: #451a03;
+
+  --color-rose-50: #fff1f2;
+  --color-rose-100: #ffe4e6;
+  --color-rose-200: #fecdd3;
+  --color-rose-300: #fda4af;
+  --color-rose-400: #fb7185;
+  --color-rose-500: #f43f5e;
+  --color-rose-600: #e11d48;
+  --color-rose-700: #be123c;
+  --color-rose-800: #9f1239;
+  --color-rose-900: #881337;
+  --color-rose-950: #4c0519;
+}
+
+@layer utilities {
+  /* Di layar ponsel ukuran huruf sedikit diperbesar agar tetap nyaman dibaca,
+     sementara di desktop mengikuti skala tipografi tab Website. */
+  @media (max-width: 639px) {
+    .text-2xs {
+      font-size: 10.5px;
+    }
+    .text-xs {
+      font-size: 12px;
+    }
+    .text-sm {
+      font-size: 13px;
+    }
+    .text-base {
+      font-size: 14px;
+    }
+  }
+}
+
+@layer base {
+  body {
+    font-family: 'Quicksand', 'Google Sans', 'Google Sans Text', 'Product Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+  }
+
+  /* Landing page publik memakai border utility Tailwind; tanpa preflight,
+     border-style default-nya "none" sehingga garis tidak pernah tampil.
+     Dibatasi ke .bejo-landing agar tidak mengubah tampilan tab lain. */
+  .bejo-landing *,
+  .bejo-landing ::before,
+  .bejo-landing ::after {
+    border-width: 0;
+    border-style: solid;
+  }
+
+  /* Utility `border` Tailwind memakai var(--tw-border-style); tanpa registrasi
+     @property nilainya invalid sehingga border-style jatuh ke "none". */
+  .bejo-landing {
+    --tw-border-style: solid;
+  }
+
+  /* Di smartphone, area yang bisa digeser horizontal diberi scrollbar tipis
+     agar pengguna tahu masih ada konten di sebelah kanan. */
+  @media (max-width: 1023px) {
+    .overflow-x-auto {
+      scrollbar-width: thin;
+      scrollbar-color: #cbd5e1 transparent;
+    }
+    .overflow-x-auto::-webkit-scrollbar {
+      height: 6px;
+    }
+    .overflow-x-auto::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .overflow-x-auto::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+  }
+}
+/* =========================================================================
+   MODE TERANG / GELAP (DARK MODE) SUDAH DIHAPUS.
+   Aplikasi sekarang selalu memakai tema terang. Varian dark: pada Tailwind
+   dinonaktifkan (hanya aktif bila elemen memiliki kelas .dark) sehingga tampilan
+   tidak pernah berubah mengikuti setelan sistem operasi.
+   ========================================================================= */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* =========================================================================
+   80MM THERMAL RECEIPT & SURAT JALAN PRINT CONFIGURATION (PREVIEW & PRINT BOLD)
+   ========================================================================= */
+
+/* On-screen Print Preview container and children ALWAYS display BOLD (No changes to the rest of the application) */
+#thermal-receipt,
+#thermal-receipt *,
+.thermal-receipt-container,
+.thermal-receipt-container * {
+  font-weight: 900 !important; /* Force bold font in the print preview screen modal */
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}
+
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  /* 1. Completely collapse the height and margins of html, body, and #root to prevent empty whitespace sheets */
+  html, body {
+    width: 80mm !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11px !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    overflow: hidden !important;
+  }
+
+  #root {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 80mm !important;
+    max-height: 100vh !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* 2. Hide all non-printing layout elements from the print page flow so they take up EXACTLY 0 space */
+  body:not(:has(#tax-official-print-container)):not(:has(.tax-official-print-root)):not(.printing-djp-tax-doc):not(:has(#invoice-print-clean)) main,
+  nav,
+  header,
+  footer,
+  aside,
+  .no-print,
+  .BackendErrorBanner,
+  .ai-assistant-widget,
+  .modal-backdrop,
+  body:not(:has(#tax-official-print-container)):not(:has(.tax-official-print-root)):not(.printing-djp-tax-doc):not(:has(#invoice-print-clean)) #root > div > *:not(.fixed) {
+    display: none !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide the modal overlay header & actions outside of the #thermal-receipt preview itself */
+  #modal-cetak-struk > div:not(.overflow-y-auto),
+  #modal-cetak-struk > div.p-4.bg-slate-50,
+  div.fixed.inset-0.z-50.flex > div > div.bg-slate-100,
+  div.fixed.inset-0.z-50.flex > div > div.p-4.bg-slate-50,
+  button,
+  .bg-slate-50.border-t.border-slate-200 {
+    display: none !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  /* 3. Strip down any modal overlays and dialog containers so they act as simple transparent wrappers with zero height impact */
+  div.fixed.inset-0.z-50.flex {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 80mm !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: none !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  div.fixed.inset-0.z-50.flex > div {
+    width: 80mm !important;
+    max-width: 80mm !important;
+    height: auto !important;
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  /* Scrollable Receipt Preview wrapper */
+  div.fixed.inset-0.z-50.flex .overflow-y-auto {
+    overflow: visible !important;
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    display: block !important;
+  }
+
+  /* Hide everything on screen except the thermal receipt area */
+  body * {
+    visibility: hidden !important;
+  }
+
+  #thermal-receipt,
+  #thermal-receipt *,
+  .thermal-receipt-container,
+  .thermal-receipt-container * {
+    visibility: visible !important;
+    font-weight: 900 !important; /* Force maximum thermal print bold clarity */
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    background-color: transparent !important;
+  }
+
+  #thermal-receipt,
+  .thermal-receipt-container {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 76mm !important;
+    max-width: 78mm !important;
+    height: auto !important;
+    max-height: none !important; /* Allow natural single receipt height */
+    margin: 0 auto !important;
+    padding: 3mm 2.5mm !important;
+    box-sizing: border-box !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-family: 'Courier New', Courier, 'Lucida Console', Monaco, Consolas, monospace !important;
+    font-weight: 900 !important;
+    font-size: 11.5px !important;
+    line-height: 1.3 !important;
+    letter-spacing: -0.15px !important;
+    text-rendering: geometricPrecision !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+    overflow: hidden !important;
+  }
+
+  /* Additional override to guarantee absolutely no thin/normal fonts survive the print output */
+  #thermal-receipt .font-normal,
+  #thermal-receipt .font-light,
+  #thermal-receipt .font-thin,
+  #thermal-receipt .text-slate-500,
+  #thermal-receipt .text-slate-600,
+  #thermal-receipt .text-slate-400,
+  .thermal-receipt-container .font-normal,
+  .thermal-receipt-container .font-light,
+  .thermal-receipt-container .font-thin,
+  .thermal-receipt-container .text-slate-500,
+  .thermal-receipt-container .text-slate-600,
+  .thermal-receipt-container .text-slate-400 {
+    font-weight: 900 !important;
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+  }
+
+  /* Sembunyikan seluruh border garis putus-putus dan border di sekeliling transaksi pada mode cetak thermal */
+  #thermal-receipt,
+  .thermal-receipt-container,
+  #thermal-receipt *,
+  .thermal-receipt-container * {
+    box-shadow: none !important;
+    -webkit-box-shadow: none !important;
+    outline: none !important;
+  }
+
+  /* Thermal QR and image contrast */
+  #thermal-receipt img,
+  .thermal-receipt-container img {
+    filter: contrast(200%) grayscale(100%) !important;
+    image-rendering: pixelated !important;
+    max-width: 100% !important;
+  }
+
+  /* =========================================================================
+     INVOICE & PROFORMA INVOICE CLEAN A4 PRINT STYLES
+     ========================================================================= */
+  #invoice-print-clean,
+  #invoice-print-clean * {
+    visibility: visible !important;
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    font-family: 'Google Sans', 'Google Sans Text', system-ui, sans-serif !important;
+  }
+
+  body:has(#invoice-print-clean) {
+    width: 100% !important;
+    height: auto !important;
+    font-size: 12px !important;
+    overflow: visible !important;
+  }
+
+  body:has(#invoice-print-clean) html {
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  body:has(#invoice-print-clean) #root {
+    position: static !important;
+    width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  body:has(#invoice-print-clean) div.fixed.inset-0.z-50.flex,
+  body:has(#invoice-print-clean) div.fixed.inset-0.z-50.flex > div {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: transparent !important;
+  }
+
+  #invoice-print-clean {
+    position: relative !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    background: #ffffff !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  #invoice-print-clean table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  #invoice-print-clean tr,
+  #invoice-print-clean td,
+  #invoice-print-clean th {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  #invoice-print-clean .border-b-2 {
+    border-bottom: 2px solid #0f172a !important;
+  }
+
+  #invoice-print-clean .border-b {
+    border-bottom: 1px solid #cbd5e1 !important;
+  }
+
+  #invoice-print-clean .border-t-2 {
+    border-top: 2px solid #0f172a !important;
+  }
+
+  #invoice-print-clean .border-t {
+    border-top: 1px solid #cbd5e1 !important;
+  }
+
+  #invoice-print-clean .border {
+    border: 1px solid #cbd5e1 !important;
+  }
+
+  #invoice-print-clean .bg-slate-50,
+  #invoice-print-clean .bg-slate-50\/60,
+  #invoice-print-clean .bg-amber-50,
+  #invoice-print-clean .bg-amber-50\/80 {
+    background-color: #f8fafc !important;
+  }
+
+  /* =========================================================================
+     STANDAR RESMI DJP RI: FORMULIR 1770 & LAMPIRAN I-IV CLEAN A4 PRINT STYLES
+     ========================================================================= */
+  body:has(#tax-official-print-container),
+  body:has(.tax-official-print-root),
+  body.printing-djp-tax-doc {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    font-size: 11px !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body:has(#tax-official-print-container) html,
+  body:has(.tax-official-print-root) html,
+  body.printing-djp-tax-doc html {
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+  }
+
+  body:has(#tax-official-print-container) #root,
+  body:has(.tax-official-print-root) #root,
+  body.printing-djp-tax-doc #root {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body:has(#tax-official-print-container) main,
+  body:has(.tax-official-print-root) main,
+  body.printing-djp-tax-doc main {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body:has(#tax-official-print-container) #tax-official-print-container,
+  body:has(#tax-official-print-container) #tax-official-print-container *,
+  body:has(.tax-official-print-root) .tax-official-print-root,
+  body:has(.tax-official-print-root) .tax-official-print-root *,
+  body.printing-djp-tax-doc #tax-official-print-container,
+  body.printing-djp-tax-doc #tax-official-print-container *,
+  body.printing-djp-tax-doc .tax-official-print-root,
+  body.printing-djp-tax-doc .tax-official-print-root * {
+    visibility: visible !important;
+  }
+
+  body:has(#tax-official-print-container) nav,
+  body:has(#tax-official-print-container) header,
+  body:has(#tax-official-print-container) aside,
+  body:has(#tax-official-print-container) footer,
+  body:has(#tax-official-print-container) .no-print,
+  body:has(#tax-official-print-container) .BackendErrorBanner,
+  body:has(#tax-official-print-container) .ai-assistant-widget,
+  body:has(.tax-official-print-root) nav,
+  body:has(.tax-official-print-root) header,
+  body:has(.tax-official-print-root) aside,
+  body:has(.tax-official-print-root) footer,
+  body:has(.tax-official-print-root) .no-print,
+  body:has(.tax-official-print-root) .BackendErrorBanner,
+  body:has(.tax-official-print-root) .ai-assistant-widget,
+  body.printing-djp-tax-doc nav,
+  body.printing-djp-tax-doc header,
+  body.printing-djp-tax-doc aside,
+  body.printing-djp-tax-doc footer,
+  body.printing-djp-tax-doc .no-print,
+  body.printing-djp-tax-doc .BackendErrorBanner,
+  body.printing-djp-tax-doc .ai-assistant-widget {
+    display: none !important;
+    height: 0 !important;
+    width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+  }
+
+  #tax-official-print-container,
+  .tax-official-print-root {
+    position: relative !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    background: #ffffff !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  #tax-official-print-container .print-sheet,
+  .tax-official-print-root .print-sheet {
+    display: block !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    box-shadow: none !important;
+    border: 2px solid #000000 !important;
+    border-radius: 0 !important;
+    margin: 0 0 10mm 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 8mm 10mm !important;
+    box-sizing: border-box !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  #tax-official-print-container .print-sheet:last-child,
+  .tax-official-print-root .print-sheet:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+    margin-bottom: 0 !important;
+  }
+
+  #tax-official-print-container table,
+  .tax-official-print-root table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  #tax-official-print-container tr,
+  #tax-official-print-container td,
+  #tax-official-print-container th,
+  .tax-official-print-root tr,
+  .tax-official-print-root td,
+  .tax-official-print-root th {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}
+

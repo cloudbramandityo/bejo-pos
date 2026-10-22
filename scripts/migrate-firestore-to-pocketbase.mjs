@@ -209,14 +209,37 @@ async function main() {
         try {
           const payload = stripInternal(convertValue(doc.data()));
           const id = doc.id.replace(/\//g, '_');
+          // PocketBase memakai primary key sendiri (pola [a-z0-9]{15}),
+          // jadi id logis aplikasi disimpan di field `legacyId`.
+          const body = { ...payload, legacyId: id, data: payload };
+
+          // Koleksi `users` = auth collection PocketBase (butuh email + password)
+          if (pbCol === 'users') {
+            const base = String(payload.username || id)
+              .replace(/[^a-zA-Z0-9._-]/g, '-')
+              .toLowerCase();
+            const pwd =
+              payload.password && String(payload.password).length >= 6
+                ? String(payload.password)
+                : 'bejo-' + id;
+            body.email = payload.email || `${base}@bejo.local`;
+            body.password = pwd;
+            body.passwordConfirm = pwd;
+            body.appPassword = payload.password || '';
+          }
+
           try {
-            await pb.collection(pbCol).update(id, payload);
-          } catch (e) {
-            if (e.status === 404) {
-              await pb.collection(pbCol).create({ ...payload, id });
+            // Cari record lama berdasarkan legacyId
+            const existing = await pb
+              .collection(pbCol)
+              .getList(1, 1, { filter: `legacyId = "${id.replace(/"/g, '')}"` });
+            if (existing.items.length > 0) {
+              await pb.collection(pbCol).update(existing.items[0].id, body);
             } else {
-              throw e;
+              await pb.collection(pbCol).create(body);
             }
+          } catch (e) {
+            throw e;
           }
           okCount++;
         } catch (e) {
@@ -245,14 +268,14 @@ async function main() {
         const snap = await db.collection('settings').doc(docId).get();
         if (!snap.exists) continue;
         const payload = stripInternal(convertValue(snap.data()));
-        try {
-          await pb.collection('settings').update(docId, payload);
-        } catch (e) {
-          if (e.status === 404) {
-            await pb.collection('settings').create({ ...payload, id: docId });
-          } else {
-            throw e;
-          }
+        const body = { ...payload, legacyId: docId, data: payload };
+        const existing = await pb
+          .collection('settings')
+          .getList(1, 1, { filter: `legacyId = "${docId}"` });
+        if (existing.items.length > 0) {
+          await pb.collection('settings').update(existing.items[0].id, body);
+        } else {
+          await pb.collection('settings').create(body);
         }
         okCount++;
       }

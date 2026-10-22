@@ -347,15 +347,35 @@ function stripPbFields(data: Record<string, any>): Record<string, any> {
  */
 const LEGACY_ID_FIELD = 'legacyId';
 
+/** Pola primary key PocketBase (15 karakter huruf/angka kecil). */
+const PB_ID_PATTERN = /^[a-z0-9]{15}$/;
+
 /** Koleksi users merupakan auth collection PocketBase (email + password). */
 const USERS_COLLECTION = 'users';
 
-/** Kembalikan id logis aplikasi. */
+/**
+ * Setiap record menyimpan salinan UTUH objek aplikasi pada field JSON `data`.
+ * Tujuannya: field yang belum ada di skema PocketBase (atau field baru di
+ * aplikasi) tetap tersimpan utuh — tidak ada data yang hilang.
+ * Field kolom yang ada di skema tetap dipakai agar tabel/filter di Admin UI
+ * tetap rapi.
+ */
+const DATA_MIRROR_FIELD = 'data';
+
+/** Gabungkan field datar + salinan `data` menjadi objek aplikasi. */
 function withAppId<T>(record: any): T {
   if (!record) return record as T;
-  const out: any = { ...record };
-  if (out[LEGACY_ID_FIELD]) {
-    out.id = out[LEGACY_ID_FIELD];
+  const mirror =
+    record[DATA_MIRROR_FIELD] && typeof record[DATA_MIRROR_FIELD] === 'object'
+      ? record[DATA_MIRROR_FIELD]
+      : null;
+  const out: any = mirror ? { ...record, ...mirror } : { ...record };
+  delete out[DATA_MIRROR_FIELD];
+  delete out.collectionId;
+  delete out.collectionName;
+  delete out.expand;
+  if (record[LEGACY_ID_FIELD]) {
+    out.id = record[LEGACY_ID_FIELD];
   }
   if (out.appPassword) {
     out.password = out.appPassword;
@@ -382,45 +402,84 @@ async function upsertRecord(
 ): Promise<void> {
   const service = pbService(collection);
   const payload = stripPbFields(sanitizeForDb(data));
+  // Salinan utuh objek aplikasi (field yang tidak ada di skema tetap tersimpan)
+  const mirror: Record<string, any> = { ...payload };
   delete payload.id;
   payload[LEGACY_ID_FIELD] = id;
+  payload[DATA_MIRROR_FIELD] = mirror;
 
-  if (collection === USERS_COLLECTION) {
-    // Auth collection PocketBase memerlukan password + passwordConfirm
-    const pwd = (payload.password && String(payload.password).length >= 6 ? String(payload.password) : 'bejo-' + id);
-    payload.password = pwd;
-    payload.passwordConfirm = pwd;
+  const isUser = collection === USERS_COLLECTION;
+  if (isUser) {
+    // Simpan password versi aplikasi; password auth PocketBase hanya saat create.
     payload.appPassword = (data as any)?.password || '';
   } else {
     delete payload.password;
   }
 
-  // 1) Coba update langsung memakai id (bila id valid untuk PocketBase)
-  try {
-    await service.update(id, payload);
-    return;
-  } catch (err: any) {
-    if (err?.status !== 404) throw err;
+  // 1) Coba update langsung memakai id (hanya bila id cocok pola primary key PocketBase)
+  if (PB_ID_PATTERN.test(id)) {
+    try {
+      const updatePayload = { ...payload };
+      if (isUser) {
+        delete updatePayload.email;
+        delete updatePayload.password;
+        delete updatePayload.passwordConfirm;
+      }
+      await service.update(id, updatePayload);
+      return;
+    } catch (err: any) {
+      if (err?.status !== 404) throw err;
+    }
   }
 
   // 2) Cari berdasarkan legacyId
   const existing = await findByAppId(collection, id);
   if (existing) {
-    await service.update(existing.id, payload);
+    const updatePayload = { ...payload };
+    if (isUser) {
+      delete updatePayload.email;
+      delete updatePayload.password;
+      delete updatePayload.passwordConfirm;
+    }
+    await service.update(existing.id, updatePayload);
     return;
   }
 
   // 3) Buat record baru (PocketBase membuat primary key sendiri)
+  if (isUser) {
+    const pwd =
+      payload.password && String(payload.password).length >= 6
+        ? String(payload.password)
+        : 'bejo-' + id;
+    const emailBase = String(payload.username || id)
+      .replace(/[^a-zA-Z0-9._-]/g, '-')
+      .toLowerCase();
+    payload.password = pwd;
+    payload.passwordConfirm = pwd;
+    try {
+      payload.email = emailBase + '@bejo.local';
+      await service.create(payload);
+    } catch (err: any) {
+      if (err?.status !== 400) throw err;
+      // Email sudah dipakai -> pakai email unik
+      payload.email = emailBase + '-' + Date.now() + '@bejo.local';
+      await service.create(payload);
+    }
+    return;
+  }
+
   await service.create(payload);
 }
 
 async function removeRecord(collection: string, id: string): Promise<void> {
   const service = pbService(collection);
-  try {
-    await service.delete(id);
-    return;
-  } catch (err: any) {
-    if (err?.status !== 404) throw err;
+  if (PB_ID_PATTERN.test(id)) {
+    try {
+      await service.delete(id);
+      return;
+    } catch (err: any) {
+      if (err?.status !== 404) throw err;
+    }
   }
   const existing = await findByAppId(collection, id);
   if (existing) {
@@ -450,8 +509,8 @@ async function fetchOneRecord(
   const byLegacy = await findByAppId(collection, id);
   if (byLegacy) return withAppId(stripPbFields(byLegacy));
 
-  // Hanya probing getOne bila idyg resemble primary key PocketBase ([a-z0-9]{15})
-  if (!/^[a-z0-9]{15}$/.test(id)) return null;
+  // Hanya probing getOne bila id resemble primary key PocketBase ([a-z0-9]{15})
+  if (!PB_ID_PATTERN.test(id)) return null;
 
   try {
     const record = await pbService(collection).getOne(id, { expand });
@@ -1335,7 +1394,25 @@ export async function saveTaxMonthlyBillingsCloud(
 /* -------------------------------------------------------------------------- */
 /*  Seeding database                                                           */
 /* -------------------------------------------------------------------------- */
-export async function seedDatabaseIfEmpty(): Promise<void> {
+
+/**
+ * Kunci modul agar seeding hanya berjalan SATU KALI per instance aplikasi.
+ * (React StrictMode / multi-tab bisa memanggil seeding berkali-kali sehingga
+ *  record duplikat pernah terjadi bila dua proses seeding berjalan bersamaan.)
+ */
+let seedPromise: Promise<void> | null = null;
+
+export function seedDatabaseIfEmpty(): Promise<void> {
+  if (!seedPromise) {
+    seedPromise = runSeed().catch((err) => {
+      seedPromise = null; // izinkan percobaan ulang bila gagal
+      throw err;
+    });
+  }
+  return seedPromise;
+}
+
+async function runSeed(): Promise<void> {
   if (isCloudUnavailable) {
     console.warn('[PocketBase] Seeding dilewati karena server tidak terjangkau.');
     return;
@@ -1349,6 +1426,15 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
       return;
     }
 
+    // Pengaman lintas-tab: proses seeding lain sedang berjalan
+    if (initRecord?.seedingAt) {
+      const startedAt = Number(initRecord.seedingAt) || 0;
+      if (Date.now() - startedAt < 5 * 60 * 1000) {
+        console.log('[PocketBase] Seeding sedang berjalan di instance lain - dilewati.');
+        return;
+      }
+    }
+
     const existing = await fetchAllRecords('products');
     if (existing.length > 0) {
       await upsertRecord('settings', 'database_init', {
@@ -1359,6 +1445,12 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
     }
 
     console.log('Seeding initial Bejo Stiker data to PocketBase...');
+
+    // Tandai sedang seeding (pengaman untuk tab/perangkat lain)
+    await upsertRecord('settings', 'database_init', {
+      isSeeded: false,
+      seedingAt: Date.now(),
+    });
 
     const seed = async (
       collection: string,
@@ -1393,6 +1485,7 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
     await upsertRecord('settings', 'database_init', {
       isSeeded: true,
       seededAt: new Date().toISOString(),
+      seedingAt: 0,
     });
 
     console.log('Successfully seeded database with initial data!');

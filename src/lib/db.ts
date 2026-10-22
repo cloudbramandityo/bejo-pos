@@ -101,13 +101,20 @@ export async function pbUpsert(
 ) {
   const pb = getPB();
   const payload = stripPbFields(data);
+  // id logis aplikasi disimpan di legacyId (primary key PocketBase miliknya sendiri)
+  const body = { ...payload, legacyId: id, data: payload };
+  delete (body as any).id;
   try {
-    await pb.collection(collection).update(id, payload);
+    await pb.collection(collection).update(id, body);
   } catch (err: any) {
-    if (err?.status === 404) {
-      await pb.collection(collection).create({ ...payload, id });
+    if (err?.status !== 404) throw err;
+    const existing = await pb
+      .collection(collection)
+      .getList(1, 1, { filter: `legacyId = "${String(id).replace(/"/g, '')}"` });
+    if (existing.items.length > 0) {
+      await pb.collection(collection).update(existing.items[0].id, body);
     } else {
-      throw err;
+      await pb.collection(collection).create(body);
     }
   }
 }

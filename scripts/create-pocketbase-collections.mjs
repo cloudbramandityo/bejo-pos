@@ -484,8 +484,7 @@ const COLLECTIONS = [
     name: 'settings',
     type: 'base',
     fields: [J('payload')],
-  },
-  {
+  },  {
     name: 'taxpayer_profile',
     type: 'base',
     fields: [T('npwp'), T('name'), T('address'), T('phone'), T('email'), T('taxOfficer'), N('updatedAt'), J('extra')],
@@ -549,7 +548,8 @@ async function main() {
       name: def.name,
       type: def.type || 'base',
       // Field id logis aplikasi (PocketBase memakai primary key sendiri)
-      fields: [...(def.fields || []), T('legacyId', false, 128)],
+      // + `data` = salinan utuh objek aplikasi (field baru tetap tersimpan)
+      fields: [...(def.fields || []), T('legacyId', false, 128), J('data', false, 5000000)],
       // Aturan akses: hanya request yang sudah terautentikasi (akun sinkronisasi).
       listRule: isAuth ? '' : '@request.auth.id != ""',
       viewRule: isAuth ? '' : '@request.auth.id != ""',

@@ -108,13 +108,16 @@ Write-Ok "Port 8090 hanya untuk lokal (tidak dibuka ke internet)"
 
 # ---------------------------------------------------------------- 5. CADDY
 Write-Step "5/5 Update Caddyfile (route /api/pb)"
-if (Test-Path "$AppDir\deploy\Caddyfile") {
-    Copy-Item "$AppDir\deploy\Caddyfile" "C:\caddy\Caddyfile" -Force
+$caddyWin = "$AppDir\deploy\Caddyfile.windows"
+if (Test-Path $caddyWin) {
+    Copy-Item $caddyWin "C:\caddy\Caddyfile" -Force
     & "C:\caddy\caddy.exe" fmt --overwrite "C:\caddy\Caddyfile" 2>&1 | Out-Null
     Restart-Service Caddy -ErrorAction SilentlyContinue
     Write-Ok "Caddyfile diperbarui & Caddy direstart"
 } else {
-    Write-Warn "deploy\Caddyfile tidak ditemukan di $AppDir - update manual"
+    Write-Warn "deploy\Caddyfile.windows tidak ditemukan di $AppDir - update manual"
+    Write-Host "   Tambahkan ke C:\caddy\Caddyfile:" -ForegroundColor White
+    Write-Host "       handle /api/pb/* { reverse_proxy 127.0.0.1:8090 }" -ForegroundColor White
 }
 
 Write-Host ""
@@ -128,8 +131,10 @@ Write-Host " Service    : $ServiceName (auto start + auto restart)" -ForegroundC
 Write-Host " Logs       : C:\pocketbase\logs\stderr.log" -ForegroundColor White
 Write-Host ""
 Write-Host " LANGKAH BERIKUTNYA:" -ForegroundColor Yellow
-Write-Host " 1. Buka http://127.00.0.1:$PB_PORT/_/ -> buat akun admin" -ForegroundColor White
-Write-Host " 2. Buat koleksi (products, customers, transactions, ...) via Admin UI" -ForegroundColor White
-Write-Host " 3. Jalankan migrasi data: scripts\migrate-firestore-to-pocketbase.mjs" -ForegroundColor White
+Write-Host " 1. Buka http://127.0.0.1:$PB_PORT/_/ -> buat akun admin" -ForegroundColor White
+Write-Host " 2. Buat koleksi (27 koleksi) dari PC:" -ForegroundColor White
+Write-Host "      node scripts\create-pocketbase-collections.mjs --drop" -ForegroundColor White
+Write-Host " 3. Migrasi data lama (opsional):" -ForegroundColor White
+Write-Host "      node scripts\migrate-firestore-to-pocketbase.mjs" -ForegroundColor White
 Write-Host " 4. Jalankan: npm run build && Restart-Service BejoStikerPOS" -ForegroundColor White
 Write-Host "==================================================================" -ForegroundColor Green

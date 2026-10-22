@@ -165,9 +165,19 @@ $Domain {
         max_size 25MB
     }
 
-    reverse_proxy 127.0.0.1:3000 {
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-Proto {scheme}
+    # -------------------------------------------------------------
+    # PocketBase (database + realtime + auth) - LANGSUNG ke PocketBase
+    # (bukan lewat Node) supaya streaming SSE realtime tidak di-buffer.
+    # -------------------------------------------------------------
+    handle /api/pb/* {
+        reverse_proxy 127.0.0.1:8090
+    }
+
+    handle {
+        reverse_proxy 127.0.0.1:3000 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
     }
 
     log {

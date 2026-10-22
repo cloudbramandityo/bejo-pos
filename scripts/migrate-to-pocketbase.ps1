@@ -194,7 +194,11 @@ $envFiles = @((Join-Path $root '.env'), (Join-Path $root '.env.example'))
 $pbBlock = @"
 
 # --- PocketBase (database + realtime + auth, self-hosted di VPS) ---
+# development: http://localhost:8090 | production: https://bejodigitalprint.com/api/pb
 VITE_POCKETBASE_URL=http://localhost:8090
+# Akun sinkronisasi milik APLIKASI (password harus sama dengan di PocketBase)
+VITE_PB_SYNC_EMAIL=sync@bejo.local
+VITE_PB_SYNC_PASSWORD=sync_password_bejo_2026
 PB_SYNC_EMAIL=sync@bejo.local
 PB_SYNC_PASSWORD=sync_password_bejo_2026
 POCKETBASE_UPSTREAM=http://127.0.0.1:8090
@@ -217,7 +221,7 @@ $pkg = Get-Content (Join-Path $root 'package.json') -Raw | ConvertFrom-Json
 if ($pkg.dependencies.PSObject.Properties.Name -contains 'pocketbase') {
     Write-Ok "pocketbase sudah ada di package.json"
 } else {
-    $pkg.dependencies | Add-Member -NotePropertyName 'pocketbase' -NotePropertyValue '^0.21.0' -Force
+    $pkg.dependencies | Add-Member -NotePropertyName 'pocketbase' -NotePropertyValue '^0.28.1' -Force
     $pkg | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $root 'package.json')
     Write-Ok "pocketbase ditambahkan ke package.json"
 }
@@ -233,6 +237,9 @@ if ($pkg.dependencies.PSObject.Properties.Name -contains '@google/genai') {
 }
 
 Write-Host "   Menjalankan npm install..." -ForegroundColor Yellow
+# Native command di PowerShell 5.1 menulis stderr sebagai error record;
+# matikan ErrorActionPreference sementara agar script tidak terhenti.
+$ErrorActionPreference = 'Continue'
 & cmd /c "npm install" 2>&1 | Select-Object -Last 3
 
 # ---------------------------------------------------------------- 8. TSC + BUILD
@@ -246,6 +253,7 @@ Write-Host "   npm run build..." -ForegroundColor Yellow
 & cmd /c "npm run build" 2>&1 | Select-String -Pattern "built in|error|Error" | Select-Object -Last 5
 $buildOk = ($LASTEXITCODE -eq 0)
 if ($buildOk) { Write-Ok "Build produksi berhasil" } else { Write-Warn "Build gagal (lihat di atas)" }
+$ErrorActionPreference = 'Stop'
 
 # ---------------------------------------------------------------- RINGKASAN
 Write-Host ""

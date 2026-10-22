@@ -1,0 +1,52 @@
+# =====================================================================
+#  BEJO STIKER POS - Caddyfile (Windows VPS / Rumah Web)
+#  Lokasi: C:\caddy\Caddyfile
+#  Reload: Restart-Service Caddy
+# =====================================================================
+
+# --- www dialihkan ke domain utama ---
+www.bejodigitalprint.com {
+    redir https://bejodigitalprint.com{uri} permanent
+}
+
+# --- domain utama ---
+bejodigitalprint.com {
+    encode zstd gzip
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+        -Server
+    }
+
+    request_body {
+        max_size 25MB
+    }
+
+    # -----------------------------------------------------------------
+    # PocketBase (database + realtime + auth)
+    # Di-proxy LANGSUNG ke PocketBase (bukan lewat Node) agar streaming
+    # SSE realtime & WebSocket tidak ter-buffer.
+    # -----------------------------------------------------------------
+    handle /api/pb/* {
+        reverse_proxy 127.0.0.1:8090
+    }
+
+    # Teruskan ke aplikasi Node (port internal, tidak dibuka ke publik)
+    handle {
+        reverse_proxy 127.0.0.1:3000 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    log {
+        output file C:\caddy\logs\access.log {
+            roll_size 10MiB
+            roll_keep 5
+        }
+        format json
+    }
+}

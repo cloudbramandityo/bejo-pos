@@ -780,39 +780,6 @@ export default function App() {
         );
         setCustomers(sorted);
         saveStoredCustomers(sorted);
-
-        // Immediately ensure all 5 agents from DEFAULT_AGENTS_LIST exist in customer list
-        DEFAULT_AGENTS_LIST.forEach((ag) => {
-          const cleanName = ag.name.trim();
-          const cleanPhone = (ag.phone || '').trim();
-          const cleanDigits = cleanPhone.replace(/[^0-9]/g, '');
-
-          const exists = sorted.some((c) => {
-            const cPhone = (c.phone || '').trim();
-            const cDigits = cPhone.replace(/[^0-9]/g, '');
-            const cName = (c.name || '').trim().toLowerCase();
-            return (
-              cName === cleanName.toLowerCase() ||
-              (cleanPhone && cPhone === cleanPhone) ||
-              (cleanDigits && cDigits === cleanDigits && cleanDigits.length >= 5)
-            );
-          });
-
-          if (!exists) {
-            const custId = cleanDigits || cleanPhone || `cust_agen_${ag.id}`;
-            const newCust: Customer = {
-              id: custId,
-              phone: cleanPhone || '081234567800',
-              name: cleanName,
-              categoryId: 'cat_agen',
-              createdAt: ag.createdAt || '01 Januari 2026',
-              totalSpent: 0,
-              transactionCount: 0,
-              notes: `Otomatis disinkronisasi dari DAFTAR AGEN (${cleanName})`
-            };
-            saveCustomerCloud(newCust).catch(console.error);
-          }
-        });
       }
     });
 
@@ -918,18 +885,8 @@ export default function App() {
     const unsubAgents = subscribeAgents((cloudAgents) => {
       if (cloudAgents) {
         const filteredAgents = cloudAgents.filter(a => !['agent_1', 'agent_2'].includes(a.id) && !a.name.includes('Studio Kreasi') && !a.name.includes('Mitra Advertising'));
-        const merged = [...filteredAgents];
-        for (const defAgent of DEFAULT_AGENTS_LIST) {
-          const exists = merged.some(
-            (a) => a.id === defAgent.id || a.name.toLowerCase() === defAgent.name.toLowerCase()
-          );
-          if (!exists) {
-            merged.push(defAgent);
-            saveAgentCloud(defAgent).catch(console.error);
-          }
-        }
-        setAgents(merged);
-        saveStoredAgents(merged);
+        setAgents(filteredAgents);
+        saveStoredAgents(filteredAgents);
       }
     });
 

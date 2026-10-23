@@ -177,9 +177,14 @@ function Ensure-ServiceRunning($name) {
     'Paused' {
       # Caddy lama bisa stuck Paused; coba resume dulu
       try { Resume-Service $name -ErrorAction Stop } catch {}
-      Start-Sleep -Seconds 2
+      Start-Sleep -Seconds 3
       $svc.Refresh()
       if ($svc.Status -eq 'Running') { Write-Ok "Service '$name' Running (diresume)"; return $true }
+      # Masih paused -> coba restart paksa
+      try { Restart-Service $name -Force -ErrorAction Stop } catch {}
+      Start-Sleep -Seconds 4
+      $svc.Refresh()
+      if ($svc.Status -eq 'Running') { Write-Ok "Service '$name' Running (direstart)"; return $true }
       Write-Warn2 "Service '$name' masih Paused."; $script:Warnings++; return $false
     }
     default {
@@ -259,9 +264,15 @@ if (Test-Path $caddySrc) {
 New-Item -ItemType Directory -Path "$CaddyDir\logs" -Force | Out-Null
 
 # Normalisasi format & validasi
-& "$CaddyDir\caddy.exe" fmt --overwrite $caddyDst 2>&1 | Out-Null
-$validateOut = & "$CaddyDir\caddy.exe" validate --config $caddyDst 2>&1
-if ($LASTEXITCODE -ne 0 -or ($validateOut -join "`n") -match "Error") {
+$fmtOut = & "$CaddyDir\caddy.exe" fmt --overwrite $caddyDst 2>&1 | Out-Null
+$validateOk = $false
+try {
+  $validateOut = & "$CaddyDir\caddy.exe" validate --config $caddyDst 2>&1
+  $validateOk = ($LASTEXITCODE -eq 0)
+} catch {
+  $validateOut = @($_.Exception.Message)
+}
+if (-not $validateOk -or ($validateOut -join "`n") -match "Error") {
   Write-Warn2 "Validasi Caddyfile GAGAL:"
   $validateOut | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
   $script:Warnings++

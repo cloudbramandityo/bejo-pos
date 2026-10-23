@@ -30,7 +30,7 @@ bejodigitalprint.com {
     # Di-proxy LANGSUNG ke PocketBase (bukan lewat Node) agar streaming
     # SSE realtime & WebSocket tidak ter-buffer.
     # -----------------------------------------------------------------
-    handle /api/pb/* {
+    handle_path /api/pb/* {
         reverse_proxy 127.0.0.1:8090
     }
 

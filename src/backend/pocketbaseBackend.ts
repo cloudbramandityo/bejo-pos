@@ -395,7 +395,32 @@ async function findByAppId(collection: string, appId: string): Promise<any | nul
   }
 }
 
+/**
+ * Serialisasi penulisan per record (collection + id logis).
+ *
+ * Tanpa ini, dua pemanggilan `saveXCloud()` bersamaan untuk id yang sama
+ * sama-sama tidak menemukan record lalu sama-sama membuat record baru —
+ * inilah penyebab ratusan duplikat pelanggan/agen di database.
+ */
+const writeQueues = new Map<string, Promise<void>>();
+
 async function upsertRecord(
+  collection: string,
+  id: string,
+  data: Record<string, any>
+): Promise<void> {
+  const key = `${collection}:${id}`;
+  const previous = writeQueues.get(key) || Promise.resolve();
+  const task = previous.catch(() => {}).then(() => doUpsertRecord(collection, id, data));
+  writeQueues.set(key, task);
+  try {
+    await task;
+  } finally {
+    if (writeQueues.get(key) === task) writeQueues.delete(key);
+  }
+}
+
+async function doUpsertRecord(
   collection: string,
   id: string,
   data: Record<string, any>
@@ -492,12 +517,15 @@ async function fetchAllRecords(
   options?: { filter?: string; sort?: string; perPage?: number; expand?: string }
 ): Promise<any[]> {
   const service = pbService(collection);
-  const result = await service.getList(1, options?.perPage || 500, {
+  // getFullList mengambil SEMUA halaman. Sebelumnya getList dibatasi 500 record,
+  // sehingga data ke-501 dst. tidak pernah sampai ke aplikasi.
+  const items = await service.getFullList({
     filter: options?.filter,
     sort: options?.sort,
     expand: options?.expand,
-  });
-  return result.items.map((item) => withAppId(stripPbFields(item as any)));
+    batch: options?.perPage || 500,
+  } as any);
+  return items.map((item) => withAppId(stripPbFields(item as any)));
 }
 
 async function fetchOneRecord(
@@ -600,17 +628,66 @@ function subscribeCollection(
   options?: { filter?: string; sort?: string }
 ): () => void {
   const service = pbService(collection);
-  return subscribeRealtime(service as any, '*', async () => {
+  let cancelled = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let running = false;
+  let pending = false;
+
+  const load = async () => {
     try {
       const items = await fetchAllRecords(collection, {
         filter: options?.filter,
         sort: options?.sort,
       });
-      onData(items);
+      if (!cancelled) onData(items);
     } catch (err) {
-      onError(err);
+      if (!cancelled) onError(err);
     }
-  });
+  };
+
+  const run = async () => {
+    if (cancelled) return;
+    if (running) {
+      pending = true;
+      return;
+    }
+    running = true;
+    try {
+      await load();
+    } finally {
+      running = false;
+      if (pending && !cancelled) {
+        pending = false;
+        schedule();
+      }
+    }
+  };
+
+  // Kumpulkan beberapa event realtime beruntun menjadi satu reload.
+  // Tanpa ini, batch write (mis. impor/sinkron agen) memicu puluhan
+  // request sekaligus dan membuat server kewalahan.
+  const schedule = () => {
+    if (cancelled) return;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      void run();
+    }, 200);
+  };
+
+  const unsub = subscribeRealtime(service as any, '*', schedule);
+
+  // Ambil snapshot awal SEKARANG. Sebelumnya data baru dimuat setelah
+  // ada event realtime, sehingga client yang baru dibuka / setelah
+  // localStorage dibersihkan tidak pernah menerima data dari server.
+  void run();
+
+  return () => {
+    cancelled = true;
+    if (timer) clearTimeout(timer);
+    timer = null;
+    unsub();
+  };
 }
 
 /**
@@ -623,18 +700,44 @@ function subscribeRecord(
   onError: (error: any) => void
 ): () => void {
   const service = pbService(collection);
-  return subscribeRealtime(service as any, id, async (e) => {
+  let cancelled = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const load = async () => {
     try {
-      if (e?.action === 'delete') {
-        onData(null);
-        return;
-      }
       const item = await fetchOneRecord(collection, id);
-      onData(item);
+      if (!cancelled) onData(item);
     } catch (err) {
-      onError(err);
+      if (!cancelled) onError(err);
     }
+  };
+
+  const schedule = () => {
+    if (cancelled) return;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      void load();
+    }, 150);
+  };
+
+  const unsub = subscribeRealtime(service as any, id, (e) => {
+    if (e?.action === 'delete') {
+      if (!cancelled) onData(null);
+      return;
+    }
+    schedule();
   });
+
+  // Snapshot awal (settings/singleton) tanpa menunggu event realtime.
+  void load();
+
+  return () => {
+    cancelled = true;
+    if (timer) clearTimeout(timer);
+    timer = null;
+    unsub();
+  };
 }
 
 /* -------------------------------------------------------------------------- */

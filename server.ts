@@ -1691,6 +1691,51 @@ async function setupVite() {
         }
       }
     }));
+  // -----------------------------------------------------------------------
+  // MARKETING — WhatsApp Status Ads (Meta Marketing API proxy)
+  // -----------------------------------------------------------------------
+  app.post('/api/marketing/whatsapp-status-ads/publish', async (req, res) => {
+    try {
+      const payload = req.body || {};
+      const { business, campaign, targeting, creative } = payload;
+
+      if (!business?.connected) {
+        return res.status(400).json({ error: 'Akun bisnis belum terhubung.' });
+      }
+      if (!campaign?.name || !campaign?.dailyBudget) {
+        return res.status(400).json({ error: 'Nama kampanye dan anggaran harian wajib diisi.' });
+      }
+      if (!creative?.mediaType) {
+        return res.status(400).json({ error: 'Media iklan (foto/video 9:16) wajib diunggah.' });
+      }
+
+      const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN || '';
+      const META_AD_ACCOUNT_ID = process.env.META_AD_ACCOUNT_ID || '';
+
+      if (!META_ACCESS_TOKEN || !META_AD_ACCOUNT_ID) {
+        console.warn('[Marketing] META_ACCESS_TOKEN / META_AD_ACCOUNT_ID belum disetel. Mode simulasi.');
+        const mockCampaignId = 'MOCK-CAMPAIGN-' + Date.now();
+        return res.json({
+          success: true,
+          simulated: true,
+          campaignId: mockCampaignId,
+          message: 'Iklan berhasil disimulasikan (kredensial Meta belum disetel).',
+        });
+      }
+
+      // TODO: Implementasi nyata ke Meta Marketing API:
+      // 1. POST /act_{ad_account_id}/campaigns  -> Campaign (objective)
+      // 2. POST /act_{ad_account_id}/adsets    -> AdSet (targeting, budget, placements)
+      // 3. POST /act_{ad_account_id}/adcreatives -> AdCreative (media, caption, CTA)
+      // 4. POST /act_{ad_account_id}/ads       -> Ad (link creative ke adset)
+
+      return res.json({ success: true, campaignId: 'PENDING-META-IMPLEMENTATION' });
+    } catch (err: any) {
+      console.error('[Marketing] Publish error:', err?.message || err);
+      res.status(500).json({ error: err?.message || 'Gagal menerbitkan iklan.' });
+    }
+  });
+
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });

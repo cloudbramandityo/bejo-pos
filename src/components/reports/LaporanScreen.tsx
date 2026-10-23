@@ -7,9 +7,10 @@
  * sehingga navigasi navbar lebih ringkas (satu tab "Laporan" untuk semua laporan).
  */
 import React, { useState } from 'react';
-import { Receipt, Landmark } from 'lucide-react';
+import { Receipt, Landmark, BookOpen } from 'lucide-react';
 import { TransactionHistoryScreen } from '../TransactionHistoryScreen';
 import { LaporanKeuanganScreen } from './LaporanKeuanganScreen';
+import { KasUtamaScreen } from '../KasUtamaScreen';
 import {
   Transaction,
   StockTransaction,
@@ -47,7 +48,7 @@ interface LaporanScreenProps {
   onSaveFinancialSettings: (s: FinancialSettings) => void;
 }
 
-type LaporanSubTab = 'penjualan' | 'keuangan';
+type LaporanSubTab = 'penjualan' | 'keuangan' | 'jurnal';
 
 export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
   const [activeSubTab, setActiveSubTab] = useState<LaporanSubTab>('penjualan');
@@ -55,6 +56,7 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
   const subTabs: { key: LaporanSubTab; label: string; icon: React.ElementType; desc: string }[] = [
     { key: 'penjualan', label: 'Laporan Penjualan', icon: Receipt, desc: 'Riwayat & analisis transaksi penjualan' },
     { key: 'keuangan', label: 'Laporan Keuangan', icon: Landmark, desc: 'Laba Rugi, Modal, Neraca & Arus Kas' },
+    { key: 'jurnal', label: 'Jurnal', icon: BookOpen, desc: 'Kas Utama — sinkronisasi dua arah dengan Google Sheets' },
   ];
 
   return (
@@ -114,7 +116,7 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
           onUpdateTransaction={props.onUpdateTransaction}
           onDeleteTransaction={props.onDeleteTransaction}
         />
-      ) : (
+      ) : activeSubTab === 'keuangan' ? (
         <LaporanKeuanganScreen
           transactions={props.transactions}
           stockTransactions={props.stockTransactions}
@@ -123,6 +125,8 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
           settings={props.financialSettings}
           onSaveSettings={props.onSaveFinancialSettings}
         />
+      ) : (
+        <KasUtamaScreen />
       )}
     </div>
   );

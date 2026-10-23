@@ -1913,6 +1913,120 @@ async function setupVite() {
     }
   });
 
+  // -----------------------------------------------------------------------
+  // KAS UTAMA — Two-way sync with Google Sheets
+  // -----------------------------------------------------------------------
+  // In-memory store for latest sheet data & connected SSE clients
+  const kasUtamaClients = new Set<any>();
+  let kasUtamaCache: Record<string, any[]> = { 'Kas Utama': [], 'Debit': [], 'Kredit': [] };
+
+  // SSE endpoint: frontend subscribes here for real-time updates from Google Sheets
+  app.get('/api/kas-utama/events', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+    kasUtamaClients.add(res);
+    // send cached snapshot on connect
+    res.write(`data: ${JSON.stringify({ type: 'snapshot', data: kasUtamaCache })}\n\n`);
+    req.on('close', () => kasUtamaClients.delete(res));
+  });
+
+  // Broadcast helper
+  function broadcastKasUtama(payload) {
+    const msg = `data: ${JSON.stringify(payload)}\n\n`;
+    for (const client of kasUtamaClients) {
+      try { (client as any).write(msg); } catch { kasUtamaClients.delete(client); }
+    }
+  }
+
+  // GET /api/kas-utama/load — load all sheets from Google Sheets API
+  app.get('/api/kas-utama/load', async (req, res) => {
+    const SHEETS_API_KEY = process.env.GOOGLE_SHEETS_API_KEY || '';
+    const SPREADSHEET_ID = '1shQNawsRhUC7TVhR-G9EgWJsun0g8PMmbINlu1FG0d0';
+    const SHEET_NAMES = ['Kas Utama', 'Debit', 'Kredit'];
+
+    if (!SHEETS_API_KEY) {
+      // Mode simulasi: kembalikan cache / data kosong
+      return res.json({ success: true, simulated: true, data: kasUtamaCache });
+    }
+
+    try {
+      const result = {};
+      for (const name of SHEET_NAMES) {
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(name)}?key=${SHEETS_API_KEY}`;
+        const r = await fetch(url);
+        const j = await r.json();
+        result[name] = j.values || [];
+      }
+      kasUtamaCache = result;
+      res.json({ success: true, data: result });
+    } catch (err: any) {
+      console.error('[KasUtama] Load error:', err?.message || err);
+      res.status(500).json({ error: err?.message || 'Gagal memuat data.' });
+    }
+  });
+
+  // POST /api/kas-utama/sync-to-sheets — update cell in Google Sheets
+  app.post('/api/kas-utama/sync-to-sheets', async (req, res) => {
+    try {
+      const { sheetName, range, value } = req.body || {};
+      if (!sheetName || !range) {
+        return res.status(400).json({ error: 'sheetName dan range wajib diisi.' });
+      }
+
+      const ACCESS_TOKEN = process.env.GOOGLE_SHEETS_ACCESS_TOKEN || '';
+      const SPREADSHEET_ID = '1shQNawsRhUC7TVhR-G9EgWJsun0g8PMmbINlu1FG0d0';
+
+      if (!ACCESS_TOKEN) {
+        console.warn('[KasUtama] GOOGLE_SHEETS_ACCESS_TOKEN belum disetel. Mode simulasi.');
+        // Update cache lokal
+        if (kasUtamaCache[sheetName]) {
+          // parse range like "A1" -> row/col
+        }
+        broadcastKasUtama({ type: 'cell-update', sheetName, range, value });
+        return res.json({ success: true, simulated: true });
+      }
+
+      // Google Sheets API batchUpdate
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(sheetName + '!' + range)}?valueInputOption=USER_ENTERED`;
+      const r = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + ACCESS_TOKEN },
+        body: JSON.stringify({ values: [[value]] }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error?.message || 'Gagal update Google Sheets.');
+
+      broadcastKasUtama({ type: 'cell-update', sheetName, range, value });
+      res.json({ success: true, updated: j });
+    } catch (err: any) {
+      console.error('[KasUtama] Sync error:', err?.message || err);
+      res.status(500).json({ error: err?.message || 'Gagal sinkronisasi.' });
+    }
+  });
+
+  // POST /api/kas-utama/webhook-from-sheets — receive webhook from Google Apps Script
+  app.post('/api/kas-utama/webhook-from-sheets', (req, res) => {
+    try {
+      const payload = req.body || {};
+      console.log('[KasUtama] Webhook from sheets:', payload.sheetName, payload.range, payload.value);
+
+      // Update cache
+      if (payload.sheetName && kasUtamaCache[payload.sheetName]) {
+        // optional: refetch full sheet
+      }
+
+      // Broadcast to all connected clients
+      broadcastKasUtama({ type: 'external-edit', ...payload });
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[KasUtama] Webhook error:', err?.message || err);
+      res.status(500).json({ error: err?.message || 'Gagal memproses webhook.' });
+    }
+  });
+
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });

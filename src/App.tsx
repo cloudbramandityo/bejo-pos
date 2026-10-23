@@ -691,7 +691,7 @@ export default function App() {
       if (currentTab !== 'pos' && currentTab !== 'shift') {
         setCurrentTab('pos');
       }
-    } else if (currentUser?.role !== 'DEVELOPER' && currentUser?.role !== 'ADMIN' && (currentTab === 'landing_editor' || currentTab === 'tax')) {
+    } else if (currentUser?.role !== 'DEVELOPER' && currentUser?.role !== 'ADMIN' && currentUser?.role !== 'OWNER' && (currentTab === 'landing_editor' || currentTab === 'tax')) {
       setCurrentTab('pos');
     }
   }, [currentUser, currentTab]);
@@ -2192,7 +2192,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'tax' && userRole === 'DEVELOPER' && (
+        {currentTab === 'tax' && (userRole === 'DEVELOPER' || userRole === 'ADMIN' || userRole === 'OWNER') && (
           <TaxScreen />
         )}
       </main>

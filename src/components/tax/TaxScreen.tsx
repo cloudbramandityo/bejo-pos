@@ -233,7 +233,7 @@ export const TaxScreen: React.FC<TaxScreenProps> = () => {
                 Modul Pengisian Pajak Internal
               </h1>
               <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-mono text-[10px] font-bold border border-indigo-200">
-                DEVELOPER ONLY
+                DEV & ADMIN
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">

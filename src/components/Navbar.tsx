@@ -102,7 +102,7 @@ const ALL_TABS: TabDef[] = [
   { id: 'spk', label: 'SPK Cetak Digital', nav: 'SPK Cetak', short: 'SPK', icon: Printer, tone: 'indigo', group: 'Produksi', badge: 'DEV' },
   { id: 'transactions', label: 'Laporan', nav: 'Laporan', short: 'Laporan', icon: Receipt, tone: 'slate', group: 'Laporan & Keuangan' },
   { id: 'invoices', label: 'Invoice B2B', nav: 'Invoice', short: 'Invoice', icon: FileText, tone: 'blue', group: 'Laporan & Keuangan', badge: 'B2B' },
-  { id: 'tax', label: 'Pajak', nav: 'Pajak', short: 'Pajak', icon: Calculator, tone: 'rose', group: 'Laporan & Keuangan', badge: 'DEV' },
+  { id: 'tax', label: 'Pajak', nav: 'Pajak', short: 'Pajak', icon: Calculator, tone: 'rose', group: 'Laporan & Keuangan' },
   { id: 'customers', label: 'Pengaturan Toko', nav: 'Pengaturan', short: 'Toko', icon: Users, tone: 'slate', group: 'Pengaturan' },
   { id: 'landing_editor', label: 'Website', nav: 'Website', short: 'Website', icon: Globe, tone: 'emerald', group: 'Developer', badge: 'DEV' },
 ];
@@ -199,7 +199,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       case 'invoices':
         return canAccessInvoice;
       case 'tax':
-        return isDeveloper || isAdmin;
+        return isDeveloper || isAdmin || isOwner;
       default:
         return false;
     }

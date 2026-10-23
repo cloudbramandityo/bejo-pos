@@ -1940,14 +1940,59 @@ async function setupVite() {
     }
   }
 
+  // Helper: Get Google OAuth2 access token from service account (JWT)
+  let _gsAccessToken = '';
+  let _gsTokenExpiry = 0;
+  async function getGoogleAccessToken() {
+    if (_gsAccessToken && Date.now() < _gsTokenExpiry - 60000) {
+      return _gsAccessToken;
+    }
+    const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '';
+    const privateKey = (process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+    if (!email || !privateKey) {
+      throw new Error('GOOGLE_SERVICE_ACCOUNT_EMAIL atau GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY belum disetel.');
+    }
+
+    const crypto = require('crypto');
+    const now = Math.floor(Date.now() / 1000);
+    const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+    const payload = Buffer.from(JSON.stringify({
+      iss: email,
+      scope: 'https://www.googleapis.com/auth/spreadsheets',
+      aud: 'https://oauth2.googleapis.com/token',
+      exp: now + 3600,
+      iat: now,
+    })).toString('base64url');
+
+    const signatureInput = `${header}.${payload}`;
+    const sign = crypto.createSign('RSA-SHA256');
+    sign.update(signatureInput);
+    const signature = sign.sign(privateKey, 'base64url');
+
+    const jwt = `${signatureInput}.${signature}`;
+
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+    });
+    const tokenJson = await tokenRes.json();
+    if (!tokenJson.access_token) {
+      throw new Error(tokenJson.error_description || 'Gagal mendapatkan access token Google.');
+    }
+    _gsAccessToken = tokenJson.access_token;
+    _gsTokenExpiry = Date.now() + (tokenJson.expires_in || 3600) * 1000;
+    return _gsAccessToken;
+  }
+
   // GET /api/kas-utama/load — load all sheets from Google Sheets API
   app.get('/api/kas-utama/load', async (req, res) => {
     const SHEETS_API_KEY = process.env.GOOGLE_SHEETS_API_KEY || '';
-    const SPREADSHEET_ID = '1shQNawsRhUC7TVhR-G9EgWJsun0g8PMmbINlu1FG0d0';
+    const SPREADSHEET_ID = process.env.KAS_UTAMA_SPREADSHEET_ID || '1shQNawsRhUC7TVhR-G9EgWJsun0g8PMmbINlu1FG0d0';
     const SHEET_NAMES = ['Kas Utama', 'Debit', 'Kredit'];
 
     if (!SHEETS_API_KEY) {
-      // Mode simulasi: kembalikan cache / data kosong
+      // Mode simulasi: kembalikan cache
       return res.json({ success: true, simulated: true, data: kasUtamaCache });
     }
 
@@ -1957,6 +2002,7 @@ async function setupVite() {
         const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(name)}?key=${SHEETS_API_KEY}`;
         const r = await fetch(url);
         const j = await r.json();
+        if (j.error) throw new Error(j.error.message);
         result[name] = j.values || [];
       }
       kasUtamaCache = result;
@@ -1975,24 +2021,26 @@ async function setupVite() {
         return res.status(400).json({ error: 'sheetName dan range wajib diisi.' });
       }
 
-      const ACCESS_TOKEN = process.env.GOOGLE_SHEETS_ACCESS_TOKEN || '';
-      const SPREADSHEET_ID = '1shQNawsRhUC7TVhR-G9EgWJsun0g8PMmbINlu1FG0d0';
+      const SPREADSHEET_ID = process.env.KAS_UTAMA_SPREADSHEET_ID || '1shQNawsRhUC7TVhR-G9EgWJsun0g8PMmbINlu1FG0d0';
 
-      if (!ACCESS_TOKEN) {
-        console.warn('[KasUtama] GOOGLE_SHEETS_ACCESS_TOKEN belum disetel. Mode simulasi.');
-        // Update cache lokal
-        if (kasUtamaCache[sheetName]) {
-          // parse range like "A1" -> row/col
-        }
+      let accessToken = '';
+      try {
+        accessToken = await getGoogleAccessToken();
+      } catch (e) {
+        console.warn('[KasUtama] Service account tidak tersedia, mode simulasi.');
+      }
+
+      if (!accessToken) {
+        // Mode simulasi
         broadcastKasUtama({ type: 'cell-update', sheetName, range, value });
         return res.json({ success: true, simulated: true });
       }
 
-      // Google Sheets API batchUpdate
+      // Google Sheets API: values.update
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(sheetName + '!' + range)}?valueInputOption=USER_ENTERED`;
       const r = await fetch(url, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + ACCESS_TOKEN },
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
         body: JSON.stringify({ values: [[value]] }),
       });
       const j = await r.json();

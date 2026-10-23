@@ -42,13 +42,29 @@ $Src = Get-ChildItem $Work -Directory | Select-Object -First 1
 if (-not $Src) { Fail "Folder source tidak ditemukan setelah ekstraksi." }
 Ok "Source: $($Src.FullName)"
 
-Step "3/5 Menyalin file aplikasi (tanpa .env / data lokal)"
+Step "3/6 Menyalin file aplikasi (tanpa .env / data lokal)"
 $excludeDirs = @('node_modules', 'dist', 'logs', 'backups', '.git', '.vscode', '.idea')
 & robocopy $Src.FullName $AppDir /E /NFL /NDL /NJH /NJS /NP /XD $excludeDirs /XF ".env" "dev-server.log" "URL-INTERNET.txt" | Out-Null
 if ($LASTEXITCODE -gt 7) { Fail "Penyalinan file gagal (robocopy exit $LASTEXITCODE)." }
 Ok "Source diperbarui."
 
-Step "4/5 Build produksi"
+Step "4/6 Memperbarui Caddyfile (handle_path + flush_interval untuk realtime SSE)"
+$caddySrc = Join-Path $AppDir "deploy\Caddyfile.windows"
+$caddyDst = "C:\caddy\Caddyfile"
+if (Test-Path $caddySrc) {
+  Copy-Item $caddySrc $caddyDst -Force
+  # validasi
+  $caddyExe = "C:\caddy\caddy.exe"
+  if (Test-Path $caddyExe) {
+    & $caddyExe validate --config $caddyDst 2>&1 | Out-Null
+  }
+  Restart-Service Caddy -Force -ErrorAction SilentlyContinue
+  Ok "Caddyfile diperbarui & Caddy direstart."
+} else {
+  Write-Host "   [!] Caddyfile.windows tidak ditemukan, dilewati." -ForegroundColor Yellow
+}
+
+Step "5/6 Build produksi"
 Set-Location $AppDir
 if (-not (Test-Path (Join-Path $AppDir "node_modules"))) {
   & npm.cmd install --no-audit --no-fund
@@ -59,7 +75,7 @@ $env:NODE_ENV = "production"
 if ($LASTEXITCODE -ne 0) { Fail "Build gagal." }
 Ok "Build selesai."
 
-Step "5/5 Restart service & health check"
+Step "6/6 Restart service & health check"
 Restart-Service -Name $Service -Force
 $healthy = $false
 for ($i = 0; $i -lt 20; $i++) {

@@ -8,6 +8,7 @@ import {
   Megaphone,
   MessageCircle,
   Music2,
+  ShoppingBag,
   CheckCircle2,
   AlertCircle,
   Loader2,
@@ -32,6 +33,7 @@ import {
 } from 'lucide-react';
 
 import { TikTokInFeedAds } from './marketing/TikTokInFeedAds';
+import { ShopeeDiscoveryAds } from './marketing/ShopeeDiscoveryAds';
 
 /* ------------------------------------------------------------------ */
 /* Types                                                              */
@@ -92,6 +94,7 @@ const CTA_LABELS: Record<CTA, string> = {
 const SUB_MENUS = [
   { id: 'whatsapp-status-ads', label: 'WhatsApp Status Ads', icon: MessageCircle },
   { id: 'tiktok-infeed-ads', label: 'TikTok In-Feed Ads', icon: Music2 },
+  { id: 'shopee-discovery-ads', label: 'Shopee Discovery Ads', icon: ShoppingBag },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -140,6 +143,7 @@ export const MarketingScreen: React.FC = () => {
 
       {activeSubMenu === 'whatsapp-status-ads' && <WhatsAppStatusAds />}
       {activeSubMenu === 'tiktok-infeed-ads' && <TikTokInFeedAds />}
+      {activeSubMenu === 'shopee-discovery-ads' && <ShopeeDiscoveryAds />}
     </div>
   );
 };

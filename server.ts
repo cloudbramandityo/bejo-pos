@@ -1840,6 +1840,79 @@ async function setupVite() {
     }
   });
 
+  // -----------------------------------------------------------------------
+  // SHOPEE — Discovery Ads (Shopee Open Platform API proxy)
+  // -----------------------------------------------------------------------
+  app.post('/api/marketing/shopee-discovery-ads/connect', async (req, res) => {
+    try {
+      const { shopeeSellerId } = req.body || {};
+      if (!shopeeSellerId) {
+        return res.status(400).json({ error: 'Shopee Seller Account ID wajib diisi.' });
+      }
+
+      const SHOPEE_ACCESS_TOKEN = process.env.SHOPEE_ACCESS_TOKEN || '';
+
+      if (!SHOPEE_ACCESS_TOKEN) {
+        console.warn('[Marketing] SHOPEE_ACCESS_TOKEN belum disetel. Mode simulasi connect.');
+        return res.json({
+          success: true,
+          simulated: true,
+          balance: 500000,
+          message: 'Akun toko Shopee terverifikasi (mode simulasi).',
+        });
+      }
+
+      // TODO: Implementasi nyata:
+      // 1. GET https://partner.shopeemobile.com/api/v2/shop/get_shop_info
+      // 2. GET https://partner.shopeemobile.com/api/v2/ads/get_shop_ads_balance
+
+      return res.json({ success: true, balance: 0, message: 'Akun toko Shopee terhubung.' });
+    } catch (err: any) {
+      console.error('[Marketing] Shopee connect error:', err?.message || err);
+      res.status(500).json({ error: err?.message || 'Gagal menghubungkan akun Shopee.' });
+    }
+  });
+
+  app.post('/api/marketing/shopee-discovery-ads/publish', async (req, res) => {
+    try {
+      const payload = req.body || {};
+      const { business, campaign, bidding, product } = payload;
+
+      if (!business?.connected) {
+        return res.status(400).json({ error: 'Akun toko Shopee belum terhubung.' });
+      }
+      if (!campaign?.adName) {
+        return res.status(400).json({ error: 'Nama iklan wajib diisi.' });
+      }
+      if (!product) {
+        return res.status(400).json({ error: 'Pilih produk yang akan diiklankan.' });
+      }
+
+      const SHOPEE_ACCESS_TOKEN = process.env.SHOPEE_ACCESS_TOKEN || '';
+
+      if (!SHOPEE_ACCESS_TOKEN) {
+        console.warn('[Marketing] SHOPEE_ACCESS_TOKEN belum disetel. Mode simulasi.');
+        const mockAdId = 'MOCK-SHOPEE-AD-' + Date.now();
+        return res.json({
+          success: true,
+          simulated: true,
+          adId: mockAdId,
+          message: 'Iklan Shopee berhasil disimulasikan (kredensial Shopee belum disetel).',
+        });
+      }
+
+      // TODO: Implementasi nyata ke Shopee Open Platform API:
+      // 1. POST /api/v2/ads/create_campaign -> Campaign (ad name, budget)
+      // 2. POST /api/v2/ads/create_adgroup  -> AdGroup (bidding, placements, targeting)
+      // 3. POST /api/v2/ads/create_ad       -> Ad (product item, creative auto from Shopee)
+
+      return res.json({ success: true, adId: 'PENDING-SHOPEE-IMPLEMENTATION' });
+    } catch (err: any) {
+      console.error('[Marketing] Shopee publish error:', err?.message || err);
+      res.status(500).json({ error: err?.message || 'Gagal menerbitkan iklan Shopee.' });
+    }
+  });
+
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });

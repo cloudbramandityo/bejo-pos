@@ -2,19 +2,31 @@
  * =====================================================================
  *  BEJO STIKER POS - Import Data Original ke PocketBase
  * =====================================================================
- *  Menjalankan di PC (Node 18+):
+ *  Menjalankan di PC atau VPS (Node 18+).
+ *
+ *  Path file backup dapat dikonfigurasi dengan 3 cara (prioritas urut):
+ *    1. Argumen CLI   : node scripts\import-original-data.mjs "C:\bejo-pos\backup.json"
+ *    2. Env variable  : $env:BACKUP_FILE="C:\bejo-pos\backup.json"
+ *    3. Auto-detect   : mencari file "backup_pos_bejo_stiker_*.json" di
+ *                       folder skrip, folder project, D:\DOWNLOADS, dan cwd.
+ *                       Bila ada beberapa file, dipakai yang PALING BARU.
+ *    (Bila semua gagal, dipakai nilai default di DEFAULT_BACKUP_FILE.)
+ *
+ *  Contoh di VPS (PowerShell):
  *
  *      # 1. Set environment variables
- *      $env:POCKETBASE_URL="http://localhost:8090"
+ *      $env:POCKETBASE_URL="http://127.0.0.1:8090"
  *      $env:PB_ADMIN_EMAIL="admin@bejodigitalprint.com"
- *      $env:PB_ADMIN_PASSWORD="Bejo#PB2026"
+ *      $env:PB_ADMIN_PASSWORD="Bejo#PB2026!"
+ *      $env:BACKUP_FILE="C:\bejo-pos\backup.json"
  *
  *      # 2. Jalankan
  *      node scripts\import-original-data.mjs
+ *      # atau langsung dengan argumen:
+ *      node scripts\import-original-data.mjs "C:\bejo-pos\backup.json"
  *
  *  Catatan:
  *  - Script ini akan HAPUS data lama di PocketBase lalu import data baru
- *  - Backup file: backup_pos_bejo_stiker_22-10-2026_1338.json
  *  - Memerlukan akses admin PocketBase
  * =====================================================================
  */
@@ -22,9 +34,96 @@
 import PocketBase from 'pocketbase';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-// Konfigurasi
-const BACKUP_FILE = 'D:/DOWNLOADS/backup_pos_bejo_stiker_22-10-2026_1338.json';
+// ---------------------------------------------------------------------
+// Resolusi path file backup (configurable)
+// ---------------------------------------------------------------------
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PROJECT_ROOT = path.resolve(__dirname, '..');
+
+// Nilai default dipakai hanya bila semua cara di atas tidak menemukan file.
+const DEFAULT_BACKUP_FILE =
+  'D:/DOWNLOADS/backup_pos_bejo_stiker_22-10-2026_1338.json';
+
+const BACKUP_PATTERN = /^backup_pos_bejo_stiker_.*\.json$/i;
+
+/** Folder yang diperiksa saat auto-detect file backup. */
+const BACKUP_SEARCH_DIRS = [
+  __dirname, // scripts/
+  PROJECT_ROOT, // root project
+  path.join(PROJECT_ROOT, 'backups'),
+  process.cwd(),
+  'D:/DOWNLOADS',
+  'C:/DOWNLOADS',
+];
+
+/** Argumen CLI pertama yang bukan flag dianggap sebagai path file backup. */
+const cliArg = process.argv.slice(2).find((a) => !a.startsWith('--'));
+
+/**
+ * Cari file backup terbaru di daftar folder yang diketahui.
+ * @returns {string|null} path absolut file backup, atau null bila tidak ada.
+ */
+function autoDetectBackupFile() {
+  let newest = null;
+  let newestTime = 0;
+
+  for (const dir of BACKUP_SEARCH_DIRS) {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue; // folder tidak ada / tidak dapat dibaca
+    }
+    for (const entry of entries) {
+      if (!entry.isFile() || !BACKUP_PATTERN.test(entry.name)) continue;
+      const full = path.join(dir, entry.name);
+      try {
+        const { mtimeMs } = fs.statSync(full);
+        if (mtimeMs > newestTime) {
+          newestTime = mtimeMs;
+          newest = full;
+        }
+      } catch {
+        /* abaikan file yang tidak terbaca */
+      }
+    }
+  }
+  return newest;
+}
+
+/**
+ * Tentukan path file backup dengan prioritas:
+ * CLI arg -> env BACKUP_FILE -> auto-detect -> default.
+ */
+function resolveBackupFile() {
+  const candidates = [
+    { source: 'argumen CLI', value: cliArg },
+    { source: 'env BACKUP_FILE', value: process.env.BACKUP_FILE },
+  ];
+
+  for (const { source, value } of candidates) {
+    if (!value) continue;
+    const resolved = path.resolve(value);
+    if (fs.existsSync(resolved)) {
+      return { path: resolved, source };
+    }
+    warn(`Path dari ${source} tidak ditemukan, dilewati: ${resolved}`);
+  }
+
+  const detected = autoDetectBackupFile();
+  if (detected) {
+    return { path: detected, source: 'auto-detect' };
+  }
+
+  return { path: path.resolve(DEFAULT_BACKUP_FILE), source: 'default' };
+}
+
+const { path: BACKUP_FILE, source: BACKUP_FILE_SOURCE } = resolveBackupFile();
+
+// Konfigurasi koneksi PocketBase
 const PB_URL = process.env.POCKETBASE_URL || 'http://localhost:8090';
 const PB_ADMIN_EMAIL = process.env.PB_ADMIN_EMAIL || '';
 const PB_ADMIN_PASSWORD = process.env.PB_ADMIN_PASSWORD || '';
@@ -58,12 +157,19 @@ async function main() {
   console.log('  BEJO STIKER POS - IMPORT DATA ORIGINAL KE POCKETBASE');
   console.log('==================================================================');
   console.log(`Backup file: ${BACKUP_FILE}`);
+  console.log(`  (sumber : ${BACKUP_FILE_SOURCE})`);
   console.log(`PocketBase:  ${PB_URL}`);
   console.log('');
 
   // Load backup
   if (!fs.existsSync(BACKUP_FILE)) {
-    fail(`Backup file tidak ditemukan: ${BACKUP_FILE}`);
+    fail(
+      `Backup file tidak ditemukan: ${BACKUP_FILE}\n` +
+        '    Tentukan path dengan salah satu cara berikut:\n' +
+        '      - Argumen CLI : node scripts/import-original-data.mjs "C:\\path\\backup.json"\n' +
+        '      - Env variable: set BACKUP_FILE=C:\\path\\backup.json  (PowerShell: $env:BACKUP_FILE="...")\n' +
+        '    Letakkan file backup_pos_bejo_stiker_*.json di folder project/scripts juga terdeteksi otomatis.'
+    );
   }
   const backup = JSON.parse(fs.readFileSync(BACKUP_FILE, 'utf8'));
   log(`Backup dimuat: ${backup.app} v${backup.version} (${backup.exportedAt})`);

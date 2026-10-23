@@ -4,6 +4,9 @@ dist/
 backups/
 .env
 *.log
+# File backup data (besar, dipakai skrip import; jangan di-commit)
+backup_pos_bejo_stiker_*.json
+.bejo-*.mjs
 dev-server.log
 URL-INTERNET.txt
 .DS_Store

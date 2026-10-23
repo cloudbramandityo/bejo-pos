@@ -169,8 +169,10 @@ $Domain {
     # PocketBase (database + realtime + auth) - LANGSUNG ke PocketBase
     # (bukan lewat Node) supaya streaming SSE realtime tidak di-buffer.
     # -------------------------------------------------------------
-    handle /api/pb/* {
-        reverse_proxy 127.0.0.1:8090
+    handle_path /api/pb/* {
+        reverse_proxy 127.0.0.1:8090 {
+            flush_interval -1
+        }
     }
 
     handle {

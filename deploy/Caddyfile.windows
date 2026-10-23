@@ -31,7 +31,9 @@ bejodigitalprint.com {
     # SSE realtime & WebSocket tidak ter-buffer.
     # -----------------------------------------------------------------
     handle_path /api/pb/* {
-        reverse_proxy 127.0.0.1:8090
+        reverse_proxy 127.0.0.1:8090 {
+            flush_interval -1
+        }
     }
 
     # Teruskan ke aplikasi Node (port internal, tidak dibuka ke publik)

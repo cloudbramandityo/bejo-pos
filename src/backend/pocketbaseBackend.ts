@@ -130,11 +130,12 @@ const SYNC_PASSWORD = (import.meta.env.VITE_PB_SYNC_PASSWORD as string) || '';
 const GUEST_EMAIL = (import.meta.env.VITE_PB_GUEST_EMAIL as string) || 'sync@bejo.local';
 const GUEST_PASSWORD = (import.meta.env.VITE_PB_GUEST_PASSWORD as string) || 'sync_password_bejo_2026';
 
-export const authReady: Promise<void> = (async () => {
+export let authReady: Promise<void> = Promise.resolve();
+
+async function performAuth(): Promise<void> {
   const pb = getPB();
   try {
     if (pb.authStore.isValid) {
-      // refresh sesi yang tersimpan
       try {
         await pb.collection('users').authRefresh();
       } catch {
@@ -145,7 +146,6 @@ export const authReady: Promise<void> = (async () => {
       if (SYNC_EMAIL && SYNC_PASSWORD) {
         await pb.collection('users').authWithPassword(SYNC_EMAIL, SYNC_PASSWORD);
       } else {
-        // Akun sinkronisasi bersama (dibuat otomatis bila belum ada)
         try {
           await pb.collection('users').authWithPassword(GUEST_EMAIL, GUEST_PASSWORD);
         } catch {
@@ -165,6 +165,7 @@ export const authReady: Promise<void> = (async () => {
         }
       }
     }
+    isCloudUnavailable = false;
     console.log('[PocketBase] Terhubung & terautentikasi.');
   } catch (err) {
     isCloudUnavailable = true;
@@ -172,9 +173,19 @@ export const authReady: Promise<void> = (async () => {
       '[PocketBase] Gagal terhubung. Aplikasi berjalan dalam MODE LOKAL. Detail:',
       err
     );
+    // Coba ulang otomatis setelah 15 detik agar pemulihan jaringan tidak perlu refresh halaman.
+    setTimeout(() => {
+      authReady = performAuth().catch(() => {});
+    }, 15000);
     throw err;
   }
-})();
+}
+
+authReady = performAuth().catch(() => {});
+
+export function resetCloudAvailability(): void {
+  isCloudUnavailable = false;
+}
 
 /* -------------------------------------------------------------------------- */
 /*  Error handling                                                            */
@@ -595,10 +606,19 @@ export async function safeCloudWrite(
   opType: OperationType,
   path: string
 ): Promise<void> {
-  if (isCloudUnavailable) return;
+  if (isCloudUnavailable) {
+    // Coba pulihkan ketersediaan cloud sebelum menyerah.
+    try {
+      await authReady;
+      isCloudUnavailable = false;
+    } catch {
+      return;
+    }
+  }
   try {
     await authReady;
     await operation();
+    isCloudUnavailable = false;
   } catch (err: any) {
     if (isNetworkError(err)) {
       isCloudUnavailable = true;
@@ -619,8 +639,6 @@ function createSafeSubscription(
   opType: OperationType,
   setupListener: (onError: (error: any) => void) => () => void
 ): () => void {
-  if (isCloudUnavailable) return () => {};
-
   let unsub: (() => void) | null = null;
   const onError = (error: any) => {
     handleBackendError(error, opType, path);
@@ -633,25 +651,42 @@ function createSafeSubscription(
   };
 
   let cancelled = false;
-  try {
-    authReady
-      .then(() => {
-        if (cancelled) return;
-        unsub = setupListener(onError);
-      })
-      .catch((err) => onError(err));
-  } catch (err) {
-    onError(err);
-    return () => {};
-  }
+  const trySetup = () => {
+    if (cancelled) return;
+    if (isCloudUnavailable) {
+      // Coba pulihkan, lalu ulangi.
+      authReady
+        .then(() => {
+          isCloudUnavailable = false;
+          if (!cancelled) trySetup();
+        })
+        .catch(() => {
+          setTimeout(trySetup, 15000);
+        });
+      return;
+    }
+    try {
+      authReady
+        .then(() => {
+          if (cancelled) return;
+          unsub = setupListener(onError);
+        })
+        .catch((err) => onError(err));
+    } catch (err) {
+      onError(err);
+      return;
+    }
+  };
+
+  trySetup();
 
   return () => {
     cancelled = true;
     if (unsub) {
       try {
         unsub();
-        unsub = null;
       } catch {}
+      unsub = null;
     }
   };
 }
@@ -782,9 +817,9 @@ function subscribeRecord(
 /*  Health check                                                              */
 /* -------------------------------------------------------------------------- */
 export async function testPocketBaseConnection(): Promise<boolean> {
-  if (isCloudUnavailable) return false;
   try {
     await getPB().health.check();
+    isCloudUnavailable = false;
     console.log('Connected to PocketBase successfully');
     return true;
   } catch (error: any) {

@@ -182,7 +182,9 @@ import {
   markAgentNotificationReadCloud,
   subscribeSpkOrders,
   subscribeMachines,
-  subscribeInvoices
+  subscribeInvoices,
+  subscribeLandingConfig,
+  saveLandingConfigCloud
 } from './backend/pocketbaseBackend';
 import { DEFAULT_AGENTS_LIST } from './utils/agentMapping';
 
@@ -951,6 +953,14 @@ export default function App() {
       }
     });
 
+    // 21b. Subscribe Landing Page CMS Config (Real-time cloud sync)
+    const unsubLanding = subscribeLandingConfig((cloudConfig) => {
+      if (cloudConfig) {
+        setLandingConfig(cloudConfig);
+        saveStoredLandingConfig(cloudConfig);
+      }
+    });
+
     // 22. Periodic Auto-Cleanup for SPK Archives (Runs daily at 19:00 WIB)
     checkAndRunSpkAutoCleanup();
     const cleanupInterval = setInterval(() => {
@@ -981,6 +991,7 @@ export default function App() {
       unsubSpkOrders();
       unsubMachines();
       unsubInvoices();
+      unsubLanding();
     };
   }, []);
 
@@ -2176,6 +2187,7 @@ export default function App() {
             onConfigUpdated={(updated) => {
               setLandingConfig(updated);
               saveStoredLandingConfig(updated);
+              saveLandingConfigCloud(updated).catch(console.error);
             }}
             onPreviewLandingPage={() => setIsViewingPublicLanding(true)}
           />

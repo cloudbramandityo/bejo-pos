@@ -38,7 +38,8 @@ import {
   PrivateChatMessage,
   PrintingRejectRecord,
   Invoice,
-  InvoiceStoreIdentity
+  InvoiceStoreIdentity,
+  LandingPageConfig
 } from '../types';
 import {
   TaxAnnualReturn1770,
@@ -1578,6 +1579,30 @@ export async function saveTaxMonthlyBillingsCloud(
  */
 let seedPromise: Promise<void> | null = null;
 
+/* -------------------------------------------------------------------------- */
+/*  Landing Page CMS Config (collection: settings)                             */
+/* -------------------------------------------------------------------------- */
+export function subscribeLandingConfig(
+  onData: (config: LandingPageConfig) => void
+): () => void {
+  return createSafeSubscription('settings/landing_config', OperationType.GET, (onError) =>
+    subscribeRecord('settings', 'landing_config', (item) => {
+      if (item && Object.keys(item).length > 0) {
+        onData(item as LandingPageConfig);
+      }
+    }, onError)
+  );
+}
+
+export async function saveLandingConfigCloud(config: LandingPageConfig): Promise<void> {
+  return safeCloudWrite(async () => {
+    await upsertRecord('settings', 'landing_config', config as any);
+  }, OperationType.WRITE, 'settings/landing_config');
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Database seeding                                                          */
+/* -------------------------------------------------------------------------- */
 export function seedDatabaseIfEmpty(): Promise<void> {
   if (!seedPromise) {
     seedPromise = runSeed().catch((err) => {

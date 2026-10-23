@@ -263,27 +263,37 @@ if (Test-Path $caddySrc) {
 
 New-Item -ItemType Directory -Path "$CaddyDir\logs" -Force | Out-Null
 
-# Normalisasi format & validasi
+# Normalisasi format & validasi (non-fatal: caddy tetap direstart dan dicek)
 $fmtOut = & "$CaddyDir\caddy.exe" fmt --overwrite $caddyDst 2>&1 | Out-Null
 $validateOk = $false
+$validateErr = ""
 try {
-  $validateOut = & "$CaddyDir\caddy.exe" validate --config $caddyDst 2>&1
-  $validateOk = ($LASTEXITCODE -eq 0)
+  $p = Start-Process -FilePath "$CaddyDir\caddy.exe" -ArgumentList "validate","--config",$caddyDst `
+    -RedirectStandardOutput "$env:TEMP\caddy-validate.out" `
+    -RedirectStandardError "$env:TEMP\caddy-validate.err" `
+    -Wait -PassThru -NoNewWindow
+  $validateOk = ($p.ExitCode -eq 0)
+  $validateErr = Get-Content "$env:TEMP\caddy-validate.err" -Raw -ErrorAction SilentlyContinue
+  $validateOut = Get-Content "$env:TEMP\caddy-validate.out" -Raw -ErrorAction SilentlyContinue
+  Remove-Item "$env:TEMP\caddy-validate.out","$env:TEMP\caddy-validate.err" -Force -ErrorAction SilentlyContinue
 } catch {
-  $validateOut = @($_.Exception.Message)
+  $validateErr = $_.Exception.Message
 }
-if (-not $validateOk -or ($validateOut -join "`n") -match "Error") {
-  Write-Warn2 "Validasi Caddyfile GAGAL:"
-  $validateOut | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
+if (-not $validateOk -or ($validateErr -match "Error")) {
+  Write-Warn2 "Validasi Caddyfile GAGAL (non-fatal, caddy tetap direstart):"
+  if ($validateErr) { Write-Host "      $validateErr" -ForegroundColor DarkGray }
+  if ($validateOut) { Write-Host "      $validateOut" -ForegroundColor DarkGray }
   $script:Warnings++
 } else {
   Write-Ok "Caddyfile valid"
-  try { Restart-Service $ServiceCaddy -Force -ErrorAction Stop } catch {}
-  Start-Sleep -Seconds 4
-  $caddySvc = Get-Service $ServiceCaddy -ErrorAction SilentlyContinue
-  if ($caddySvc -and $caddySvc.Status -eq 'Running') { Write-Ok "Caddy Running" }
-  else { Write-Warn2 "Caddy status: $($caddySvc.Status). Cek log: $CaddyDir\logs\caddy-err.log"; $script:Warnings++ }
 }
+
+# Selalu coba restart Caddy dan cek status
+try { Restart-Service $ServiceCaddy -Force -ErrorAction Stop } catch {}
+Start-Sleep -Seconds 4
+$caddySvc = Get-Service $ServiceCaddy -ErrorAction SilentlyContinue
+if ($caddySvc -and $caddySvc.Status -eq 'Running') { Write-Ok "Caddy Running" }
+else { Write-Warn2 "Caddy status: $($caddySvc.Status). Cek log: $CaddyDir\logs\caddy-err.log"; $script:Warnings++ }
 
 # =============================================================== 4. .ENV
 Write-Step "4/10 Menyiapkan .env production"
@@ -337,12 +347,32 @@ if ($SkipBuild) {
   Write-Warn2 "Build dilewati (-SkipBuild). Memakai dist\ yang ada."
   if (-not (Test-Path (Join-Path $AppDir "dist\server.cjs"))) { Write-Fail "dist\server.cjs tidak ada - jalankan tanpa -SkipBuild." }
 } else {
-  Write-Host "   npm ci ..." -ForegroundColor Yellow
-  & cmd /c "npm ci --no-audit --no-fund 2>&1" | Select-Object -Last 3
-  if ($LASTEXITCODE -ne 0) { Write-Warn2 "npm ci gagal - mencoba npm install."; & cmd /c "npm install --no-audit --no-fund 2>&1" | Select-Object -Last 3 }
+  Write-Host "   Install dependensi..." -ForegroundColor Yellow
+  $hasLock = Test-Path (Join-Path $AppDir "package-lock.json")
+  if ($hasLock) {
+    Write-Host "   npm ci ..." -ForegroundColor DarkGray
+    $npmOut = & cmd /c "npm ci --no-audit --no-fund 2>&1"
+    $npmExit = $LASTEXITCODE
+    $npmOut | Select-Object -Last 3
+    if ($npmExit -ne 0) {
+      Write-Warn2 "npm ci gagal - mencoba npm install."
+      $npmOut = & cmd /c "npm install --no-audit --no-fund 2>&1"
+      $npmExit = $LASTEXITCODE
+      $npmOut | Select-Object -Last 3
+    }
+  } else {
+    Write-Warn2 "package-lock.json tidak ada - pakai npm install."
+    $npmOut = & cmd /c "npm install --no-audit --no-fund 2>&1"
+    $npmExit = $LASTEXITCODE
+    $npmOut | Select-Object -Last 3
+  }
+  if ($npmExit -ne 0) { Write-Fail "Install dependensi gagal (kode $npmExit). Cek log di atas." }
 
   Write-Host "   npm run build ..." -ForegroundColor Yellow
-  & cmd /c "npm run build 2>&1" | Select-String -Pattern "built in|error|Done in" | Select-Object -Last 3
+  $buildOut = & cmd /c "npm run build 2>&1"
+  $buildExit = $LASTEXITCODE
+  $buildOut | Select-String -Pattern "built in|error|Done in" | Select-Object -Last 3
+  if ($buildExit -ne 0) { Write-Fail "Build gagal (kode $buildExit)." }
   if (-not (Test-Path (Join-Path $AppDir "dist\server.cjs"))) { Write-Fail "Build gagal - dist\server.cjs tidak terbentuk." }
   Write-Ok "Build selesai"
 }

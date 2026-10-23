@@ -485,15 +485,53 @@ async function doUpsertRecord(
       payload.email = emailBase + '@bejo.local';
       await service.create(payload);
     } catch (err: any) {
-      if (err?.status !== 400) throw err;
-      // Email sudah dipakai -> pakai email unik
-      payload.email = emailBase + '-' + Date.now() + '@bejo.local';
-      await service.create(payload);
+      if (err?.status === 400) {
+        // Email sudah dipakai -> pakai email unik
+        try {
+          payload.email = emailBase + '-' + Date.now() + '@bejo.local';
+          await service.create(payload);
+        } catch (err2: any) {
+          // Race condition / unique constraint: record mungkin sudah dibuat proses lain.
+          const existing = await findByAppId(collection, id);
+          if (existing) {
+            const updatePayload = { ...payload };
+            delete updatePayload.email;
+            delete updatePayload.password;
+            delete updatePayload.passwordConfirm;
+            await service.update(existing.id, updatePayload);
+            return;
+          }
+          throw err2;
+        }
+        return;
+      }
+      // Race condition: record sudah dibuat oleh proses lain (unique constraint pada legacyId).
+      const existing = await findByAppId(collection, id);
+      if (existing) {
+        const updatePayload = { ...payload };
+        delete updatePayload.email;
+        delete updatePayload.password;
+        delete updatePayload.passwordConfirm;
+        await service.update(existing.id, updatePayload);
+        return;
+      }
+      throw err;
     }
     return;
   }
 
-  await service.create(payload);
+  try {
+    await service.create(payload);
+  } catch (err: any) {
+    // Race condition antar tab/proses: record dengan legacyId yang sama sudah dibuat.
+    const existing = await findByAppId(collection, id);
+    if (existing) {
+      const updatePayload = { ...payload };
+      await service.update(existing.id, updatePayload);
+      return;
+    }
+    throw err;
+  }
 }
 
 async function removeRecord(collection: string, id: string): Promise<void> {

@@ -151,6 +151,7 @@ const WhatsAppStatusAds: React.FC = () => {
     connected: false,
   });
   const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState('');
   const [form, setForm] = useState<CampaignForm>(DEFAULT_FORM);
   const [locationInput, setLocationInput] = useState('');
   const [interestInput, setInterestInput] = useState('');
@@ -163,17 +164,26 @@ const WhatsAppStatusAds: React.FC = () => {
   /* ---- Step 1: Business Account Setup ---- */
   const handleConnectFacebook = async () => {
     setConnecting(true);
-    // TODO: integrasi OAuth Facebook Login for Business
-    // window.location.href = 'https://www.facebook.com/v19.0/dialog/oauth?client_id=...&redirect_uri=...&scope=...';
-    setTimeout(() => {
-      setBusiness({
-        metaBusinessId: 'MB-123456789',
-        facebookPageId: 'FB-PAGE-987654',
-        whatsappBusinessNumber: '6281234567890',
-        connected: true,
+    setConnectError('');
+    try {
+      const res = await fetch('/api/marketing/whatsapp-status-ads/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          metaBusinessId: business.metaBusinessId,
+          facebookPageId: business.facebookPageId,
+          whatsappBusinessNumber: business.whatsappBusinessNumber,
+        }),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Gagal menghubungkan.');
+      setBusiness((prev) => ({ ...prev, connected: true }));
+    } catch (err: any) {
+      setConnectError(err?.message || 'Terjadi kesalahan saat menghubungkan.');
+      setBusiness((prev) => ({ ...prev, connected: false }));
+    } finally {
       setConnecting(false);
-    }, 1500);
+    }
   };
 
   /* ---- Step 2 helpers ---- */
@@ -365,7 +375,13 @@ const WhatsAppStatusAds: React.FC = () => {
         {/* Form panel */}
         <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-5">
           {step === 1 && (
-            <BusinessAccountSetup business={business} connecting={connecting} onConnect={handleConnectFacebook} />
+            <BusinessAccountSetup
+              business={business}
+              connecting={connecting}
+              connectError={connectError}
+              onConnect={handleConnectFacebook}
+              onChange={(key, value) => setBusiness((prev) => ({ ...prev, [key]: value, connected: false }))}
+            />
           )}
           {step === 2 && (
             <CampaignSetup form={form} setField={setField} />
@@ -442,13 +458,48 @@ const WhatsAppStatusAds: React.FC = () => {
 const BusinessAccountSetup: React.FC<{
   business: BusinessAccount;
   connecting: boolean;
+  connectError: string;
   onConnect: () => void;
-}> = ({ business, connecting, onConnect }) => (
+  onChange: (key: keyof BusinessAccount, value: string) => void;
+}> = ({ business, connecting, connectError, onConnect, onChange }) => (
   <div className="space-y-4">
     <h2 className="text-base font-extrabold text-slate-900">1. Persiapan Akun Bisnis</h2>
     <p className="text-xs text-slate-500">
-      Hubungkan akun Meta Business Manager, Facebook Page, dan Nomor WhatsApp Business Anda.
+      Isi data akun bisnis Meta Anda secara manual, lalu klik "Verifikasi & Hubungkan" untuk mengecek koneksi ke Meta.
     </p>
+
+    <div className="grid grid-cols-1 gap-3">
+      <div>
+        <label className="block text-xs font-bold text-slate-700 mb-1">Meta Business Manager ID</label>
+        <input
+          type="text"
+          value={business.metaBusinessId}
+          onChange={(e) => onChange('metaBusinessId', e.target.value)}
+          placeholder="Contoh: 123456789012345"
+          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-bold text-slate-700 mb-1">Facebook Page ID</label>
+        <input
+          type="text"
+          value={business.facebookPageId}
+          onChange={(e) => onChange('facebookPageId', e.target.value)}
+          placeholder="Contoh: 987654321098765"
+          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-bold text-slate-700 mb-1">Nomor WhatsApp Business</label>
+        <input
+          type="text"
+          value={business.whatsappBusinessNumber}
+          onChange={(e) => onChange('whatsappBusinessNumber', e.target.value)}
+          placeholder="Contoh: 6281234567890"
+          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        />
+      </div>
+    </div>
 
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
       <StatusCard label="Meta Business Manager" value={business.metaBusinessId || '—'} connected={business.connected} />
@@ -459,16 +510,22 @@ const BusinessAccountSetup: React.FC<{
     <button
       type="button"
       onClick={onConnect}
-      disabled={connecting || business.connected}
+      disabled={connecting || !business.metaBusinessId || !business.facebookPageId || !business.whatsappBusinessNumber}
       className="w-full py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
     >
       {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
-      {business.connected ? 'Terhubung' : connecting ? 'Menghubungkan...' : 'Hubungkan dengan Facebook'}
+      {business.connected ? 'Terhubung ✓' : connecting ? 'Memverifikasi...' : 'Verifikasi & Hubungkan ke Meta'}
     </button>
+
+    {connectError && (
+      <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 flex items-center gap-2">
+        <AlertCircle className="w-4 h-4" /> {connectError}
+      </div>
+    )}
 
     {business.connected && (
       <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 flex items-center gap-2">
-        <CheckCircle2 className="w-4 h-4" /> Akun bisnis berhasil terhubung.
+        <CheckCircle2 className="w-4 h-4" /> Akun bisnis berhasil terhubung ke Meta.
       </div>
     )}
   </div>

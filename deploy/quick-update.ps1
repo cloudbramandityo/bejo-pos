@@ -56,7 +56,10 @@ if (Test-Path $caddySrc) {
   # validasi
   $caddyExe = "C:\caddy\caddy.exe"
   if (Test-Path $caddyExe) {
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     & $caddyExe validate --config $caddyDst 2>&1 | Out-Null
+    $ErrorActionPreference = $prevEAP
   }
   Restart-Service Caddy -Force -ErrorAction SilentlyContinue
   Ok "Caddyfile diperbarui & Caddy direstart."

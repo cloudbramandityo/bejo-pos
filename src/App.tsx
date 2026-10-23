@@ -691,7 +691,7 @@ export default function App() {
       if (currentTab !== 'pos' && currentTab !== 'shift') {
         setCurrentTab('pos');
       }
-    } else if (currentUser?.role !== 'DEVELOPER' && (currentTab === 'landing_editor' || currentTab === 'tax')) {
+    } else if (currentUser?.role !== 'DEVELOPER' && currentUser?.role !== 'ADMIN' && (currentTab === 'landing_editor' || currentTab === 'tax')) {
       setCurrentTab('pos');
     }
   }, [currentUser, currentTab]);

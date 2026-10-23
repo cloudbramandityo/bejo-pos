@@ -199,7 +199,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       case 'invoices':
         return canAccessInvoice;
       case 'tax':
-        return isDeveloper;
+        return isDeveloper || isAdmin;
       default:
         return false;
     }

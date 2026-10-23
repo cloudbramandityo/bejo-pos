@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import {
   Megaphone,
   MessageCircle,
+  Music2,
   CheckCircle2,
   AlertCircle,
   Loader2,
@@ -29,6 +30,8 @@ import {
   RefreshCw,
   X,
 } from 'lucide-react';
+
+import { TikTokInFeedAds } from './marketing/TikTokInFeedAds';
 
 /* ------------------------------------------------------------------ */
 /* Types                                                              */
@@ -88,6 +91,7 @@ const CTA_LABELS: Record<CTA, string> = {
 /* ------------------------------------------------------------------ */
 const SUB_MENUS = [
   { id: 'whatsapp-status-ads', label: 'WhatsApp Status Ads', icon: MessageCircle },
+  { id: 'tiktok-infeed-ads', label: 'TikTok In-Feed Ads', icon: Music2 },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -135,6 +139,7 @@ export const MarketingScreen: React.FC = () => {
       </div>
 
       {activeSubMenu === 'whatsapp-status-ads' && <WhatsAppStatusAds />}
+      {activeSubMenu === 'tiktok-infeed-ads' && <TikTokInFeedAds />}
     </div>
   );
 };

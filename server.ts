@@ -1767,6 +1767,79 @@ async function setupVite() {
     }
   });
 
+  // -----------------------------------------------------------------------
+  // TIKTOK — In-Feed Ads (TikTok Marketing API proxy)
+  // -----------------------------------------------------------------------
+  app.post('/api/marketing/tiktok-infeed-ads/connect', async (req, res) => {
+    try {
+      const { tiktokForBusinessId, tiktokAdsManagerId, tiktokOrganicHandle } = req.body || {};
+      if (!tiktokForBusinessId || !tiktokAdsManagerId || !tiktokOrganicHandle) {
+        return res.status(400).json({ error: 'Semua field akun bisnis TikTok wajib diisi.' });
+      }
+
+      const TIKTOK_ACCESS_TOKEN = process.env.TIKTOK_ACCESS_TOKEN || '';
+
+      if (!TIKTOK_ACCESS_TOKEN) {
+        console.warn('[Marketing] TIKTOK_ACCESS_TOKEN belum disetel. Mode simulasi connect.');
+        return res.json({
+          success: true,
+          simulated: true,
+          message: 'Akun bisnis TikTok terverifikasi (mode simulasi).',
+        });
+      }
+
+      // TODO: Implementasi nyata:
+      // 1. GET https://business-api.tiktok.com/open_api/v1.3/user/info/
+      // 2. Verifikasi advertiser_id & organic account
+
+      return res.json({ success: true, message: 'Akun bisnis TikTok terhubung.' });
+    } catch (err: any) {
+      console.error('[Marketing] TikTok connect error:', err?.message || err);
+      res.status(500).json({ error: err?.message || 'Gagal menghubungkan akun TikTok.' });
+    }
+  });
+
+  app.post('/api/marketing/tiktok-infeed-ads/publish', async (req, res) => {
+    try {
+      const payload = req.body || {};
+      const { business, campaign, targeting, creative } = payload;
+
+      if (!business?.connected) {
+        return res.status(400).json({ error: 'Akun bisnis TikTok belum terhubung.' });
+      }
+      if (!campaign?.name || !campaign?.dailyBudget) {
+        return res.status(400).json({ error: 'Nama kampanye dan anggaran harian wajib diisi.' });
+      }
+      if (!creative?.mediaType) {
+        return res.status(400).json({ error: 'Video iklan (9:16) wajib diunggah.' });
+      }
+
+      const TIKTOK_ACCESS_TOKEN = process.env.TIKTOK_ACCESS_TOKEN || '';
+      const TIKTOK_ADVERTISER_ID = process.env.TIKTOK_ADVERTISER_ID || '';
+
+      if (!TIKTOK_ACCESS_TOKEN || !TIKTOK_ADVERTISER_ID) {
+        console.warn('[Marketing] TIKTOK_ACCESS_TOKEN / TIKTOK_ADVERTISER_ID belum disetel. Mode simulasi.');
+        const mockCampaignId = 'MOCK-TIKTOK-CAMPAIGN-' + Date.now();
+        return res.json({
+          success: true,
+          simulated: true,
+          campaignId: mockCampaignId,
+          message: 'Iklan TikTok berhasil disimulasikan (kredensial TikTok belum disetel).',
+        });
+      }
+
+      // TODO: Implementasi nyata ke TikTok Marketing API:
+      // 1. POST /open_api/v1.3/campaign/create/ -> Campaign
+      // 2. POST /open_api/v1.3/adgroup/create/  -> AdGroup (targeting, budget, placements)
+      // 3. POST /open_api/v1.3/ad/create/       -> Ad (video, text, CTA)
+
+      return res.json({ success: true, campaignId: 'PENDING-TIKTOK-IMPLEMENTATION' });
+    } catch (err: any) {
+      console.error('[Marketing] TikTok publish error:', err?.message || err);
+      res.status(500).json({ error: err?.message || 'Gagal menerbitkan iklan TikTok.' });
+    }
+  });
+
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });

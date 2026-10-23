@@ -169,13 +169,28 @@ Write-Step "2/10 Memastikan Windows Service berjalan"
 function Ensure-ServiceRunning($name) {
   $svc = Get-Service -Name $name -ErrorAction SilentlyContinue
   if (-not $svc) { Write-Warn2 "Service '$name' belum terdaftar."; $script:Warnings++; return $false }
-  if ($svc.Status -ne 'Running') {
-    & $Nssm start $name 2>&1 | Out-Null
-    Start-Sleep -Seconds 3
-    $svc.Refresh()
+
+  switch ($svc.Status) {
+    'Running' {
+      Write-Ok "Service '$name' Running"; return $true
+    }
+    'Paused' {
+      # Caddy lama bisa stuck Paused; coba resume dulu
+      try { Resume-Service $name -ErrorAction Stop } catch {}
+      Start-Sleep -Seconds 2
+      $svc.Refresh()
+      if ($svc.Status -eq 'Running') { Write-Ok "Service '$name' Running (diresume)"; return $true }
+      Write-Warn2 "Service '$name' masih Paused."; $script:Warnings++; return $false
+    }
+    default {
+      # Stopped, StartPending, StopPending, ...
+      try { Start-Service $name -ErrorAction Stop } catch {}
+      Start-Sleep -Seconds 3
+      $svc.Refresh()
+      if ($svc.Status -eq 'Running') { Write-Ok "Service '$name' Running"; return $true }
+      Write-Warn2 "Service '$name' status: $($svc.Status)"; $script:Warnings++; return $false
+    }
   }
-  if ($svc.Status -eq 'Running') { Write-Ok "Service '$name' Running"; return $true }
-  Write-Warn2 "Service '$name' status: $($svc.Status)"; $script:Warnings++; return $false
 }
 
 Ensure-ServiceRunning $ServicePB    | Out-Null
@@ -252,7 +267,7 @@ if ($LASTEXITCODE -ne 0 -or ($validateOut -join "`n") -match "Error") {
   $script:Warnings++
 } else {
   Write-Ok "Caddyfile valid"
-  & $Nssm restart $ServiceCaddy 2>&1 | Out-Null
+  try { Restart-Service $ServiceCaddy -Force -ErrorAction Stop } catch {}
   Start-Sleep -Seconds 4
   $caddySvc = Get-Service $ServiceCaddy -ErrorAction SilentlyContinue
   if ($caddySvc -and $caddySvc.Status -eq 'Running') { Write-Ok "Caddy Running" }
@@ -321,7 +336,7 @@ if ($SkipBuild) {
   Write-Ok "Build selesai"
 }
 
-& $Nssm restart $ServiceApp 2>&1 | Out-Null
+try { Restart-Service $ServiceApp -Force -ErrorAction Stop } catch {}
 Start-Sleep -Seconds 5
 
 $appReady = $false

@@ -13,12 +13,23 @@ import {
   saveStoredTaxpayerProfile,
   getStoredAnnualReturns,
   saveStoredAnnualReturns,
+  getStoredMonthlyBillings,
+  saveStoredMonthlyBillings,
   recomputeTaxReturn,
   createInitialTaxReturn,
   syncReturnWithMonthlyBillings,
   syncAllReturnsWithMonthlyBillings,
   clearAllDummyTaxData,
 } from '../../utils/taxStorage';
+import {
+  subscribeTaxpayerProfile,
+  saveTaxpayerProfileCloud,
+  subscribeTaxAnnualReturns,
+  saveTaxAnnualReturnCloud,
+  saveAllTaxAnnualReturnsCloud,
+  subscribeTaxMonthlyBillings,
+  saveTaxMonthlyBillingsCloud,
+} from '../../backend/pocketbaseBackend';
 
 // Subcomponents
 import { TaxCorporatePlaceholder } from './TaxCorporatePlaceholder';
@@ -100,6 +111,32 @@ export const TaxScreen: React.FC<TaxScreenProps> = () => {
     setAllReturns(prev => syncAllReturnsWithMonthlyBillings(prev));
   }, []);
 
+  // Sinkronisasi real-time dengan PocketBase agar data pajak tersedia di semua akun/PC
+  useEffect(() => {
+    const unsubProfile = subscribeTaxpayerProfile((cloudProfile) => {
+      if (cloudProfile) {
+        setTaxpayer(cloudProfile);
+        saveStoredTaxpayerProfile(cloudProfile);
+      }
+    });
+    const unsubReturns = subscribeTaxAnnualReturns((cloudReturns) => {
+      if (cloudReturns && cloudReturns.length > 0) {
+        setAllReturns(cloudReturns);
+        saveStoredAnnualReturns(cloudReturns);
+      }
+    });
+    const unsubBillings = subscribeTaxMonthlyBillings((cloudBillings) => {
+      if (cloudBillings) {
+        saveStoredMonthlyBillings(cloudBillings);
+      }
+    });
+    return () => {
+      unsubProfile();
+      unsubReturns();
+      unsubBillings();
+    };
+  }, []);
+
   // Active return for selected year
   const activeReturn = allReturns.find(r => r.taxYear === selectedYear) || allReturns[0];
 
@@ -121,12 +158,14 @@ export const TaxScreen: React.FC<TaxScreenProps> = () => {
     const updatedList = allReturns.map(r => r.id === recalculated.id ? recalculated : r);
     setAllReturns(updatedList);
     saveStoredAnnualReturns(updatedList);
+    saveTaxAnnualReturnCloud(recalculated).catch(console.error);
   };
 
   // Batch update all returns (e.g. from Riwayat Pelaporan sync)
   const handleUpdateAllReturns = (updatedList: TaxAnnualReturn1770[]) => {
     setAllReturns(updatedList);
     saveStoredAnnualReturns(updatedList);
+    saveAllTaxAnnualReturnsCloud(updatedList).catch(console.error);
   };
 
   // Re-synchronize all returns with monthly billings immediately
@@ -134,11 +173,15 @@ export const TaxScreen: React.FC<TaxScreenProps> = () => {
     const synced = syncAllReturnsWithMonthlyBillings(allReturns);
     setAllReturns(synced);
     saveStoredAnnualReturns(synced);
+    saveAllTaxAnnualReturnsCloud(synced).catch(console.error);
+    const billings = getStoredMonthlyBillings();
+    saveTaxMonthlyBillingsCloud(billings).catch(console.error);
   };
 
   const handleSaveTaxpayerProfile = (newProfile: TaxpayerProfile) => {
     setTaxpayer(newProfile);
     saveStoredTaxpayerProfile(newProfile);
+    saveTaxpayerProfileCloud(newProfile).catch(console.error);
 
     // Update taxpayer profile in active return
     if (activeReturn) {

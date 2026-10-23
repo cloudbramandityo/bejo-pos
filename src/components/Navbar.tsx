@@ -27,6 +27,7 @@ import {
   Globe,
   FileText,
   Calculator,
+  Megaphone,
   Menu,
   X,
   LayoutGrid,
@@ -48,7 +49,8 @@ type TabId =
   | 'spk'
   | 'landing_editor'
   | 'invoices'
-  | 'tax';
+  | 'tax'
+  | 'marketing';
 
 type Tone = 'slate' | 'amber' | 'indigo' | 'blue' | 'emerald' | 'rose';
 type GroupKey = 'Operasional' | 'Produksi' | 'Laporan & Keuangan' | 'Pengaturan' | 'Developer';
@@ -103,6 +105,7 @@ const ALL_TABS: TabDef[] = [
   { id: 'transactions', label: 'Laporan', nav: 'Laporan', short: 'Laporan', icon: Receipt, tone: 'slate', group: 'Laporan & Keuangan' },
   { id: 'invoices', label: 'Invoice B2B', nav: 'Invoice', short: 'Invoice', icon: FileText, tone: 'blue', group: 'Laporan & Keuangan', badge: 'B2B' },
   { id: 'tax', label: 'Pajak', nav: 'Pajak', short: 'Pajak', icon: Calculator, tone: 'rose', group: 'Laporan & Keuangan' },
+  { id: 'marketing', label: 'Marketing', nav: 'Marketing', short: 'Marketing', icon: Megaphone, tone: 'emerald', group: 'Operasional', badge: 'NEW' },
   { id: 'customers', label: 'Pengaturan Toko', nav: 'Pengaturan', short: 'Toko', icon: Users, tone: 'slate', group: 'Pengaturan' },
   { id: 'landing_editor', label: 'Website', nav: 'Website', short: 'Website', icon: Globe, tone: 'emerald', group: 'Developer', badge: 'DEV' },
 ];
@@ -199,6 +202,8 @@ export const Navbar: React.FC<NavbarProps> = ({
       case 'invoices':
         return canAccessInvoice;
       case 'tax':
+        return isDeveloper || isAdmin || isOwner;
+      case 'marketing':
         return isDeveloper || isAdmin || isOwner;
       default:
         return false;

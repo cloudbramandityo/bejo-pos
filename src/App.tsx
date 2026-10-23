@@ -29,6 +29,7 @@ import { BackendDiagnosticsModal } from './components/BackendDiagnosticsModal';
 import { LocalDatabaseSyncModal } from './components/modals/LocalDatabaseSyncModal';
 import { LandingPage } from './components/landing/LandingPage';
 import { LandingPageEditorScreen } from './components/LandingPageEditorScreen';
+import { MarketingScreen } from './components/MarketingScreen';
 import { InvoiceScreen } from './components/InvoiceScreen';
 import { TaxScreen } from './components/tax/TaxScreen';
 import { fetchBackendDiagnostics } from './utils/backendDiagnostics';
@@ -693,7 +694,7 @@ export default function App() {
       if (currentTab !== 'pos' && currentTab !== 'shift') {
         setCurrentTab('pos');
       }
-    } else if (currentUser?.role !== 'DEVELOPER' && currentUser?.role !== 'ADMIN' && currentUser?.role !== 'OWNER' && (currentTab === 'landing_editor' || currentTab === 'tax')) {
+    } else if (currentUser?.role !== 'DEVELOPER' && currentUser?.role !== 'ADMIN' && currentUser?.role !== 'OWNER' && (currentTab === 'landing_editor' || currentTab === 'tax' || currentTab === 'marketing')) {
       setCurrentTab('pos');
     }
   }, [currentUser, currentTab]);
@@ -2206,6 +2207,10 @@ export default function App() {
 
         {currentTab === 'tax' && (userRole === 'DEVELOPER' || userRole === 'ADMIN' || userRole === 'OWNER') && (
           <TaxScreen />
+        )}
+
+        {currentTab === 'marketing' && (userRole === 'DEVELOPER' || userRole === 'ADMIN' || userRole === 'OWNER') && (
+          <MarketingScreen />
         )}
       </main>
 

@@ -237,7 +237,8 @@ if (Test-Path $caddySrc) {
     "        -Server",
     "    }",
     "    request_body {",
-    "        max_size 25MB",
+    "        # Video Marketing base64 bisa ~85MB",
+    "        max_size 110MB",
     "    }",
     "    handle_path /api/pb/* {",
     "        reverse_proxy 127.0.0.1:$PB_PORT {",
@@ -343,7 +344,6 @@ Write-Ok ".env diperbarui di $envPath"
 Write-Step "5/10 Build produksi + restart aplikasi"
 
 Set-Location $AppDir
-$env:NODE_ENV = "production"
 
 if ($SkipBuild) {
   Write-Warn2 "Build dilewati (-SkipBuild). Memakai dist\ yang ada."
@@ -353,23 +353,24 @@ if ($SkipBuild) {
   $hasLock = Test-Path (Join-Path $AppDir "package-lock.json")
   if ($hasLock) {
     Write-Host "   npm ci ..." -ForegroundColor DarkGray
-    $npmOut = & cmd /c "npm ci --no-audit --no-fund 2>&1"
+    $npmOut = & cmd /c "npm ci --no-audit --no-fund --include=dev 2>&1"
     $npmExit = $LASTEXITCODE
     $npmOut | Select-Object -Last 3
     if ($npmExit -ne 0) {
       Write-Warn2 "npm ci gagal - mencoba npm install."
-      $npmOut = & cmd /c "npm install --no-audit --no-fund 2>&1"
+      $npmOut = & cmd /c "npm install --no-audit --no-fund --include=dev 2>&1"
       $npmExit = $LASTEXITCODE
       $npmOut | Select-Object -Last 3
     }
   } else {
     Write-Warn2 "package-lock.json tidak ada - pakai npm install."
-    $npmOut = & cmd /c "npm install --no-audit --no-fund 2>&1"
+    $npmOut = & cmd /c "npm install --no-audit --no-fund --include=dev 2>&1"
     $npmExit = $LASTEXITCODE
     $npmOut | Select-Object -Last 3
   }
   if ($npmExit -ne 0) { Write-Fail "Install dependensi gagal (kode $npmExit). Cek log di atas." }
 
+  $env:NODE_ENV = "production"
   Write-Host "   npm run build ..." -ForegroundColor Yellow
   $buildOut = & cmd /c "npm run build 2>&1"
   $buildExit = $LASTEXITCODE

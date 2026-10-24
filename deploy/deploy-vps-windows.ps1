@@ -56,9 +56,9 @@ if (Test-Path "$AppDir\dist") {
 # ---------------------------------------------------------------- 2 deps
 Write-Step "2/5 Installing dependensi"
 if (Test-Path "$AppDir\package-lock.json") {
-  npm.cmd ci --no-audit --no-fund
+  npm.cmd ci --no-audit --no-fund --include=dev
 } else {
-  npm.cmd install --no-audit --no-fund
+  npm.cmd install --no-audit --no-fund --include=dev
 }
 if ($LASTEXITCODE -ne 0) { Write-Fail "npm install gagal." }
 

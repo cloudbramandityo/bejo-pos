@@ -21,8 +21,9 @@ bejodigitalprint.com {
         -Server
     }
 
+    # Harus menampung video Marketing base64 (~85MB) + overhead JSON.
     request_body {
-        max_size 25MB
+        max_size 110MB
     }
 
     # -----------------------------------------------------------------

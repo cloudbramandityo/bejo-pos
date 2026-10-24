@@ -70,9 +70,12 @@ Write-Step "4/5 Build aplikasi & restart service"
 Set-Location $root
 $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")
 Write-Host "   npm ci ..." -ForegroundColor Yellow
-& cmd /c "npm ci --omit=dev" 2>&1 | Select-Object -Last 2
+& cmd /c "npm ci --no-audit --no-fund --include=dev 2>&1" | Select-Object -Last 2
+if ($LASTEXITCODE -ne 0) { Write-Fail "npm ci gagal. Build memerlukan devDependencies (vite/esbuild)." }
 Write-Host "   npm run build ..." -ForegroundColor Yellow
-& cmd /c "npm run build" 2>&1 | Select-String -Pattern "built in|error" | Select-Object -Last 2
+& cmd /c "npm run build 2>&1" | Select-String -Pattern "built in|error" | Select-Object -Last 2
+if ($LASTEXITCODE -ne 0) { Write-Fail "npm run build gagal." }
+if (-not (Test-Path (Join-Path $root "dist\server.cjs"))) { Write-Fail "dist\server.cjs tidak terbentuk." }
 
 if (Test-Path "C:\nssm\nssm.exe") {
     & "C:\nssm\nssm.exe" stop BejoStikerPOS 2>&1 | Out-Null

@@ -162,7 +162,8 @@ $Domain {
     }
 
     request_body {
-        max_size 25MB
+        # Video Marketing base64 bisa ~85MB
+        max_size 110MB
     }
 
     # -------------------------------------------------------------

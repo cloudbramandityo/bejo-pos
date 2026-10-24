@@ -70,7 +70,7 @@ if (Test-Path $caddySrc) {
 Step "5/6 Build produksi"
 Set-Location $AppDir
 if (-not (Test-Path (Join-Path $AppDir "node_modules"))) {
-  & npm.cmd install --no-audit --no-fund
+  & npm.cmd install --no-audit --no-fund --include=dev
   if ($LASTEXITCODE -ne 0) { Fail "npm install gagal." }
 }
 $env:NODE_ENV = "production"

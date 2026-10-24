@@ -17,7 +17,6 @@ import {
   Users,
   Tag,
   Eye,
-  Smartphone,
   ChevronRight,
   ChevronLeft,
   Send,
@@ -27,6 +26,9 @@ import {
   Share2,
   Bookmark,
   X,
+  Search,
+  Plus,
+  BadgeCheck,
 } from 'lucide-react';
 import {
   fileToBase64Payload,
@@ -102,6 +104,20 @@ const OBJECTIVE_LABELS: Record<CampaignObjective, { label: string; desc: string 
   VIDEO_VIEWS: { label: 'Penayangan Video', desc: 'Maksimalkan jumlah tayangan video iklan Anda' },
   TRAFFIC: { label: 'Lalu Lintas Web', desc: 'Arahkan pengguna ke website/landing page' },
   CONVERSIONS: { label: 'Konversi Produk', desc: 'Mendorong pembelian atau aksi konversi' },
+};
+
+const TIKTOK_STEPS = [
+  { n: 1, label: 'Akun Bisnis' },
+  { n: 2, label: 'Kampanye' },
+  { n: 3, label: 'Grup Iklan' },
+  { n: 4, label: 'Iklan' },
+  { n: 5, label: 'Tinjau' },
+];
+
+const OBJECTIVE_ICONS: Record<CampaignObjective, React.ComponentType<{ className?: string }>> = {
+  VIDEO_VIEWS: Video,
+  TRAFFIC: Link2,
+  CONVERSIONS: Target,
 };
 
 /* ------------------------------------------------------------------ */
@@ -308,45 +324,10 @@ export const TikTokInFeedAds: React.FC<TikTokInFeedAdsProps> = ({ defaultLanding
   };
 
   return (
-    <div className="space-y-6">
-      {/* Stepper */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-        <div className="flex items-center justify-between gap-2 overflow-x-auto">
-          {[
-            { n: 1, label: 'Akun Bisnis' },
-            { n: 2, label: 'Kampanye' },
-            { n: 3, label: 'Target & Penempatan' },
-            { n: 4, label: 'Materi Iklan' },
-            { n: 5, label: 'Terbitkan' },
-          ].map((s, idx) => (
-            <React.Fragment key={s.n}>
-              <button
-                type="button"
-                onClick={() => s.n < step && setStep(s.n)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  step === s.n
-                    ? 'bg-black text-white shadow-xs'
-                    : step > s.n
-                    ? 'bg-slate-100 text-slate-700 border border-slate-200'
-                    : 'bg-slate-100 text-slate-400'
-                }`}
-              >
-                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${
-                  step === s.n ? 'bg-white/20' : step > s.n ? 'bg-slate-300' : 'bg-slate-200'
-                }`}>
-                  {step > s.n ? <CheckCircle2 className="w-3.5 h-3.5" /> : s.n}
-                </span>
-                {s.label}
-              </button>
-              {idx < 4 && <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />}
-            </React.Fragment>
-          ))}
-        </div>
-      </div>
-
+    <div className="space-y-4">
       {/* Toast */}
       {publishStatus !== 'idle' && (
-        <div className={`rounded-xl px-4 py-3 text-sm font-semibold flex items-center gap-2 ${
+        <div className={`rounded-lg px-4 py-3 text-sm font-semibold flex items-center gap-2 ${
           publishStatus === 'success'
             ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
             : 'bg-rose-50 border border-rose-200 text-rose-800'
@@ -359,74 +340,149 @@ export const TikTokInFeedAds: React.FC<TikTokInFeedAdsProps> = ({ defaultLanding
         </div>
       )}
 
-      {/* Step content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-5">
-          {step === 1 && (
-            <TikTokBusinessSetup
-              business={business}
-              connecting={connecting}
-              connectError={connectError}
-              onConnect={handleConnect}
-              onChange={handleBusinessField}
-            />
-          )}
-          {step === 2 && (
-            <TikTokCampaignSetup form={form} setField={setField} />
-          )}
-          {step === 3 && (
-            <TikTokTargeting
-              form={form}
-              setField={setField}
-              locationInput={locationInput}
-              setLocationInput={setLocationInput}
-              addLocation={addLocation}
-              removeLocation={removeLocation}
-              interestInput={interestInput}
-              setInterestInput={setInterestInput}
-              addInterest={addInterest}
-              removeInterest={removeInterest}
-              toggleAgeGroup={toggleAgeGroup}
-            />
-          )}
-          {step === 4 && (
-            <TikTokAdCreative form={form} setField={setField} onMediaChange={handleMediaChange} />
-          )}
-          {step === 5 && (
-            <TikTokPublishReview business={business} form={form} publishing={publishing} onPublish={handlePublish} />
-          )}
-        </div>
-
-        {/* Live Ad Preview */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
-          <div className="flex items-center gap-2 mb-3">
-            <Smartphone className="w-4 h-4 text-slate-500" />
-            <h3 className="text-sm font-bold text-slate-900">Pratinjau Iklan</h3>
+      {/* TikTok Ads Manager shell */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-[#F7F7F8] shadow-xs">
+        <div className="bg-[#0F0F10] px-4 py-3 text-white">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#FE2C55]">
+                <Music2 className="h-4 w-4" />
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-sm font-bold">TikTok Ads Manager</span>
+                <span className="hidden text-[11px] text-white/40 sm:inline">|</span>
+                <span className="hidden text-[11px] text-white/70 sm:inline">In-Feed Ads</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-[10px]">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 font-semibold">
+                <span className={`h-1.5 w-1.5 rounded-full ${business.connected ? 'bg-emerald-400' : 'bg-white/40'}`} />
+                {business.connected
+                  ? business.simulated
+                    ? 'Akun terhubung · simulasi'
+                    : 'Akun terhubung'
+                  : 'Belum terhubung'}
+              </span>
+              <span className="rounded-full bg-white/10 px-2.5 py-1 font-semibold">Draf</span>
+            </div>
           </div>
-          <TikTokLivePreview form={form} />
         </div>
-      </div>
 
-      {/* Navigation buttons */}
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => setStep((s) => Math.max(1, s - 1))}
-          disabled={step === 1}
-          className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2 cursor-pointer"
-        >
-          <ChevronLeft className="w-4 h-4" /> Sebelumnya
-        </button>
-        {step < 5 && (
+        {/* Native step tabs */}
+        <div className="border-b border-slate-200 bg-white px-1 sm:px-3">
+          <div className="flex items-center gap-1 overflow-x-auto">
+            {TIKTOK_STEPS.map((s) => {
+              const active = step === s.n;
+              const done = step > s.n;
+              return (
+                <button
+                  key={s.n}
+                  type="button"
+                  onClick={() => done && setStep(s.n)}
+                  disabled={s.n > step}
+                  className={`relative flex shrink-0 items-center gap-2 px-3 py-3 text-xs font-bold transition-colors ${
+                    active
+                      ? 'text-[#FE2C55]'
+                      : done
+                      ? 'cursor-pointer text-slate-700 hover:text-[#FE2C55]'
+                      : 'cursor-not-allowed text-slate-400'
+                  }`}
+                >
+                  <span
+                    className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black ${
+                      active
+                        ? 'bg-[#FE2C55] text-white'
+                        : done
+                        ? 'bg-[#FFF0F3] text-[#FE2C55]'
+                        : 'bg-slate-100 text-slate-400'
+                    }`}
+                  >
+                    {done ? <CheckCircle2 className="h-3 w-3" /> : s.n}
+                  </span>
+                  {s.label}
+                  {active && <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[#FE2C55]" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Native two-column workspace */}
+        <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+            {step === 1 && (
+              <TikTokBusinessSetup
+                business={business}
+                connecting={connecting}
+                connectError={connectError}
+                onConnect={handleConnect}
+                onChange={handleBusinessField}
+              />
+            )}
+            {step === 2 && (
+              <TikTokCampaignSetup form={form} setField={setField} />
+            )}
+            {step === 3 && (
+              <TikTokTargeting
+                form={form}
+                setField={setField}
+                locationInput={locationInput}
+                setLocationInput={setLocationInput}
+                addLocation={addLocation}
+                removeLocation={removeLocation}
+                interestInput={interestInput}
+                setInterestInput={setInterestInput}
+                addInterest={addInterest}
+                removeInterest={removeInterest}
+                toggleAgeGroup={toggleAgeGroup}
+              />
+            )}
+            {step === 4 && (
+              <TikTokAdCreative form={form} setField={setField} onMediaChange={handleMediaChange} />
+            )}
+            {step === 5 && (
+              <TikTokPublishReview business={business} form={form} publishing={publishing} onPublish={handlePublish} />
+            )}
+          </div>
+
+          <div className="h-fit rounded-lg border border-slate-200 bg-white p-4 lg:sticky lg:top-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Eye className="h-4 w-4 text-slate-500" />
+                <h3 className="text-sm font-bold text-slate-900">Pratinjau iklan</h3>
+              </div>
+              <span className="rounded bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-500">9:16</span>
+            </div>
+            <TikTokLivePreview form={form} />
+          </div>
+        </div>
+
+        {/* Manager footer */}
+        <div className="flex items-center justify-between border-t border-slate-200 bg-white px-4 py-3">
           <button
             type="button"
-            onClick={() => setStep((s) => Math.min(5, s + 1))}
-            disabled={!canGoNext()}
-            className="px-4 py-2.5 rounded-xl text-xs font-bold bg-black text-white hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2 cursor-pointer"
+            onClick={() => setStep((s) => Math.max(1, s - 1))}
+            disabled={step === 1}
+            className="px-3.5 py-2 rounded-md text-xs font-bold bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2 cursor-pointer"
           >
-            Lanjut <ChevronRight className="w-4 h-4" />
+            <ChevronLeft className="w-4 h-4" /> Sebelumnya
           </button>
-        )}
+          <div className="flex items-center gap-3">
+            <span className="hidden text-[10px] text-slate-400 sm:block">
+              Langkah {step} dari {totalSteps}
+            </span>
+            {step < 5 && (
+              <button
+                type="button"
+                onClick={() => setStep((s) => Math.min(5, s + 1))}
+                disabled={!canGoNext()}
+                className="px-3.5 py-2 rounded-md text-xs font-bold bg-[#FE2C55] text-white hover:bg-[#E0264C] disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2 cursor-pointer"
+              >
+                Lanjut <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -435,6 +491,20 @@ export const TikTokInFeedAds: React.FC<TikTokInFeedAdsProps> = ({ defaultLanding
 /* ------------------------------------------------------------------ */
 /* Step 1: TikTok Business Account Setup                              */
 /* ------------------------------------------------------------------ */
+const TikTokStepHeader: React.FC<{ step: number; title: string; description: string }> = ({
+  step,
+  title,
+  description,
+}) => (
+  <div className="border-b border-slate-100 pb-3">
+    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#FE2C55]">
+      Langkah {step} dari 5
+    </p>
+    <h2 className="mt-1 text-lg font-bold text-slate-900">{title}</h2>
+    <p className="mt-0.5 text-xs text-slate-500">{description}</p>
+  </div>
+);
+
 const TikTokBusinessSetup: React.FC<{
   business: BusinessAccount;
   connecting: boolean;
@@ -443,10 +513,19 @@ const TikTokBusinessSetup: React.FC<{
   onChange: (key: keyof BusinessAccount, value: string) => void;
 }> = ({ business, connecting, connectError, onConnect, onChange }) => (
   <div className="space-y-4">
-    <h2 className="text-base font-extrabold text-slate-900">1. Persiapan Akun Bisnis TikTok</h2>
-    <p className="text-xs text-slate-500">
-      Isi data akun TikTok For Business Anda secara manual, lalu klik "Verifikasi & Hubungkan".
-    </p>
+    <TikTokStepHeader
+      step={1}
+      title="Akun Bisnis"
+      description="Hubungkan akun TikTok For Business yang akan menayangkan In-Feed Ads."
+    />
+
+    <div className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-[#0F0F10] px-3.5 py-3 text-white">
+      <Music2 className="mt-0.5 h-4 w-4 shrink-0 text-[#FE2C55]" />
+      <div className="text-[11px] leading-relaxed">
+        <p className="font-bold">TikTok Ads Manager</p>
+        <p className="text-white/60">Kredensial diperiksa di server. Token tidak pernah dikirim dari browser.</p>
+      </div>
+    </div>
 
     <div className="grid grid-cols-1 gap-3">
       <div>
@@ -456,7 +535,7 @@ const TikTokBusinessSetup: React.FC<{
           value={business.tiktokForBusinessId}
           onChange={(e) => onChange('tiktokForBusinessId', e.target.value)}
           placeholder="Contoh: 7123456789012345678"
-          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-black"
+          className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FE2C55]"
         />
       </div>
       <div>
@@ -466,7 +545,7 @@ const TikTokBusinessSetup: React.FC<{
           value={business.tiktokAdsManagerId}
           onChange={(e) => onChange('tiktokAdsManagerId', e.target.value)}
           placeholder="Contoh: 1234567890123456789"
-          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-black"
+          className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FE2C55]"
         />
       </div>
       <div>
@@ -476,7 +555,7 @@ const TikTokBusinessSetup: React.FC<{
           value={business.tiktokOrganicHandle}
           onChange={(e) => onChange('tiktokOrganicHandle', e.target.value)}
           placeholder="Contoh: @bejostiker"
-          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-black"
+          className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FE2C55]"
         />
       </div>
     </div>
@@ -491,21 +570,21 @@ const TikTokBusinessSetup: React.FC<{
       type="button"
       onClick={onConnect}
       disabled={connecting || !business.tiktokForBusinessId || !business.tiktokAdsManagerId || !business.tiktokOrganicHandle}
-      className="w-full py-3 bg-black hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+      className="w-full py-3 bg-[#FE2C55] hover:bg-[#E0264C] text-white font-bold text-xs rounded-md shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
     >
       {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
       {business.connected ? 'Terhubung ✓' : connecting ? 'Memverifikasi...' : 'Verifikasi & Hubungkan ke TikTok'}
     </button>
 
     {connectError && (
-      <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 flex items-center gap-2">
+      <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 flex items-center gap-2">
         <AlertCircle className="w-4 h-4" /> {connectError}
       </div>
     )}
 
     {business.connected && (
       <div
-        className={`text-xs rounded-xl px-3 py-2 flex items-center gap-2 ${
+        className={`text-xs rounded-lg px-3 py-2 flex items-center gap-2 ${
           business.simulated
             ? 'text-amber-800 bg-amber-50 border border-amber-200'
             : 'text-emerald-700 bg-emerald-50 border border-emerald-200'
@@ -521,7 +600,7 @@ const TikTokBusinessSetup: React.FC<{
 );
 
 const StatusCard: React.FC<{ label: string; value: string; connected: boolean }> = ({ label, value, connected }) => (
-  <div className={`rounded-xl border p-3 ${connected ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
+  <div className={`rounded-lg border p-3 ${connected ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
     <div className="flex items-center gap-2 mb-1">
       <span className={`w-2 h-2 rounded-full ${connected ? 'bg-emerald-500' : 'bg-slate-300'}`} />
       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
@@ -538,7 +617,11 @@ const TikTokCampaignSetup: React.FC<{
   setField: <K extends keyof CampaignForm>(key: K, value: CampaignForm[K]) => void;
 }> = ({ form, setField }) => (
   <div className="space-y-4">
-    <h2 className="text-base font-extrabold text-slate-900">2. Setup Kampanye</h2>
+    <TikTokStepHeader
+      step={2}
+      title="Kampanye"
+      description="Tentukan tujuan dan anggaran kampanye In-Feed Ads."
+    />
 
     <div>
       <label className="block text-xs font-bold text-slate-700 mb-1">Nama Kampanye</label>
@@ -547,43 +630,53 @@ const TikTokCampaignSetup: React.FC<{
         value={form.name}
         onChange={(e) => setField('name', e.target.value)}
         placeholder="Contoh: Promo Stiker Wrapping TikTok"
-        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-black"
+        className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FE2C55]"
       />
     </div>
 
     <div>
       <label className="block text-xs font-bold text-slate-700 mb-2">Tujuan Kampanye</label>
-      <div className="grid grid-cols-1 gap-3">
+      <div className="grid grid-cols-1 gap-2.5">
         {(Object.keys(OBJECTIVE_LABELS) as CampaignObjective[]).map((key) => {
           const opt = OBJECTIVE_LABELS[key];
+          const Icon = OBJECTIVE_ICONS[key];
+          const selected = form.objective === key;
           return (
             <button
               key={key}
               type="button"
               onClick={() => setField('objective', key)}
-              className={`text-left rounded-xl border p-4 transition-all cursor-pointer ${
-                form.objective === key
-                  ? 'border-black bg-slate-50 ring-2 ring-slate-300'
+              className={`flex items-start gap-3 rounded-lg border p-3.5 text-left transition-all cursor-pointer ${
+                selected
+                  ? 'border-[#FE2C55] bg-[#FFF0F3] ring-2 ring-[#FE2C55]/15'
                   : 'border-slate-200 bg-white hover:border-slate-300'
               }`}
             >
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                  form.objective === key ? 'border-black' : 'border-slate-300'
-                }`}>
-                  {form.objective === key && <span className="w-2 h-2 rounded-full bg-black" />}
-                </span>
+              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                selected ? 'bg-[#FE2C55] text-white' : 'bg-slate-100 text-slate-500'
+              }`}>
+                <Icon className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
                 <span className="text-sm font-bold text-slate-900">{opt.label}</span>
+                <p className="text-[11px] text-slate-500 mt-0.5">{opt.desc}</p>
               </div>
-              <p className="text-[11px] text-slate-500 ml-6">{opt.desc}</p>
+              <span className={`mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${
+                selected ? 'border-[#FE2C55]' : 'border-slate-300'
+              }`}>
+                {selected && <span className="h-2 w-2 rounded-full bg-[#FE2C55]" />}
+              </span>
             </button>
           );
         })}
       </div>
     </div>
 
-    <div>
-      <label className="block text-xs font-bold text-slate-700 mb-1">Anggaran Harian (Rp)</label>
+    <div className="rounded-lg border border-slate-200 p-3.5">
+      <div className="mb-3 flex items-center justify-between">
+        <label className="text-xs font-bold text-slate-700">Anggaran Harian</label>
+        <span className="text-[10px] text-slate-400">Minimum Rp 10.000</span>
+      </div>
       <div className="relative">
         <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">Rp</span>
         <input
@@ -591,14 +684,16 @@ const TikTokCampaignSetup: React.FC<{
           value={form.dailyBudget}
           onChange={(e) => setField('dailyBudget', Number(e.target.value))}
           min={10000}
-          className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-black"
+          className="w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#FE2C55]"
         />
       </div>
-      <p className="text-[10px] text-slate-400 mt-1">Minimum Rp 10.000 / hari</p>
+      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-slate-400">
+        <DollarSign className="h-3 w-3" /> Biaya dihentikan otomatis saat batas harian tercapai.
+      </div>
     </div>
 
     {form.objective === 'CONVERSIONS' && (
-      <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+      <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
         Objective Konversi memerlukan <span className="font-mono font-semibold">TIKTOK_PIXEL_ID</span> pada
         konfigurasi server. Tanpa pixel, pilih Lalu Lintas atau Penayangan Video.
       </div>
@@ -623,11 +718,21 @@ const TikTokTargeting: React.FC<{
   toggleAgeGroup: (g: string) => void;
 }> = ({ form, setField, locationInput, setLocationInput, addLocation, removeLocation, interestInput, setInterestInput, addInterest, removeInterest, toggleAgeGroup }) => (
   <div className="space-y-4">
-    <h2 className="text-base font-extrabold text-slate-900">3. Target & Penempatan</h2>
+    <TikTokStepHeader
+      step={3}
+      title="Grup Iklan"
+      description="Tentukan audiens dan penempatan video In-Feed Anda."
+    />
+
+    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+      <Users className="h-3.5 w-3.5 text-[#FE2C55]" /> Target audiens
+    </div>
 
     {/* Locations */}
     <div>
-      <label className="block text-xs font-bold text-slate-700 mb-1">Lokasi Target</label>
+      <label className="mb-1 flex items-center gap-1 text-xs font-bold text-slate-700">
+        <MapPin className="h-3 w-3 text-slate-400" /> Lokasi Target
+      </label>
       <div className="flex gap-2">
         <input
           type="text"
@@ -635,16 +740,16 @@ const TikTokTargeting: React.FC<{
           onChange={(e) => setLocationInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLocation())}
           placeholder="Ketik kota/kabupaten, Enter untuk tambah"
-          className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-black"
+          className="flex-1 rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FE2C55]"
         />
-        <button type="button" onClick={addLocation} className="px-4 py-2.5 bg-black text-white rounded-xl text-xs font-bold hover:bg-slate-800 cursor-pointer">
+        <button type="button" onClick={addLocation} className="px-4 py-2.5 bg-[#FE2C55] text-white rounded-md text-xs font-bold hover:bg-[#E0264C] cursor-pointer">
           Tambah
         </button>
       </div>
       {form.locations.length > 0 && (
         <div className="flex flex-wrap gap-2 mt-2">
           {form.locations.map((loc) => (
-            <span key={loc} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-3 py-1 text-xs font-semibold">
+            <span key={loc} className="inline-flex items-center gap-1 rounded-full border border-[#FE2C55]/20 bg-[#FFF0F3] px-3 py-1 text-xs font-semibold text-[#C81445]">
               <MapPin className="w-3 h-3" /> {loc}
               <button type="button" onClick={() => removeLocation(loc)} className="ml-1 hover:text-rose-600 cursor-pointer"><X className="w-3 h-3" /></button>
             </span>
@@ -655,7 +760,7 @@ const TikTokTargeting: React.FC<{
 
     {/* Age groups */}
     <div>
-      <label className="block text-xs font-bold text-slate-700 mb-2">Kelompok Usia (TikTok)</label>
+      <label className="mb-2 block text-xs font-bold text-slate-700">Kelompok Usia</label>
       <div className="flex flex-wrap gap-2">
         {AGE_GROUPS.map((g) => (
           <button
@@ -664,7 +769,7 @@ const TikTokTargeting: React.FC<{
             onClick={() => toggleAgeGroup(g.value)}
             className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${
               form.ageGroups.includes(g.value)
-                ? 'bg-black text-white border-black'
+                ? 'bg-[#FE2C55] text-white border-[#FE2C55]'
                 : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
             }`}
           >
@@ -680,7 +785,7 @@ const TikTokTargeting: React.FC<{
       <select
         value={form.gender}
         onChange={(e) => setField('gender', e.target.value as Gender)}
-        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-black"
+        className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#FE2C55]"
       >
         <option value="ALL">Semua</option>
         <option value="MALE">Laki-laki</option>
@@ -690,7 +795,9 @@ const TikTokTargeting: React.FC<{
 
     {/* Interests */}
     <div>
-      <label className="block text-xs font-bold text-slate-700 mb-1">Minat & Perilaku</label>
+      <label className="mb-1 flex items-center gap-1 text-xs font-bold text-slate-700">
+        <Tag className="h-3 w-3 text-slate-400" /> Minat & Perilaku
+      </label>
       <div className="flex gap-2">
         <input
           type="text"
@@ -698,9 +805,9 @@ const TikTokTargeting: React.FC<{
           onChange={(e) => setInterestInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addInterest())}
           placeholder="Contoh: fashion, gaming, beauty"
-          className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-black"
+          className="flex-1 rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FE2C55]"
         />
-        <button type="button" onClick={addInterest} className="px-4 py-2.5 bg-black text-white rounded-xl text-xs font-bold hover:bg-slate-800 cursor-pointer">
+        <button type="button" onClick={addInterest} className="px-4 py-2.5 bg-[#FE2C55] text-white rounded-md text-xs font-bold hover:bg-[#E0264C] cursor-pointer">
           Tambah
         </button>
       </div>
@@ -716,14 +823,21 @@ const TikTokTargeting: React.FC<{
       )}
     </div>
 
-    {/* Placement info */}
-    <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-800 flex items-start gap-2">
-      <Music2 className="w-4 h-4 shrink-0 mt-0.5" />
-      <div>
-        <p className="font-bold">Iklan akan ditayangkan secara alami di sela-sela FYP target audiens Anda</p>
-        <p className="text-[11px] text-slate-600 mt-0.5">
-          Penempatan otomatis ke TikTok In-Feed Ads (FYP & Friends Feed) dengan format video vertikal 9:16.
-        </p>
+    {/* Placement */}
+    <div className="rounded-lg bg-[#0F0F10] p-3.5 text-white">
+      <div className="flex items-start gap-2.5">
+        <Music2 className="mt-0.5 h-4 w-4 shrink-0 text-[#FE2C55]" />
+        <div>
+          <p className="text-xs font-bold">Penempatan In-Feed</p>
+          <p className="mt-0.5 text-[10px] leading-relaxed text-white/60">
+            Iklan ditayangkan secara alami di sela video For You dan Friends Feed audiens.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-semibold">For You (FYP)</span>
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-semibold">Friends Feed</span>
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-semibold">Video 9:16</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -738,16 +852,35 @@ const TikTokAdCreative: React.FC<{
   onMediaChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }> = ({ form, setField, onMediaChange }) => (
   <div className="space-y-4">
-    <h2 className="text-base font-extrabold text-slate-900">4. Materi Iklan & Pratinjau</h2>
+    <TikTokStepHeader
+      step={4}
+      title="Iklan"
+      description="Unggah video vertikal dan lengkapi teks iklan In-Feed."
+    />
+
+    <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-center">
+      <div>
+        <p className="text-[10px] font-bold text-slate-800">9:16</p>
+        <p className="text-[9px] text-slate-400">Vertikal</p>
+      </div>
+      <div className="border-x border-slate-200">
+        <p className="text-[10px] font-bold text-slate-800">9–60 detik</p>
+        <p className="text-[9px] text-slate-400">Durasi video</p>
+      </div>
+      <div>
+        <p className="text-[10px] font-bold text-slate-800">1 video</p>
+        <p className="text-[9px] text-slate-400">MP4 / MOV</p>
+      </div>
+    </div>
 
     {/* Drop zone */}
     <div>
-      <label className="block text-xs font-bold text-slate-700 mb-1">Video Iklan (9:16, 9-60 detik)</label>
-      <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 cursor-pointer transition-all">
+      <label className="block text-xs font-bold text-slate-700 mb-1">Video Iklan</label>
+      <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-slate-300 rounded-lg bg-slate-50 hover:bg-[#FFF0F3] hover:border-[#FE2C55]/50 cursor-pointer transition-all">
         <input type="file" accept="video/*" onChange={onMediaChange} className="hidden" />
         {form.mediaFile ? (
           <div className="text-center">
-            <Video className="w-8 h-8 text-black mx-auto mb-2" />
+            <Video className="w-8 h-8 text-[#FE2C55] mx-auto mb-2" />
             <p className="text-xs font-semibold text-slate-700">{form.mediaFile.name}</p>
             <p className="text-[10px] text-slate-400 mt-1">Durasi: {form.mediaDuration}s — Klik untuk ganti</p>
           </div>
@@ -764,7 +897,7 @@ const TikTokAdCreative: React.FC<{
     {/* Ad Text */}
     <div>
       <div className="flex items-center justify-between mb-1">
-        <label className="block text-xs font-bold text-slate-700">Teks Iklan (TikTok Caption)</label>
+        <label className="block text-xs font-bold text-slate-700">Teks Iklan</label>
         <span className={`text-[10px] font-mono ${form.adText.length > 100 ? 'text-rose-600' : 'text-slate-400'}`}>
           {form.adText.length}/100
         </span>
@@ -775,19 +908,19 @@ const TikTokAdCreative: React.FC<{
         rows={4}
         maxLength={100}
         placeholder="Tulis caption menarik untuk iklan TikTok Anda..."
-        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-black resize-none"
+        className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FE2C55] resize-none"
       />
     </div>
 
     {/* Landing page */}
     <div>
-      <label className="block text-xs font-bold text-slate-700 mb-1">Landing Page URL</label>
+      <label className="block text-xs font-bold text-slate-700 mb-1">URL Tujuan</label>
       <input
         type="url"
         value={form.landingPageUrl}
         onChange={(e) => setField('landingPageUrl', e.target.value)}
         placeholder="https://bejodigitalprint.com"
-        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-black"
+        className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FE2C55]"
       />
       <p className="text-[10px] text-slate-400 mt-1">
         Tujuan klik tombol CTA. Terisi otomatis dari APP_URL server; dapat diubah.
@@ -796,11 +929,11 @@ const TikTokAdCreative: React.FC<{
 
     {/* CTA */}
     <div>
-      <label className="block text-xs font-bold text-slate-700 mb-1">Call to Action (CTA)</label>
+      <label className="block text-xs font-bold text-slate-700 mb-1">Ajakan Bertindak (CTA)</label>
       <select
         value={form.cta}
         onChange={(e) => setField('cta', e.target.value as CTA)}
-        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-black"
+        className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#FE2C55]"
       >
         {Object.entries(CTA_LABELS).map(([k, v]) => (
           <option key={k} value={k}>{v}</option>
@@ -820,28 +953,50 @@ const TikTokPublishReview: React.FC<{
   onPublish: () => void;
 }> = ({ business, form, publishing, onPublish }) => (
   <div className="space-y-4">
-    <h2 className="text-base font-extrabold text-slate-900">5. Ringkasan & Terbitkan</h2>
+    <TikTokStepHeader
+      step={5}
+      title="Tinjau & terbitkan"
+      description="Periksa kembali kampanye sebelum dikirim ke TikTok Ads Manager."
+    />
 
-    <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3 text-xs">
-      <Row label="Akun Bisnis" value={business.connected ? business.tiktokAdsManagerId : 'Belum terhubung'} />
-      <Row label="Mode" value={business.simulated ? 'Simulasi (belum live)' : 'Live API TikTok'} />
-      <Row label="Nama Kampanye" value={form.name || '—'} />
-      <Row label="Tujuan" value={OBJECTIVE_LABELS[form.objective].label} />
-      <Row label="Anggaran Harian" value={`Rp ${form.dailyBudget.toLocaleString('id-ID')}`} />
-      <Row label="Lokasi" value={form.locations.join(', ') || '—'} />
-      <Row label="Usia" value={form.ageGroups.join(', ') || '—'} />
-      <Row label="Gender" value={form.gender === 'ALL' ? 'Semua' : form.gender === 'MALE' ? 'Laki-laki' : 'Perempuan'} />
-      <Row label="Minat" value={form.interests.join(', ') || '—'} />
-      <Row label="Landing Page" value={form.landingPageUrl || '—'} />
-      <Row label="Media" value={form.mediaFile ? `${form.mediaFile.name} (${form.mediaDuration}s)` : '—'} />
-      <Row label="CTA" value={CTA_LABELS[form.cta]} />
+    <div className="overflow-hidden rounded-lg border border-slate-200">
+      <div className="bg-slate-50 px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        Kampanye
+      </div>
+      <div className="space-y-2.5 p-3.5 text-xs">
+        <Row label="Akun Bisnis" value={business.connected ? business.tiktokAdsManagerId : 'Belum terhubung'} />
+        <Row label="Mode" value={business.simulated ? 'Simulasi (belum live)' : 'Live API TikTok'} />
+        <Row label="Nama Kampanye" value={form.name || '—'} />
+        <Row label="Tujuan" value={OBJECTIVE_LABELS[form.objective].label} />
+        <Row label="Anggaran Harian" value={`Rp ${form.dailyBudget.toLocaleString('id-ID')}`} />
+      </div>
+
+      <div className="border-t border-slate-200 bg-slate-50 px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        Grup Iklan
+      </div>
+      <div className="space-y-2.5 p-3.5 text-xs">
+        <Row label="Lokasi" value={form.locations.join(', ') || '—'} />
+        <Row label="Usia" value={form.ageGroups.join(', ') || '—'} />
+        <Row label="Gender" value={form.gender === 'ALL' ? 'Semua' : form.gender === 'MALE' ? 'Laki-laki' : 'Perempuan'} />
+        <Row label="Minat" value={form.interests.join(', ') || '—'} />
+        <Row label="Penempatan" value="In-Feed · For You & Friends Feed" />
+      </div>
+
+      <div className="border-t border-slate-200 bg-slate-50 px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        Iklan
+      </div>
+      <div className="space-y-2.5 p-3.5 text-xs">
+        <Row label="URL Tujuan" value={form.landingPageUrl || '—'} />
+        <Row label="Media" value={form.mediaFile ? `${form.mediaFile.name} (${form.mediaDuration}s)` : '—'} />
+        <Row label="CTA" value={CTA_LABELS[form.cta]} />
+      </div>
     </div>
 
     <button
       type="button"
       onClick={onPublish}
       disabled={publishing}
-      className="w-full py-3.5 bg-black hover:bg-slate-800 text-white font-black text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+      className="w-full py-3.5 bg-[#FE2C55] hover:bg-[#E0264C] text-white font-bold text-sm rounded-md shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
     >
       {publishing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
       {publishing ? 'Menerbitkan...' : 'Terbitkan Iklan TikTok Sekarang'}
@@ -857,63 +1012,138 @@ const Row: React.FC<{ label: string; value: string }> = ({ label, value }) => (
 );
 
 /* ------------------------------------------------------------------ */
-/* Live Ad Preview — TikTok FYP mockup                                */
+/* Live Ad Preview — TikTok In-Feed (FYP)                             */
 /* ------------------------------------------------------------------ */
-const TikTokLivePreview: React.FC<{ form: CampaignForm }> = ({ form }) => (
-  <div className="mx-auto w-[220px] h-[400px] bg-black rounded-[2rem] border-4 border-slate-800 relative overflow-hidden shadow-xl">
-    {/* Status bar */}
-    <div className="absolute top-0 left-0 right-0 h-6 bg-black/60 z-10 flex items-center justify-between px-3">
-      <span className="text-[8px] text-white font-bold">9:41</span>
-      <span className="text-[8px] text-white">●●●</span>
-    </div>
-    {/* Video */}
-    <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
-      {form.mediaPreviewUrl ? (
-        <video src={form.mediaPreviewUrl} className="w-full h-full object-cover" autoPlay muted loop />
-      ) : (
-        <div className="text-center text-slate-500">
-          <Video className="w-10 h-10 mx-auto mb-2 opacity-40" />
-          <p className="text-[10px]">Upload video 9:16</p>
+const TikTokLivePreview: React.FC<{ form: CampaignForm }> = ({ form }) => {
+  const [feed, setFeed] = useState<'following' | 'foryou'>('foryou');
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px]">
+        <span className="font-bold text-slate-700">In-Feed Ads</span>
+        <span className="text-slate-400">For You & Friends Feed · 9:16</span>
+      </div>
+
+      <div className="mx-auto w-full max-w-[300px] overflow-hidden rounded-xl border border-slate-200 bg-black shadow-lg">
+        <div className="relative aspect-[9/16]">
+          {/* Video */}
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-slate-800 via-slate-900 to-black">
+            {form.mediaPreviewUrl ? (
+              <video src={form.mediaPreviewUrl} className="h-full w-full object-cover" autoPlay muted loop playsInline />
+            ) : (
+              <div className="px-6 text-center">
+                <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-white/10">
+                  <Video className="h-6 w-6 text-white/60" />
+                </div>
+                <p className="text-[11px] font-semibold text-white/80">Video iklan 9:16</p>
+                <p className="mt-0.5 text-[9px] text-white/45">Unggah video di langkah Iklan</p>
+              </div>
+            )}
+          </div>
+
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/70 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
+
+          {/* Feed tabs */}
+          <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-center gap-4 pt-2.5 text-[11px] font-semibold">
+            <button
+              type="button"
+              onClick={() => setFeed('following')}
+              className={`relative pb-1.5 transition-colors cursor-pointer ${
+                feed === 'following' ? 'text-white' : 'text-white/55'
+              }`}
+            >
+              Mengikuti
+              {feed === 'following' && <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-white" />}
+            </button>
+            <span className="mb-1.5 h-3 w-px bg-white/25" />
+            <button
+              type="button"
+              onClick={() => setFeed('foryou')}
+              className={`relative pb-1.5 transition-colors cursor-pointer ${
+                feed === 'foryou' ? 'text-white' : 'text-white/55'
+              }`}
+            >
+              Untuk Kamu
+              {feed === 'foryou' && <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-white" />}
+            </button>
+            <Search className="absolute right-3 top-2.5 h-4 w-4 text-white" />
+          </div>
+
+          <div className="absolute left-2.5 top-12 z-20">
+            <span className="rounded bg-black/35 px-1.5 py-0.5 text-[8px] font-semibold text-white backdrop-blur-sm">
+              Disponsori
+            </span>
+          </div>
+
+          {/* Right action rail */}
+          <div className="absolute bottom-28 right-2 z-20 flex flex-col items-center gap-3 text-white">
+            <div className="relative mb-1">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-[#FE2C55] text-[10px] font-black">
+                BS
+              </div>
+              <span className="absolute -bottom-1 left-1/2 flex h-4 w-4 -translate-x-1/2 items-center justify-center rounded-full bg-[#FE2C55] text-white">
+                <Plus className="h-2.5 w-2.5" />
+              </span>
+            </div>
+            <div className="flex flex-col items-center">
+              <Heart className="h-6 w-6" fill="white" />
+              <span className="mt-0.5 text-[8px]">12.4K</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <MessageCircle className="h-6 w-6" fill="white" />
+              <span className="mt-0.5 text-[8px]">342</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <Bookmark className="h-6 w-6" fill="white" />
+              <span className="mt-0.5 text-[8px]">891</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <Share2 className="h-6 w-6" fill="white" />
+              <span className="mt-0.5 text-[8px]">56</span>
+            </div>
+            <div
+              className="mt-1 flex h-8 w-8 items-center justify-center rounded-full border-[6px] border-slate-800 bg-gradient-to-br from-pink-500 to-yellow-400 animate-spin"
+              style={{ animationDuration: '3s' }}
+            >
+              <Music2 className="h-2.5 w-2.5 text-white" />
+            </div>
+          </div>
+
+          {/* Caption & CTA */}
+          <div className="absolute inset-x-0 bottom-0 z-20 p-3 pr-14">
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] font-bold text-white">@bejostiker</span>
+              <BadgeCheck className="h-3 w-3 text-white" />
+              <span className="rounded bg-white/20 px-1 py-0.5 text-[7px] font-bold text-white">Iklan</span>
+            </div>
+            {form.adText ? (
+              <p className="mt-1 line-clamp-2 text-[10px] leading-snug text-white">{form.adText}</p>
+            ) : (
+              <p className="mt-1 text-[10px] italic text-white/45">Teks iklan akan tampil di sini</p>
+            )}
+            <div className="mt-1.5 flex items-center gap-1 text-[9px] text-white/85">
+              <Music2 className="h-3 w-3" />
+              <span className="truncate">Original sound · Bejo Stiker</span>
+            </div>
+            <button
+              type="button"
+              className="mt-2 inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1.5 text-[10px] font-bold text-black shadow-sm"
+            >
+              {CTA_LABELS[form.cta]}
+              <ChevronRight className="h-3 w-3" />
+            </button>
+          </div>
+
+          <div className="absolute inset-x-0 bottom-0 z-30 h-0.5 bg-white/25">
+            <div className="h-full w-1/3 bg-[#FE2C55]" />
+          </div>
         </div>
-      )}
-    </div>
-    {/* Gradient overlay bottom */}
-    <div className="absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-black/80 to-transparent z-10" />
-    {/* Right side icons */}
-    <div className="absolute right-2 bottom-24 z-20 flex flex-col items-center gap-3">
-      <div className="flex flex-col items-center">
-        <Heart className="w-6 h-6 text-white" />
-        <span className="text-[8px] text-white mt-0.5">12.4K</span>
       </div>
-      <div className="flex flex-col items-center">
-        <MessageCircle className="w-6 h-6 text-white" />
-        <span className="text-[8px] text-white mt-0.5">342</span>
-      </div>
-      <div className="flex flex-col items-center">
-        <Bookmark className="w-6 h-6 text-white" />
-        <span className="text-[8px] text-white mt-0.5">891</span>
-      </div>
-      <div className="flex flex-col items-center">
-        <Share2 className="w-6 h-6 text-white" />
-        <span className="text-[8px] text-white mt-0.5">56</span>
-      </div>
+
+      <p className="text-center text-[9px] text-slate-400">
+        Pratinjau TikTok In-Feed · video 9:16 · tanpa frame perangkat
+      </p>
     </div>
-    {/* Caption & CTA */}
-    <div className="absolute bottom-3 left-3 right-12 z-20 space-y-2">
-      {form.adText && (
-        <p className="text-[10px] text-white font-medium line-clamp-2 drop-shadow">{form.adText}</p>
-      )}
-      <button className="bg-white text-black text-[10px] font-bold py-1.5 px-3 rounded-full">
-        {CTA_LABELS[form.cta]}
-      </button>
-    </div>
-    {/* Sponsored label */}
-    <div className="absolute top-8 left-3 z-20">
-      <span className="text-[8px] text-white/80 bg-black/40 px-2 py-0.5 rounded-full">Disponsori</span>
-    </div>
-    {/* Music disc */}
-    <div className="absolute bottom-3 right-2 z-20">
-      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-yellow-400 border-2 border-white animate-spin" style={{ animationDuration: '3s' }} />
-    </div>
-  </div>
-);
+  );
+};

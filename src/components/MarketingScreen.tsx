@@ -21,15 +21,19 @@ import {
   Users,
   Tag,
   Eye,
-  Smartphone,
   ChevronRight,
   ChevronLeft,
   Send,
   Link2,
   Globe,
-  BarChart3,
-  RefreshCw,
   X,
+  Facebook,
+  Instagram,
+  MoreHorizontal,
+  Camera,
+  Heart,
+  Bookmark,
+  Check,
 } from 'lucide-react';
 
 import { TikTokInFeedAds } from './marketing/TikTokInFeedAds';
@@ -95,13 +99,42 @@ const CTA_LABELS: Record<CTA, string> = {
   SIGN_UP: 'Daftar Sekarang',
 };
 
+const META_STEPS = [
+  { n: 1, label: 'Akun & Aset' },
+  { n: 2, label: 'Kampanye' },
+  { n: 3, label: 'Grup Iklan' },
+  { n: 4, label: 'Iklan' },
+  { n: 5, label: 'Tinjau' },
+];
+
 /* ------------------------------------------------------------------ */
 /* Sub-menu definitions                                               */
 /* ------------------------------------------------------------------ */
 const SUB_MENUS = [
-  { id: 'whatsapp-status-ads', label: 'WhatsApp Status Ads', icon: MessageCircle },
-  { id: 'tiktok-infeed-ads', label: 'TikTok In-Feed Ads', icon: Music2 },
-  { id: 'shopee-discovery-ads', label: 'Shopee Discovery Ads', icon: ShoppingBag },
+  {
+    id: 'whatsapp-status-ads',
+    label: 'WhatsApp Status Ads',
+    subtitle: 'Meta · Status & Stories',
+    icon: MessageCircle,
+    activeClass: 'border-[#128C7E] bg-[#128C7E]',
+    iconClass: 'bg-[#25D366] text-white',
+  },
+  {
+    id: 'tiktok-infeed-ads',
+    label: 'TikTok In-Feed Ads',
+    subtitle: 'TikTok Ads Manager · FYP',
+    icon: Music2,
+    activeClass: 'border-[#111111] bg-[#111111]',
+    iconClass: 'bg-[#FE2C55] text-white',
+  },
+  {
+    id: 'shopee-discovery-ads',
+    label: 'Shopee Discovery Ads',
+    subtitle: 'Shopee Ads · Discovery',
+    icon: ShoppingBag,
+    activeClass: 'border-[#EE4D2D] bg-[#EE4D2D]',
+    iconClass: 'bg-[#EE4D2D] text-white',
+  },
 ];
 
 interface ChannelStatus {
@@ -154,27 +187,40 @@ export const MarketingScreen: React.FC = () => {
     : [];
 
   return (
-    <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 py-6 space-y-6">
+    <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 py-6 space-y-5">
       {/* Header */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-xs">
-            <Megaphone className="w-7 h-7" />
+          <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center text-white shadow-xs">
+            <Megaphone className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
-              Marketing — Iklan Multi-Kanal
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
+                Marketing
+              </h1>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Pusat Iklan
+              </span>
+            </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Kelola iklan resmi WhatsApp Status (Meta), TikTok In-Feed, dan Shopee Discovery Ads.
+              Kelola iklan WhatsApp Status (Meta), TikTok In-Feed, dan Shopee Discovery Ads.
             </p>
           </div>
+        </div>
+        <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500">
+          <span className={`w-2 h-2 rounded-full ${status && simulationChannels.length === 0 ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+          {status
+            ? simulationChannels.length === 0
+              ? 'Semua kanal API aktif'
+              : `${simulationChannels.length} kanal dalam mode simulasi`
+            : 'Memeriksa koneksi API...'}
         </div>
       </div>
 
       {/* Integration status */}
       {status && simulationChannels.length > 0 && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 flex items-start gap-3">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
           <div className="space-y-1">
             <p className="font-bold">Mode simulasi aktif: {simulationChannels.join(', ')}.</p>
@@ -186,35 +232,58 @@ export const MarketingScreen: React.FC = () => {
           </div>
         </div>
       )}
-      {status && simulationChannels.length === 0 && (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800 flex items-center gap-3">
-          <CheckCircle2 className="w-5 h-5 shrink-0" />
-          <p className="font-semibold">
-            Semua kanal API (Meta, TikTok, Shopee) terkonfigurasi dan siap menerbitkan iklan live.
-          </p>
-        </div>
-      )}
 
-      {/* Sub-menu tabs */}
-      <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200 self-start w-fit">
-        {SUB_MENUS.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            onClick={() => setActiveSubMenu(m.id)}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-              activeSubMenu === m.id
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-            }`}
-          >
-            <m.icon className="w-4 h-4" />
-            {m.label}
-            {status && !channelOf(m.id)?.configured && (
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Mode simulasi" />
-            )}
-          </button>
-        ))}
+      {/* Platform selector — each tab uses the native brand identity */}
+      <div>
+        <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+          Pilih platform iklan
+        </p>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          {SUB_MENUS.map((m) => {
+            const channel = channelOf(m.id);
+            const active = activeSubMenu === m.id;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setActiveSubMenu(m.id)}
+                className={`flex items-center gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
+                  active
+                    ? `${m.activeClass} text-white shadow-md`
+                    : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:shadow-xs'
+                }`}
+              >
+                <div
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+                    active ? 'bg-white/15 text-white' : m.iconClass
+                  }`}
+                >
+                  <m.icon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold">{m.label}</p>
+                  <p className={`mt-0.5 truncate text-[10px] ${active ? 'text-white/70' : 'text-slate-500'}`}>
+                    {m.subtitle}
+                  </p>
+                </div>
+                {channel && (
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${
+                      active
+                        ? 'bg-white/15 text-white'
+                        : channel.configured
+                        ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border border-amber-200 bg-amber-50 text-amber-700'
+                    }`}
+                  >
+                    {channel.configured ? 'LIVE' : 'SIMULASI'}
+                  </span>
+                )}
+                <ChevronRight className={`h-4 w-4 shrink-0 ${active ? 'text-white/60' : 'text-slate-300'}`} />
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {activeSubMenu === 'whatsapp-status-ads' && <WhatsAppStatusAds />}
@@ -424,45 +493,10 @@ const WhatsAppStatusAds: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Stepper */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-        <div className="flex items-center justify-between gap-2 overflow-x-auto">
-          {[
-            { n: 1, label: 'Akun Bisnis' },
-            { n: 2, label: 'Kampanye' },
-            { n: 3, label: 'Target & Penempatan' },
-            { n: 4, label: 'Materi Iklan' },
-            { n: 5, label: 'Terbitkan' },
-          ].map((s, idx) => (
-            <React.Fragment key={s.n}>
-              <button
-                type="button"
-                onClick={() => s.n < step && setStep(s.n)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  step === s.n
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : step > s.n
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                    : 'bg-slate-100 text-slate-400'
-                }`}
-              >
-                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${
-                  step === s.n ? 'bg-white/20' : step > s.n ? 'bg-emerald-200' : 'bg-slate-200'
-                }`}>
-                  {step > s.n ? <CheckCircle2 className="w-3.5 h-3.5" /> : s.n}
-                </span>
-                {s.label}
-              </button>
-              {idx < 4 && <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />}
-            </React.Fragment>
-          ))}
-        </div>
-      </div>
-
+    <div className="space-y-4">
       {/* Toast */}
       {publishStatus !== 'idle' && (
-        <div className={`rounded-xl px-4 py-3 text-sm font-semibold flex items-center gap-2 ${
+        <div className={`rounded-lg px-4 py-3 text-sm font-semibold flex items-center gap-2 ${
           publishStatus === 'success'
             ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
             : 'bg-rose-50 border border-rose-200 text-rose-800'
@@ -475,83 +509,157 @@ const WhatsAppStatusAds: React.FC = () => {
         </div>
       )}
 
-      {/* Step content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Form panel */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-5">
-          {step === 1 && (
-            <BusinessAccountSetup
-              business={business}
-              connecting={connecting}
-              connectError={connectError}
-              onConnect={handleConnectFacebook}
-              onChange={(key, value) => setBusiness((prev) => ({ ...prev, [key]: value, connected: false }))}
-            />
-          )}
-          {step === 2 && (
-            <CampaignSetup form={form} setField={setField} />
-          )}
-          {step === 3 && (
-            <TargetingPlacement
-              form={form}
-              setField={setField}
-              locationInput={locationInput}
-              setLocationInput={setLocationInput}
-              addLocation={addLocation}
-              removeLocation={removeLocation}
-              interestInput={interestInput}
-              setInterestInput={setInterestInput}
-              addInterest={addInterest}
-              removeInterest={removeInterest}
-            />
-          )}
-          {step === 4 && (
-            <AdCreative
-              form={form}
-              setField={setField}
-              onMediaChange={handleMediaChange}
-            />
-          )}
-          {step === 5 && (
-            <PublishReview
-              business={business}
-              form={form}
-              publishing={publishing}
-              onPublish={handlePublish}
-            />
-          )}
-        </div>
-
-        {/* Live Ad Preview */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
-          <div className="flex items-center gap-2 mb-3">
-            <Smartphone className="w-4 h-4 text-slate-500" />
-            <h3 className="text-sm font-bold text-slate-900">Pratinjau Iklan</h3>
+      {/* Meta Ads Manager shell */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-[#F0F2F5] shadow-xs">
+        <div className="bg-[#1877F2] px-4 py-3 text-white">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15">
+                <Facebook className="h-4 w-4" />
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-sm font-bold">Meta Ads Manager</span>
+                <span className="hidden text-[11px] text-white/50 sm:inline">|</span>
+                <span className="hidden text-[11px] text-white/80 sm:inline">WhatsApp Status Ads</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-[10px]">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 font-semibold">
+                <span className={`h-1.5 w-1.5 rounded-full ${business.connected ? 'bg-emerald-300' : 'bg-white/50'}`} />
+                {business.connected
+                  ? business.simulated
+                    ? 'Akun terhubung · simulasi'
+                    : 'Akun terhubung'
+                  : 'Belum terhubung'}
+              </span>
+              <span className="rounded-full bg-white/15 px-2.5 py-1 font-semibold">Draf</span>
+            </div>
           </div>
-          <LiveAdPreview form={form} />
         </div>
-      </div>
 
-      {/* Navigation buttons */}
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => setStep((s) => Math.max(1, s - 1))}
-          disabled={step === 1}
-          className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2 cursor-pointer"
-        >
-          <ChevronLeft className="w-4 h-4" /> Sebelumnya
-        </button>
-        {step < 5 && (
+        {/* Native step tabs */}
+        <div className="border-b border-slate-200 bg-white px-1 sm:px-3">
+          <div className="flex items-center gap-1 overflow-x-auto">
+            {META_STEPS.map((s) => {
+              const active = step === s.n;
+              const done = step > s.n;
+              return (
+                <button
+                  key={s.n}
+                  type="button"
+                  onClick={() => done && setStep(s.n)}
+                  disabled={s.n > step}
+                  className={`relative flex shrink-0 items-center gap-2 px-3 py-3 text-xs font-bold transition-colors ${
+                    active
+                      ? 'text-[#1877F2]'
+                      : done
+                      ? 'cursor-pointer text-slate-700 hover:text-[#1877F2]'
+                      : 'cursor-not-allowed text-slate-400'
+                  }`}
+                >
+                  <span
+                    className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black ${
+                      active
+                        ? 'bg-[#1877F2] text-white'
+                        : done
+                        ? 'bg-[#E7F0FD] text-[#1877F2]'
+                        : 'bg-slate-100 text-slate-400'
+                    }`}
+                  >
+                    {done ? <Check className="h-3 w-3" /> : s.n}
+                  </span>
+                  {s.label}
+                  {active && <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[#1877F2]" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Native two-column workspace */}
+        <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+            {step === 1 && (
+              <BusinessAccountSetup
+                business={business}
+                connecting={connecting}
+                connectError={connectError}
+                onConnect={handleConnectFacebook}
+                onChange={(key, value) => setBusiness((prev) => ({ ...prev, [key]: value, connected: false }))}
+              />
+            )}
+            {step === 2 && (
+              <CampaignSetup form={form} setField={setField} />
+            )}
+            {step === 3 && (
+              <TargetingPlacement
+                form={form}
+                setField={setField}
+                locationInput={locationInput}
+                setLocationInput={setLocationInput}
+                addLocation={addLocation}
+                removeLocation={removeLocation}
+                interestInput={interestInput}
+                setInterestInput={setInterestInput}
+                addInterest={addInterest}
+                removeInterest={removeInterest}
+              />
+            )}
+            {step === 4 && (
+              <AdCreative
+                form={form}
+                setField={setField}
+                onMediaChange={handleMediaChange}
+              />
+            )}
+            {step === 5 && (
+              <PublishReview
+                business={business}
+                form={form}
+                publishing={publishing}
+                onPublish={handlePublish}
+              />
+            )}
+          </div>
+
+          <div className="h-fit rounded-lg border border-slate-200 bg-white p-4 lg:sticky lg:top-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Eye className="h-4 w-4 text-slate-500" />
+                <h3 className="text-sm font-bold text-slate-900">Pratinjau iklan</h3>
+              </div>
+              <span className="rounded bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-500">9:16</span>
+            </div>
+            <LiveAdPreview form={form} />
+          </div>
+        </div>
+
+        {/* Manager footer */}
+        <div className="flex items-center justify-between border-t border-slate-200 bg-white px-4 py-3">
           <button
             type="button"
-            onClick={() => setStep((s) => Math.min(5, s + 1))}
-            disabled={!canGoNext()}
-            className="px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2 cursor-pointer"
+            onClick={() => setStep((s) => Math.max(1, s - 1))}
+            disabled={step === 1}
+            className="px-3.5 py-2 rounded-md text-xs font-bold bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2 cursor-pointer"
           >
-            Lanjut <ChevronRight className="w-4 h-4" />
+            <ChevronLeft className="w-4 h-4" /> Sebelumnya
           </button>
-        )}
+          <div className="flex items-center gap-3">
+            <span className="hidden text-[10px] text-slate-400 sm:block">
+              Langkah {step} dari {totalSteps}
+            </span>
+            {step < 5 && (
+              <button
+                type="button"
+                onClick={() => setStep((s) => Math.min(5, s + 1))}
+                disabled={!canGoNext()}
+                className="px-3.5 py-2 rounded-md text-xs font-bold bg-[#1877F2] text-white hover:bg-[#166FE5] disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2 cursor-pointer"
+              >
+                Lanjut <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -560,6 +668,20 @@ const WhatsAppStatusAds: React.FC = () => {
 /* ------------------------------------------------------------------ */
 /* Step 1: Business Account Setup                                     */
 /* ------------------------------------------------------------------ */
+const MetaStepHeader: React.FC<{ step: number; title: string; description: string }> = ({
+  step,
+  title,
+  description,
+}) => (
+  <div className="border-b border-slate-100 pb-3">
+    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1877F2]">
+      Langkah {step} dari 5
+    </p>
+    <h2 className="mt-1 text-lg font-bold text-slate-900">{title}</h2>
+    <p className="mt-0.5 text-xs text-slate-500">{description}</p>
+  </div>
+);
+
 const BusinessAccountSetup: React.FC<{
   business: BusinessAccount;
   connecting: boolean;
@@ -568,10 +690,19 @@ const BusinessAccountSetup: React.FC<{
   onChange: (key: keyof BusinessAccount, value: string) => void;
 }> = ({ business, connecting, connectError, onConnect, onChange }) => (
   <div className="space-y-4">
-    <h2 className="text-base font-extrabold text-slate-900">1. Persiapan Akun Bisnis</h2>
-    <p className="text-xs text-slate-500">
-      Isi data akun bisnis Meta Anda secara manual, lalu klik "Verifikasi & Hubungkan" untuk mengecek koneksi ke Meta.
-    </p>
+    <MetaStepHeader
+      step={1}
+      title="Akun & Aset"
+      description="Hubungkan aset Meta yang akan menayangkan iklan WhatsApp Status dan Instagram Stories."
+    />
+
+    <div className="flex items-start gap-2.5 rounded-lg border border-[#1877F2]/20 bg-[#F5F9FF] px-3.5 py-3">
+      <Facebook className="mt-0.5 h-4 w-4 shrink-0 text-[#1877F2]" />
+      <div className="text-[11px] leading-relaxed text-slate-600">
+        <p className="font-bold text-slate-800">Aset iklan Meta</p>
+        <p>Kredensial diverifikasi di server sebelum kampanye dibuat. Tidak ada token yang dikirim dari browser.</p>
+      </div>
+    </div>
 
     <div className="grid grid-cols-1 gap-3">
       <div>
@@ -581,7 +712,7 @@ const BusinessAccountSetup: React.FC<{
           value={business.metaBusinessId}
           onChange={(e) => onChange('metaBusinessId', e.target.value)}
           placeholder="Contoh: 123456789012345"
-          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1877F2]"
         />
       </div>
       <div>
@@ -591,7 +722,7 @@ const BusinessAccountSetup: React.FC<{
           value={business.facebookPageId}
           onChange={(e) => onChange('facebookPageId', e.target.value)}
           placeholder="Contoh: 987654321098765"
-          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1877F2]"
         />
       </div>
       <div>
@@ -601,7 +732,7 @@ const BusinessAccountSetup: React.FC<{
           value={business.whatsappBusinessNumber}
           onChange={(e) => onChange('whatsappBusinessNumber', e.target.value)}
           placeholder="Contoh: 6281234567890"
-          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1877F2]"
         />
       </div>
     </div>
@@ -616,21 +747,21 @@ const BusinessAccountSetup: React.FC<{
       type="button"
       onClick={onConnect}
       disabled={connecting || !business.metaBusinessId || !business.facebookPageId || !business.whatsappBusinessNumber}
-      className="w-full py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+      className="w-full py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white font-bold text-xs rounded-md shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
     >
       {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
       {business.connected ? 'Terhubung ✓' : connecting ? 'Memverifikasi...' : 'Verifikasi & Hubungkan ke Meta'}
     </button>
 
     {connectError && (
-      <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 flex items-center gap-2">
+      <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 flex items-center gap-2">
         <AlertCircle className="w-4 h-4" /> {connectError}
       </div>
     )}
 
     {business.connected && (
       <div
-        className={`text-xs rounded-xl px-3 py-2 flex items-center gap-2 ${
+        className={`text-xs rounded-lg px-3 py-2 flex items-center gap-2 ${
           business.simulated
             ? 'text-amber-800 bg-amber-50 border border-amber-200'
             : 'text-emerald-700 bg-emerald-50 border border-emerald-200'
@@ -646,7 +777,7 @@ const BusinessAccountSetup: React.FC<{
 );
 
 const StatusCard: React.FC<{ label: string; value: string; connected: boolean }> = ({ label, value, connected }) => (
-  <div className={`rounded-xl border p-3 ${connected ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
+  <div className={`rounded-lg border p-3 ${connected ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
     <div className="flex items-center gap-2 mb-1">
       <span className={`w-2 h-2 rounded-full ${connected ? 'bg-emerald-500' : 'bg-slate-300'}`} />
       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
@@ -663,7 +794,11 @@ const CampaignSetup: React.FC<{
   setField: <K extends keyof CampaignForm>(key: K, value: CampaignForm[K]) => void;
 }> = ({ form, setField }) => (
   <div className="space-y-4">
-    <h2 className="text-base font-extrabold text-slate-900">2. Setup Kampanye</h2>
+    <MetaStepHeader
+      step={2}
+      title="Kampanye"
+      description="Tentukan tujuan dan anggaran kampanye WhatsApp Status Ads."
+    />
 
     <div>
       <label className="block text-xs font-bold text-slate-700 mb-1">Nama Kampanye</label>
@@ -672,7 +807,7 @@ const CampaignSetup: React.FC<{
         value={form.name}
         onChange={(e) => setField('name', e.target.value)}
         placeholder="Contoh: Promo Stiker Wrapping Ramadan"
-        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1877F2]"
       />
     </div>
 
@@ -680,35 +815,38 @@ const CampaignSetup: React.FC<{
       <label className="block text-xs font-bold text-slate-700 mb-2">Tujuan Kampanye</label>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {([
-          { value: 'AWARENESS' as CampaignObjective, label: 'Kesadaran Merek', desc: 'Meningkatkan awareness brand Anda' },
-          { value: 'SALES' as CampaignObjective, label: 'Penjualan / Pesan Masuk', desc: 'Mendorong chat & pembelian' },
+          { value: 'AWARENESS' as CampaignObjective, label: 'Kesadaran Merek', desc: 'Menjangkau lebih banyak orang di sekitar toko', icon: Target },
+          { value: 'SALES' as CampaignObjective, label: 'Penjualan / Pesan Masuk', desc: 'Mendorong chat dan pembelian via WhatsApp', icon: MessageCircle },
         ]).map((opt) => (
           <button
             key={opt.value}
             type="button"
             onClick={() => setField('objective', opt.value)}
-            className={`text-left rounded-xl border p-4 transition-all cursor-pointer ${
+            className={`text-left rounded-lg border p-4 transition-all cursor-pointer ${
               form.objective === opt.value
-                ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-200'
+                ? 'border-[#1877F2] bg-[#F5F9FF] ring-2 ring-[#1877F2]/20'
                 : 'border-slate-200 bg-white hover:border-slate-300'
             }`}
           >
             <div className="flex items-center gap-2 mb-1">
-              <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                form.objective === opt.value ? 'border-emerald-500' : 'border-slate-300'
+              <span className={`flex h-7 w-7 items-center justify-center rounded-full ${
+                form.objective === opt.value ? 'bg-[#1877F2] text-white' : 'bg-slate-100 text-slate-500'
               }`}>
-                {form.objective === opt.value && <span className="w-2 h-2 rounded-full bg-emerald-500" />}
+                <opt.icon className="h-3.5 w-3.5" />
               </span>
               <span className="text-sm font-bold text-slate-900">{opt.label}</span>
             </div>
-            <p className="text-[11px] text-slate-500 ml-6">{opt.desc}</p>
+            <p className="text-[11px] text-slate-500 ml-9">{opt.desc}</p>
           </button>
         ))}
       </div>
     </div>
 
-    <div>
-      <label className="block text-xs font-bold text-slate-700 mb-1">Anggaran Harian (Rp)</label>
+    <div className="rounded-lg border border-slate-200 p-3.5">
+      <div className="mb-3 flex items-center justify-between">
+        <label className="text-xs font-bold text-slate-700">Anggaran Harian</label>
+        <span className="text-[10px] text-slate-400">Minimum Rp 10.000</span>
+      </div>
       <div className="relative">
         <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">Rp</span>
         <input
@@ -716,10 +854,12 @@ const CampaignSetup: React.FC<{
           value={form.dailyBudget}
           onChange={(e) => setField('dailyBudget', Number(e.target.value))}
           min={10000}
-          className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className="w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#1877F2]"
         />
       </div>
-      <p className="text-[10px] text-slate-400 mt-1">Minimum Rp 10.000 / hari</p>
+      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-slate-400">
+        <DollarSign className="h-3 w-3" /> Anggaran dihentikan otomatis saat batas harian tercapai.
+      </div>
     </div>
   </div>
 );
@@ -740,112 +880,138 @@ const TargetingPlacement: React.FC<{
   removeInterest: (v: string) => void;
 }> = ({ form, setField, locationInput, setLocationInput, addLocation, removeLocation, interestInput, setInterestInput, addInterest, removeInterest }) => (
   <div className="space-y-4">
-    <h2 className="text-base font-extrabold text-slate-900">3. Target & Penempatan</h2>
+    <MetaStepHeader
+      step={3}
+      title="Grup Iklan"
+      description="Tentukan siapa yang melihat iklan dan di mana iklan ditayangkan."
+    />
 
-    {/* Locations */}
-    <div>
-      <label className="block text-xs font-bold text-slate-700 mb-1">Lokasi Target</label>
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={locationInput}
-          onChange={(e) => setLocationInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLocation())}
-          placeholder="Ketik kota/kabupaten, Enter untuk tambah"
-          className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        />
-        <button type="button" onClick={addLocation} className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 cursor-pointer">
-          Tambah
-        </button>
+    <div className="space-y-3">
+      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+        <Users className="h-3.5 w-3.5 text-[#1877F2]" /> Audiens
       </div>
-      {form.locations.length > 0 && (
-        <div className="flex flex-wrap gap-2 mt-2">
-          {form.locations.map((loc) => (
-            <span key={loc} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-3 py-1 text-xs font-semibold">
-              <MapPin className="w-3 h-3" /> {loc}
-              <button type="button" onClick={() => removeLocation(loc)} className="ml-1 hover:text-rose-600 cursor-pointer"><X className="w-3 h-3" /></button>
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
 
-    {/* Age range */}
-    <div>
-      <label className="block text-xs font-bold text-slate-700 mb-1">
-        Rentang Usia: {form.ageMin} — {form.ageMax} tahun
-      </label>
-      <div className="flex gap-4">
-        <input
-          type="range"
-          min={18}
-          max={65}
-          value={form.ageMin}
-          onChange={(e) => setField('ageMin', Math.min(Number(e.target.value), form.ageMax - 1))}
-          className="flex-1 accent-emerald-600"
-        />
-        <input
-          type="range"
-          min={18}
-          max={65}
-          value={form.ageMax}
-          onChange={(e) => setField('ageMax', Math.max(Number(e.target.value), form.ageMin + 1))}
-          className="flex-1 accent-emerald-600"
-        />
-      </div>
-    </div>
-
-    {/* Gender */}
-    <div>
-      <label className="block text-xs font-bold text-slate-700 mb-1">Jenis Kelamin</label>
-      <select
-        value={form.gender}
-        onChange={(e) => setField('gender', e.target.value as Gender)}
-        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-      >
-        <option value="ALL">Semua</option>
-        <option value="MALE">Laki-laki</option>
-        <option value="FEMALE">Perempuan</option>
-      </select>
-    </div>
-
-    {/* Interests */}
-    <div>
-      <label className="block text-xs font-bold text-slate-700 mb-1">Minat / Interest</label>
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={interestInput}
-          onChange={(e) => setInterestInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addInterest())}
-          placeholder="Contoh: stiker, digital printing, branding"
-          className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        />
-        <button type="button" onClick={addInterest} className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 cursor-pointer">
-          Tambah
-        </button>
-      </div>
-      {form.interests.length > 0 && (
-        <div className="flex flex-wrap gap-2 mt-2">
-          {form.interests.map((tag) => (
-            <span key={tag} className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-3 py-1 text-xs font-semibold">
-              <Tag className="w-3 h-3" /> {tag}
-              <button type="button" onClick={() => removeInterest(tag)} className="ml-1 hover:text-rose-600 cursor-pointer"><X className="w-3 h-3" /></button>
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-
-    {/* Placement info */}
-    <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-800 flex items-start gap-2">
-      <Globe className="w-4 h-4 shrink-0 mt-0.5" />
       <div>
-        <p className="font-bold">Penempatan WhatsApp Status + Instagram Stories</p>
-        <p className="text-[11px] text-blue-700 mt-0.5">
-          Meta mewajibkan Instagram Stories berpasangan dengan WhatsApp Status; keduanya memakai media vertikal 9:16 di perangkat mobile.
-        </p>
+        <label className="block text-xs font-bold text-slate-700 mb-1">Lokasi Target</label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={locationInput}
+            onChange={(e) => setLocationInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLocation())}
+            placeholder="Ketik kota/kabupaten, Enter untuk tambah"
+            className="flex-1 rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1877F2]"
+          />
+          <button type="button" onClick={addLocation} className="px-4 py-2.5 bg-[#1877F2] text-white rounded-md text-xs font-bold hover:bg-[#166FE5] cursor-pointer">
+            Tambah
+          </button>
+        </div>
+        {form.locations.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {form.locations.map((loc) => (
+              <span key={loc} className="inline-flex items-center gap-1 bg-[#F5F9FF] text-[#1877F2] border border-[#1877F2]/20 rounded-full px-3 py-1 text-xs font-semibold">
+                <MapPin className="w-3 h-3" /> {loc}
+                <button type="button" onClick={() => removeLocation(loc)} className="ml-1 hover:text-rose-600 cursor-pointer"><X className="w-3 h-3" /></button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
+
+      <div>
+        <label className="block text-xs font-bold text-slate-700 mb-1">
+          Rentang Usia: {form.ageMin} — {form.ageMax} tahun
+        </label>
+        <div className="flex gap-4">
+          <input
+            type="range"
+            min={18}
+            max={65}
+            value={form.ageMin}
+            onChange={(e) => setField('ageMin', Math.min(Number(e.target.value), form.ageMax - 1))}
+            className="flex-1 accent-[#1877F2]"
+          />
+          <input
+            type="range"
+            min={18}
+            max={65}
+            value={form.ageMax}
+            onChange={(e) => setField('ageMax', Math.max(Number(e.target.value), form.ageMin + 1))}
+            className="flex-1 accent-[#1877F2]"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-bold text-slate-700 mb-1">Jenis Kelamin</label>
+        <select
+          value={form.gender}
+          onChange={(e) => setField('gender', e.target.value as Gender)}
+          className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#1877F2]"
+        >
+          <option value="ALL">Semua</option>
+          <option value="MALE">Laki-laki</option>
+          <option value="FEMALE">Perempuan</option>
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-xs font-bold text-slate-700 mb-1">Minat / Interest</label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={interestInput}
+            onChange={(e) => setInterestInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addInterest())}
+            placeholder="Contoh: stiker, digital printing, branding"
+            className="flex-1 rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1877F2]"
+          />
+          <button type="button" onClick={addInterest} className="px-4 py-2.5 bg-[#1877F2] text-white rounded-md text-xs font-bold hover:bg-[#166FE5] cursor-pointer">
+            Tambah
+          </button>
+        </div>
+        {form.interests.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {form.interests.map((tag) => (
+              <span key={tag} className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-3 py-1 text-xs font-semibold">
+                <Tag className="w-3 h-3" /> {tag}
+                <button type="button" onClick={() => removeInterest(tag)} className="ml-1 hover:text-rose-600 cursor-pointer"><X className="w-3 h-3" /></button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+
+    <div>
+      <div className="mb-2 flex items-center gap-1.5 text-xs font-bold text-slate-800">
+        <Globe className="h-3.5 w-3.5 text-[#1877F2]" /> Penempatan
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="flex items-center gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#25D366] text-white">
+            <MessageCircle className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold text-slate-800">WhatsApp Status</p>
+            <p className="text-[10px] text-emerald-700">Aktif · 9:16</p>
+          </div>
+          <Check className="h-4 w-4 text-emerald-600" />
+        </div>
+        <div className="flex items-center gap-2.5 rounded-lg border border-pink-200 bg-pink-50 p-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-tr from-[#FEDA75] via-[#D62976] to-[#962FBF] text-white">
+            <Instagram className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold text-slate-800">Instagram Stories</p>
+            <p className="text-[10px] text-pink-700">Aktif · 9:16</p>
+          </div>
+          <Check className="h-4 w-4 text-pink-600" />
+        </div>
+      </div>
+      <p className="mt-2 text-[10px] text-slate-400">
+        Placements dikelola otomatis oleh Meta: WhatsApp Status selalu berpasangan dengan Instagram Stories.
+      </p>
     </div>
   </div>
 );
@@ -859,16 +1025,35 @@ const AdCreative: React.FC<{
   onMediaChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }> = ({ form, setField, onMediaChange }) => (
   <div className="space-y-4">
-    <h2 className="text-base font-extrabold text-slate-900">4. Materi Iklan & Pratinjau</h2>
+    <MetaStepHeader
+      step={4}
+      title="Iklan"
+      description="Materi iklan akan tampil full-screen di WhatsApp Status dan Instagram Stories."
+    />
+
+    <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-center">
+      <div>
+        <p className="text-[10px] font-bold text-slate-800">9:16</p>
+        <p className="text-[9px] text-slate-400">Rasio vertikal</p>
+      </div>
+      <div className="border-x border-slate-200">
+        <p className="text-[10px] font-bold text-slate-800">1 media</p>
+        <p className="text-[9px] text-slate-400">Foto atau video</p>
+      </div>
+      <div>
+        <p className="text-[10px] font-bold text-slate-800">CTA</p>
+        <p className="text-[9px] text-slate-400">Kirim pesan</p>
+      </div>
+    </div>
 
     {/* Drop zone */}
     <div>
-      <label className="block text-xs font-bold text-slate-700 mb-1">Media (Foto/Video 9:16)</label>
-      <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 cursor-pointer transition-all">
+      <label className="block text-xs font-bold text-slate-700 mb-1">Media Iklan (Foto/Video 9:16)</label>
+      <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-slate-300 rounded-lg bg-slate-50 hover:bg-[#F5F9FF] hover:border-[#1877F2]/50 cursor-pointer transition-all">
         <input type="file" accept="image/*,video/*" onChange={onMediaChange} className="hidden" />
         {form.mediaFile ? (
           <div className="text-center">
-            {form.mediaType === 'image' ? <ImageIcon className="w-8 h-8 text-emerald-600 mx-auto mb-2" /> : <Video className="w-8 h-8 text-emerald-600 mx-auto mb-2" />}
+            {form.mediaType === 'image' ? <ImageIcon className="w-8 h-8 text-[#1877F2] mx-auto mb-2" /> : <Video className="w-8 h-8 text-[#1877F2] mx-auto mb-2" />}
             <p className="text-xs font-semibold text-slate-700">{form.mediaFile.name}</p>
             <p className="text-[10px] text-slate-400 mt-1">Klik untuk ganti media</p>
           </div>
@@ -884,24 +1069,27 @@ const AdCreative: React.FC<{
 
     {/* Caption */}
     <div>
-      <label className="block text-xs font-bold text-slate-700 mb-1">Caption / Teks Promosi (Hook)</label>
+      <div className="mb-1 flex items-center justify-between">
+        <label className="block text-xs font-bold text-slate-700">Teks Iklan / Caption</label>
+        <span className="text-[10px] font-mono text-slate-400">{form.caption.length}</span>
+      </div>
       <textarea
         value={form.caption}
         onChange={(e) => setField('caption', e.target.value)}
         rows={4}
         placeholder="Tulis caption menarik untuk iklan Anda..."
-        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+        className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1877F2] resize-none"
       />
     </div>
 
     {/* CTA */}
-    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800 flex items-start gap-2">
+    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800 flex items-start gap-2">
       <MessageCircle className="w-4 h-4 shrink-0 mt-0.5" />
       <div>
         <p className="font-bold">Tombol: Kirim Pesan WhatsApp</p>
         <p className="text-[11px] text-emerald-700 mt-0.5">
           WhatsApp Status Ads selalu mengarahkan klik ke chat WhatsApp Business. Nomor tujuan diambil dari
-          akun bisnis pada Step 1.
+          akun bisnis pada langkah Akun & Aset.
         </p>
       </div>
     </div>
@@ -918,27 +1106,49 @@ const PublishReview: React.FC<{
   onPublish: () => void;
 }> = ({ business, form, publishing, onPublish }) => (
   <div className="space-y-4">
-    <h2 className="text-base font-extrabold text-slate-900">5. Ringkasan & Terbitkan</h2>
+    <MetaStepHeader
+      step={5}
+      title="Tinjau & terbitkan"
+      description="Periksa kembali pengaturan kampanye sebelum dikirim ke Meta."
+    />
 
-    <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3 text-xs">
-      <Row label="Akun Bisnis" value={business.connected ? business.facebookPageId : 'Belum terhubung'} />
-      <Row label="Mode" value={business.simulated ? 'Simulasi (belum live)' : 'Live API Meta'} />
-      <Row label="Nama Kampanye" value={form.name || '—'} />
-      <Row label="Tujuan" value={form.objective === 'AWARENESS' ? 'Kesadaran Merek' : 'Penjualan / Pesan Masuk'} />
-      <Row label="Anggaran Harian" value={`Rp ${form.dailyBudget.toLocaleString('id-ID')}`} />
-      <Row label="Lokasi" value={form.locations.join(', ') || '—'} />
-      <Row label="Usia" value={`${form.ageMin} — ${form.ageMax} tahun`} />
-      <Row label="Gender" value={form.gender === 'ALL' ? 'Semua' : form.gender === 'MALE' ? 'Laki-laki' : 'Perempuan'} />
-      <Row label="Minat" value={form.interests.join(', ') || '—'} />
-      <Row label="Media" value={form.mediaFile ? form.mediaFile.name : '—'} />
-      <Row label="CTA" value={CTA_LABELS[form.cta]} />
+    <div className="overflow-hidden rounded-lg border border-slate-200">
+      <div className="bg-slate-50 px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        Kampanye
+      </div>
+      <div className="space-y-2.5 p-3.5 text-xs">
+        <Row label="Akun Bisnis" value={business.connected ? business.facebookPageId : 'Belum terhubung'} />
+        <Row label="Mode" value={business.simulated ? 'Simulasi (belum live)' : 'Live API Meta'} />
+        <Row label="Nama Kampanye" value={form.name || '—'} />
+        <Row label="Tujuan" value={form.objective === 'AWARENESS' ? 'Kesadaran Merek' : 'Penjualan / Pesan Masuk'} />
+        <Row label="Anggaran Harian" value={`Rp ${form.dailyBudget.toLocaleString('id-ID')}`} />
+      </div>
+
+      <div className="border-t border-slate-200 bg-slate-50 px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        Grup Iklan
+      </div>
+      <div className="space-y-2.5 p-3.5 text-xs">
+        <Row label="Lokasi" value={form.locations.join(', ') || '—'} />
+        <Row label="Usia" value={`${form.ageMin} — ${form.ageMax} tahun`} />
+        <Row label="Gender" value={form.gender === 'ALL' ? 'Semua' : form.gender === 'MALE' ? 'Laki-laki' : 'Perempuan'} />
+        <Row label="Minat" value={form.interests.join(', ') || '—'} />
+        <Row label="Penempatan" value="WhatsApp Status + Instagram Stories" />
+      </div>
+
+      <div className="border-t border-slate-200 bg-slate-50 px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        Iklan
+      </div>
+      <div className="space-y-2.5 p-3.5 text-xs">
+        <Row label="Media" value={form.mediaFile ? form.mediaFile.name : '—'} />
+        <Row label="CTA" value={CTA_LABELS[form.cta]} />
+      </div>
     </div>
 
     <button
       type="button"
       onClick={onPublish}
       disabled={publishing}
-      className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+      className="w-full py-3.5 bg-[#1877F2] hover:bg-[#166FE5] text-white font-bold text-sm rounded-md shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
     >
       {publishing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
       {publishing ? 'Menerbitkan...' : 'Terbitkan Iklan Sekarang'}
@@ -954,44 +1164,140 @@ const Row: React.FC<{ label: string; value: string }> = ({ label, value }) => (
 );
 
 /* ------------------------------------------------------------------ */
-/* Live Ad Preview — WhatsApp Status mockup                          */
+/* Live Ad Preview — WhatsApp Status / Instagram Stories              */
 /* ------------------------------------------------------------------ */
-const LiveAdPreview: React.FC<{ form: CampaignForm }> = ({ form }) => (
-  <div className="mx-auto w-[220px] h-[400px] bg-black rounded-[2rem] border-4 border-slate-800 relative overflow-hidden shadow-xl">
-    {/* Status bar */}
-    <div className="absolute top-0 left-0 right-0 h-6 bg-black/60 z-10 flex items-center justify-between px-3">
-      <span className="text-[8px] text-white font-bold">9:41</span>
-      <span className="text-[8px] text-white">●●●</span>
-    </div>
-    {/* Media */}
-    <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
-      {form.mediaPreviewUrl ? (
-        form.mediaType === 'image' ? (
-          <img src={form.mediaPreviewUrl} alt="preview" className="w-full h-full object-cover" />
-        ) : (
-          <video src={form.mediaPreviewUrl} className="w-full h-full object-cover" autoPlay muted loop />
-        )
-      ) : (
-        <div className="text-center text-slate-500">
-          <ImageIcon className="w-10 h-10 mx-auto mb-2 opacity-40" />
-          <p className="text-[10px]">Upload media 9:16</p>
+const LiveAdPreview: React.FC<{ form: CampaignForm }> = ({ form }) => {
+  const [placement, setPlacement] = useState<'whatsapp' | 'instagram'>('whatsapp');
+  const isWhatsApp = placement === 'whatsapp';
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1">
+        <button
+          type="button"
+          onClick={() => setPlacement('whatsapp')}
+          className={`flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[10px] font-bold transition-all cursor-pointer ${
+            isWhatsApp ? 'bg-white text-[#128C7E] shadow-xs' : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+        </button>
+        <button
+          type="button"
+          onClick={() => setPlacement('instagram')}
+          className={`flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[10px] font-bold transition-all cursor-pointer ${
+            !isWhatsApp ? 'bg-white text-[#D62976] shadow-xs' : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <Instagram className="h-3.5 w-3.5" /> Instagram
+        </button>
+      </div>
+
+      <div className="mx-auto w-full max-w-[300px] overflow-hidden rounded-xl border border-slate-200 bg-black shadow-lg">
+        <div className="relative aspect-[9/16]">
+          {/* Media */}
+          <div className="absolute inset-0 flex items-center justify-center bg-[#0B141A]">
+            {form.mediaPreviewUrl ? (
+              form.mediaType === 'video' ? (
+                <video src={form.mediaPreviewUrl} className="h-full w-full object-cover" autoPlay muted loop playsInline />
+              ) : (
+                <img src={form.mediaPreviewUrl} alt="Pratinjau media iklan" className="h-full w-full object-cover" />
+              )
+            ) : (
+              <div className="px-6 text-center">
+                <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-white/10">
+                  <ImageIcon className="h-6 w-6 text-white/60" />
+                </div>
+                <p className="text-[11px] font-semibold text-white/80">Media iklan 9:16</p>
+                <p className="mt-0.5 text-[9px] text-white/45">Unggah foto atau video di langkah Iklan</p>
+              </div>
+            )}
+          </div>
+
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/75 via-black/35 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-60 bg-gradient-to-t from-black/90 via-black/55 to-transparent" />
+
+          {/* Progress bars */}
+          <div className="absolute inset-x-0 top-0 z-20 flex gap-1 px-2.5 pt-2">
+            {[0, 1, 2, 3].map((i) => (
+              <span key={i} className={`h-0.5 flex-1 rounded-full ${i === 0 ? 'bg-white' : 'bg-white/35'}`} />
+            ))}
+          </div>
+
+          {/* Account header */}
+          <div className="absolute inset-x-0 top-4 z-20 flex items-center gap-2 px-2.5">
+            <div
+              className={
+                isWhatsApp
+                  ? 'flex h-8 w-8 items-center justify-center rounded-full border border-white/30 bg-[#128C7E] text-[10px] font-black text-white'
+                  : 'rounded-full bg-gradient-to-tr from-[#FEDA75] via-[#D62976] to-[#962FBF] p-[2px]'
+              }
+            >
+              <div className={`flex h-full w-full items-center justify-center rounded-full text-[10px] font-black text-white ${
+                isWhatsApp ? '' : 'bg-[#0B141A]'
+              }`}>
+                BS
+              </div>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1">
+                <p className="truncate text-[11px] font-bold text-white">
+                  {isWhatsApp ? 'Bejo Stiker' : 'bejostiker'}
+                </p>
+                {!isWhatsApp && <CheckCircle2 className="h-3 w-3 text-white" />}
+              </div>
+              <p className="text-[9px] text-white/70">
+                {isWhatsApp ? 'Baru saja · Disponsori' : 'Disponsori'}
+              </p>
+            </div>
+            <MoreHorizontal className="h-4 w-4 text-white/90" />
+            <X className="h-4 w-4 text-white/90" />
+          </div>
+
+          {/* Instagram right rail */}
+          {!isWhatsApp && (
+            <div className="absolute bottom-36 right-2 z-20 flex flex-col items-center gap-3.5 text-white">
+              <Heart className="h-5 w-5" />
+              <Send className="h-5 w-5" />
+              <Bookmark className="h-5 w-5" />
+            </div>
+          )}
+
+          {/* Caption & CTA */}
+          <div className={`absolute inset-x-0 bottom-0 z-20 space-y-2 p-3 ${!isWhatsApp ? 'pr-11' : ''}`}>
+            {form.caption ? (
+              <p className="line-clamp-3 text-[10px] font-medium leading-relaxed text-white drop-shadow">
+                {form.caption}
+              </p>
+            ) : (
+              <p className="text-[10px] italic text-white/45">Teks iklan akan tampil di sini</p>
+            )}
+            <div className="flex items-center gap-1.5 text-[9px] text-white/65">
+              <Link2 className="h-3 w-3" /> bejodigitalprint.com
+            </div>
+            <button
+              type="button"
+              className={`flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[10px] font-bold shadow-sm ${
+                isWhatsApp ? 'bg-[#25D366] text-white' : 'bg-white text-slate-900'
+              }`}
+            >
+              {isWhatsApp ? <MessageCircle className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
+              {CTA_LABELS[form.cta]}
+            </button>
+            <div className="flex items-center gap-1.5 rounded-full border border-white/40 bg-black/20 px-2.5 py-1.5 backdrop-blur-sm">
+              <span className="flex-1 text-[9px] text-white/70">
+                {isWhatsApp ? 'Balas...' : 'Kirim pesan'}
+              </span>
+              {isWhatsApp && <Camera className="h-3.5 w-3.5 text-white/80" />}
+              <Send className="h-3.5 w-3.5 text-white/80" />
+            </div>
+          </div>
         </div>
-      )}
+      </div>
+
+      <p className="text-center text-[9px] text-slate-400">
+        Pratinjau {isWhatsApp ? 'WhatsApp Status' : 'Instagram Stories'} · media 9:16 · tanpa frame perangkat
+      </p>
     </div>
-    {/* Gradient overlay bottom */}
-    <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-black/80 to-transparent z-10" />
-    {/* Caption & CTA */}
-    <div className="absolute bottom-3 left-3 right-3 z-20 space-y-2">
-      {form.caption && (
-        <p className="text-[10px] text-white font-medium line-clamp-3 drop-shadow">{form.caption}</p>
-      )}
-      <button className="w-full bg-emerald-600 text-white text-[10px] font-bold py-1.5 rounded-lg">
-        {CTA_LABELS[form.cta]}
-      </button>
-    </div>
-    {/* Sponsored label */}
-    <div className="absolute top-8 left-3 z-20">
-      <span className="text-[8px] text-white/80 bg-black/40 px-2 py-0.5 rounded-full">Disponsori</span>
-    </div>
-  </div>
-);
+  );
+};

@@ -58,8 +58,8 @@ import {
 } from 'lucide-react';
 import { Customer, CustomerCategory, Transaction, UserRole, AppUser, Supplier, Agent, StoreProfile, CustomRole, PrintSettings, StockTransaction, Product } from '../types';
 import { formatRupiah } from '../utils/formatters';
-import { StoreInfo, getStoredDefaultLogo, saveStoredDefaultLogo, clearStoredDefaultLogo, isDefaultCustomerCategory, getStoredProducts, DEFAULT_MASTER_STORE_PROFILE, getStoredPrintSettings, saveStoredPrintSettings, DEFAULT_PRINT_SETTINGS } from '../utils/storage';
-import { downloadBackupJSON, validateBackupPayload, restoreBackupToStorage, PosBackupPayload } from '../utils/backupUtils';
+import { StoreInfo, getStoredDefaultLogo, saveStoredDefaultLogo, clearStoredDefaultLogo, isDefaultCustomerCategory, DEFAULT_MASTER_STORE_PROFILE, getStoredPrintSettings, saveStoredPrintSettings, DEFAULT_PRINT_SETTINGS } from '../utils/storage';
+import { downloadBackupJSON, validateBackupPayload, restoreBackupToStorage, restoreBackupToCloud, PosBackupPayload } from '../utils/backupUtils';
 import { DeveloperJokerIcon } from './DeveloperJokerIcon';
 import { StoreLogo } from './StoreLogo';
 import { isReservedDeveloperUsername } from '../utils/authSecurity';
@@ -151,7 +151,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
     }
   };
 
-  const [activeTab, setActiveTab] = useState<'customers' | 'suppliers' | 'agents' | 'categories' | 'store' | 'printer' | 'users'>('customers');
+  const [activeTab, setActiveTab] = useState<'customers' | 'suppliers' | 'agents' | 'categories' | 'store' | 'printer' | 'users' | 'backup'>('customers');
   const [selectedAgentForHistory, setSelectedAgentForHistory] = useState<Agent | null>(null);
 
   // Print Settings State for Pengaturan Toko
@@ -736,6 +736,9 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
   const [restorePendingPayload, setRestorePendingPayload] = useState<PosBackupPayload | null>(null);
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [isRestoringBackup, setIsRestoringBackup] = useState(false);
+  const [restoreProgress, setRestoreProgress] = useState('');
+  const [restoreProgressPercent, setRestoreProgressPercent] = useState(0);
   const backupFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDownloadBackup = () => {
@@ -760,6 +763,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
         const parsed = JSON.parse(event.target?.result as string);
         const validation = validateBackupPayload(parsed);
         if (!validation.isValid || !validation.payload) {
+          setRestorePendingPayload(null);
           setRestoreError(validation.error || 'Format file cadangan tidak valid.');
           setIsRestoreModalOpen(true);
           return;
@@ -767,6 +771,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
         setRestorePendingPayload(validation.payload);
         setIsRestoreModalOpen(true);
       } catch (err) {
+        setRestorePendingPayload(null);
         setRestoreError('Gagal membaca file: Pastikan file yang dipilih berformat .JSON yang valid.');
         setIsRestoreModalOpen(true);
       }
@@ -775,18 +780,59 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
     e.target.value = '';
   };
 
-  const handleConfirmRestore = () => {
-    if (!restorePendingPayload) return;
-    const success = restoreBackupToStorage(restorePendingPayload);
-    if (success) {
+  const handleConfirmRestore = async () => {
+    if (!restorePendingPayload || isRestoringBackup) return;
+
+    setRestoreError(null);
+    setIsRestoringBackup(true);
+    setRestoreProgressPercent(0);
+    setRestoreProgress('Memulihkan data ke penyimpanan lokal...');
+
+    try {
+      const localSuccess = restoreBackupToStorage(restorePendingPayload);
+      if (!localSuccess) {
+        setRestoreError('Gagal memulihkan data ke sistem penyimpanan lokal.');
+        return;
+      }
+
+      const cloudResult = await restoreBackupToCloud(restorePendingPayload, (progress) => {
+        const percent = progress.overallTotal > 0
+          ? Math.round((progress.overallProcessed / progress.overallTotal) * 100)
+          : 100;
+        setRestoreProgressPercent(percent);
+        setRestoreProgress(`Menyinkronkan ${progress.step} (${progress.processed}/${progress.total})...`);
+      });
+
+      if (!cloudResult.success) {
+        const detail = cloudResult.errors.length > 0 ? ` Detail: ${cloudResult.errors.slice(0, 3).join(' | ')}` : '';
+        setRestoreError(
+          `Data lokal berhasil dipulihkan, tetapi sinkronisasi ke database cloud gagal.${detail} Periksa koneksi internet lalu klik "Coba Lagi".`
+        );
+        return;
+      }
+
+      setRestoreProgressPercent(100);
+      setRestoreProgress('Sinkronisasi cloud selesai. Memuat ulang data...');
       setIsRestoreModalOpen(false);
-      setBackupToastMsg('Data berhasil dipulihkan dari file cadangan JSON! Memuat ulang data...');
+      setRestorePendingPayload(null);
+      setBackupToastMsg(`Restore berhasil: ${cloudResult.syncedRecords} data tersinkron ke database cloud. Memuat ulang aplikasi...`);
       setTimeout(() => {
         window.location.reload();
-      }, 1200);
-    } else {
-      setRestoreError('Gagal memulihkan data ke sistem penyimpanan lokal.');
+      }, 1500);
+    } catch (err: any) {
+      setRestoreError(`Gagal memulihkan data: ${err?.message || 'Terjadi kesalahan tidak terduga.'}`);
+    } finally {
+      setIsRestoringBackup(false);
     }
+  };
+
+  const closeRestoreModal = () => {
+    if (isRestoringBackup) return;
+    setIsRestoreModalOpen(false);
+    setRestorePendingPayload(null);
+    setRestoreError(null);
+    setRestoreProgress('');
+    setRestoreProgressPercent(0);
   };
 
   // Category Modal state
@@ -969,29 +1015,14 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
             </button>
           )}
           {activeTab === 'store' && isDeveloper && (
-            <div className="flex items-center gap-2">
-              {isDeveloper && (
-                <button
-                  type="button"
-                  onClick={handleDownloadBackup}
-                  className="px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-bold rounded-xl shadow-2xs flex items-center gap-2 transition-all cursor-pointer"
-                  title="Cadangkan seluruh data ke file JSON (Khusus Developer)"
-                >
-                  <HardDriveDownload className="w-4 h-4 text-emerald-600" />
-                  <span className="hidden sm:inline">Backup Data (JSON)</span>
-                  <span className="sm:hidden">Backup</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={handleSaveStoreSubmit}
-                className="px-4 py-2.5 bg-[#1e295d] hover:bg-[#151e44] text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
-              >
-                <Save className="w-4 h-4 text-sky-400" />
-                Simpan Profil Toko
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleSaveStoreSubmit}
+              className="px-4 py-2.5 bg-[#1e295d] hover:bg-[#151e44] text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <Save className="w-4 h-4 text-sky-400" />
+              Simpan Profil Toko
+            </button>
           )}
           {activeTab === 'printer' && (
             <div className="flex items-center gap-2">
@@ -1133,6 +1164,22 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
           >
             <Shield className="w-4 h-4 text-purple-600" />
             Hak Akses & Akun ({users.length})
+          </button>
+        )}
+
+        {/* 8. Backup Data */}
+        {isDeveloper && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('backup')}
+            className={`pb-3 px-3 font-bold text-xs flex items-center gap-2 border-b-2 whitespace-nowrap transition-all ${
+              activeTab === 'backup'
+                ? 'border-slate-900 text-slate-900'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <HardDriveDownload className="w-4 h-4 text-emerald-600" />
+            Backup Data
           </button>
         )}
       </div>
@@ -2049,90 +2096,6 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
               </div>
             </div>
           </div>
-
-          {/* Offline Backup & Restore Section (Developer Only) */}
-          {isDeveloper && (
-            <div className="mt-8 pt-6 border-t border-slate-200">
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <div className="p-2 bg-slate-200 text-slate-800 rounded-lg">
-                        <HardDriveDownload className="w-5 h-5 text-slate-800" />
-                      </div>
-                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-tight">
-                        PENCADANGAN & PEMULIHAN DATA OFFLINE (JSON BACKUP)
-                      </h3>
-                    </div>
-                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                      Unduh seluruh snapshot data toko (produk, pelanggan, supplier, agen, kategori diskon, dan riwayat transaksi) ke file JSON offline untuk keamanan cadangan di perangkat Anda.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      ref={backupFileInputRef}
-                      type="file"
-                      accept=".json,application/json"
-                      onChange={handleRestoreFileSelected}
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => backupFileInputRef.current?.click()}
-                      className="px-4 py-2.5 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-800 border border-slate-300 font-bold text-xs rounded-xl shadow-2xs flex items-center gap-2 transition-all cursor-pointer"
-                      title="Pulihkan data dari file JSON cadangan sebelumnya"
-                    >
-                      <RotateCcw className="w-4 h-4 text-slate-600" />
-                      Pulihkan dari File JSON
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleDownloadBackup}
-                      className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 transition-all cursor-pointer"
-                      title="Unduh seluruh data POS ke file JSON"
-                    >
-                      <Download className="w-4 h-4 text-white" />
-                      Unduh Cadangan Lengkap (JSON)
-                    </button>
-                  </div>
-                </div>
-
-                {/* Live Data Summary Pills */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 pt-1">
-                  <div className="bg-white border border-slate-200 rounded-xl p-3 text-center shadow-2xs">
-                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Produk</div>
-                    <div className="text-base font-bold text-slate-900 mt-0.5 font-mono">{getStoredProducts().length}</div>
-                  </div>
-                  <div className="bg-white border border-slate-200 rounded-xl p-3 text-center shadow-2xs">
-                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pelanggan</div>
-                    <div className="text-base font-bold text-slate-900 mt-0.5 font-mono">{customers.length}</div>
-                  </div>
-                  <div className="bg-white border border-slate-200 rounded-xl p-3 text-center shadow-2xs">
-                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Transaksi</div>
-                    <div className="text-base font-bold text-slate-900 mt-0.5 font-mono">{transactions.length}</div>
-                  </div>
-                  <div className="bg-white border border-slate-200 rounded-xl p-3 text-center shadow-2xs">
-                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Supplier</div>
-                    <div className="text-base font-bold text-slate-900 mt-0.5 font-mono">{suppliers.length}</div>
-                  </div>
-                  <div className="bg-white border border-slate-200 rounded-xl p-3 text-center shadow-2xs">
-                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Agen</div>
-                    <div className="text-base font-bold text-slate-900 mt-0.5 font-mono">{agents.length}</div>
-                  </div>
-                  <div className="bg-white border border-slate-200 rounded-xl p-3 text-center shadow-2xs">
-                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Kategori Diskon</div>
-                    <div className="text-base font-bold text-slate-900 mt-0.5 font-mono">{categories.length}</div>
-                  </div>
-                  <div className="bg-white border border-slate-200 rounded-xl p-3 text-center shadow-2xs col-span-2 sm:col-span-1">
-                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Format File</div>
-                    <div className="text-xs font-bold text-slate-900 mt-1 font-mono">JSON v2.0</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Shortcut Pengaturan Printer & Auto-Print Kasir */}
           <div className="mt-8 pt-6 border-t border-slate-200">
@@ -3659,6 +3622,112 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
         </div>
       )}
 
+      {/* Tab: Backup Data */}
+      {activeTab === 'backup' && isDeveloper && (
+        <div className="bg-white rounded-b-2xl border border-slate-200 shadow-xs p-4 sm:p-6 space-y-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+                  <HardDriveDownload className="w-5 h-5 text-emerald-700" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-slate-900 tracking-tight">BACKUP DATA</h2>
+                  <p className="text-xs text-slate-500">
+                    Satu tempat untuk mengunduh dan memulihkan seluruh data aplikasi.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-bold font-mono">
+              <FileJson className="w-3.5 h-3.5 text-emerald-600" />
+              JSON v2.1
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+            {[
+              { label: 'Produk', value: products.length },
+              { label: 'Pelanggan', value: customers.length },
+              { label: 'Transaksi', value: transactions.length },
+              { label: 'Supplier', value: suppliers.length },
+              { label: 'Agen', value: agents.length },
+              { label: 'Kategori Diskon', value: categories.length },
+            ].map((stat) => (
+              <div key={stat.label} className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{stat.label}</div>
+                <div className="text-base font-black text-slate-900 mt-0.5 font-mono">{stat.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="border border-slate-200 rounded-xl p-5 space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-slate-900 rounded-lg">
+                  <Download className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Unduh Backup Data</h3>
+                  <p className="text-[11px] text-slate-500">Simpan snapshot seluruh data ke file JSON.</p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Mencakup produk, kategori, pelanggan, supplier, agen, transaksi, shift, mutasi stok,
+                SPK, mesin, profil toko, hak akses, invoice, dan pengaturan landing page.
+              </p>
+              <button
+                type="button"
+                onClick={handleDownloadBackup}
+                className="w-full px-4 py-2.5 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Download className="w-4 h-4 text-emerald-400" />
+                Unduh File Backup (.json)
+              </button>
+            </div>
+
+            <div className="border border-slate-200 rounded-xl p-5 space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+                  <RotateCcw className="w-4 h-4 text-emerald-700" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Pulihkan dari File Backup</h3>
+                  <p className="text-[11px] text-slate-500">Upload file JSON untuk memperbarui data lokal dan cloud.</p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Data dari file akan ditulis ke penyimpanan lokal lalu diunggah ke database cloud PocketBase,
+                sehingga tidak tertimpa lagi saat aplikasi memuat ulang data real-time.
+              </p>
+              <input
+                ref={backupFileInputRef}
+                type="file"
+                accept=".json,application/json"
+                onChange={handleRestoreFileSelected}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => backupFileInputRef.current?.click()}
+                className="w-full px-4 py-2.5 bg-white hover:bg-emerald-50 active:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Upload className="w-4 h-4 text-emerald-700" />
+                Upload & Pulihkan Data (.json)
+              </button>
+            </div>
+          </div>
+
+          <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-amber-900 leading-relaxed">
+              Restore menimpa data lokal dan menambahkan/memperbarui data di cloud. Data cloud yang tidak ada
+              di file backup tidak dihapus. Jangan tutup halaman selama proses sinkronisasi berlangsung.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Customer Modal */}
       {isCustomerModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
@@ -4331,12 +4400,9 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                 </h2>
               </div>
               <button
-                onClick={() => {
-                  setIsRestoreModalOpen(false);
-                  setRestorePendingPayload(null);
-                  setRestoreError(null);
-                }}
-                className="text-white/80 hover:text-white p-1 rounded-lg cursor-pointer"
+                onClick={closeRestoreModal}
+                disabled={isRestoringBackup}
+                className="text-white/80 hover:text-white p-1 rounded-lg cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -4347,7 +4413,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                 <div className="p-4 bg-red-50 border border-red-200 rounded-xl space-y-2">
                   <div className="flex items-center gap-2 text-red-800 font-bold text-xs">
                     <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-                    <span>File Cadangan Tidak Valid</span>
+                    <span>{restorePendingPayload ? 'Pemulihan Data Gagal' : 'File Cadangan Tidak Valid'}</span>
                   </div>
                   <p className="text-xs text-red-700 leading-relaxed">
                     {restoreError}
@@ -4360,10 +4426,30 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                     <div className="text-xs text-amber-900 leading-relaxed">
                       <p className="font-bold text-amber-950">Konfirmasi Pemulihan Data</p>
                       <p className="mt-0.5">
-                        Memulihkan data akan menggantikan data lokal saat ini dengan data dari file cadangan. Pastikan Anda telah mengunduh cadangan saat ini jika diperlukan.
+                        Data lokal akan diganti dengan data dari file cadangan, lalu seluruh data tersebut
+                        diunggah ke database cloud. Pastikan Anda telah mengunduh cadangan terbaru jika diperlukan.
                       </p>
                     </div>
                   </div>
+
+                  {isRestoringBackup && (
+                    <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between gap-2 text-xs font-bold text-blue-900">
+                        <span className="flex items-center gap-2">
+                          <RotateCcw className="w-4 h-4 text-blue-600 animate-spin" />
+                          Proses Restore & Sinkronisasi Cloud
+                        </span>
+                        <span className="font-mono">{restoreProgressPercent}%</span>
+                      </div>
+                      <div className="h-2 bg-blue-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-blue-600 rounded-full transition-all duration-300"
+                          style={{ width: `${restoreProgressPercent}%` }}
+                        />
+                      </div>
+                      <p className="text-[11px] text-blue-800 leading-relaxed">{restoreProgress}</p>
+                    </div>
+                  )}
 
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
                     <div className="text-xs font-bold text-slate-800 uppercase tracking-wide border-b border-slate-200 pb-2">
@@ -4403,23 +4489,25 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
               <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsRestoreModalOpen(false);
-                    setRestorePendingPayload(null);
-                    setRestoreError(null);
-                  }}
-                  className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                  onClick={closeRestoreModal}
+                  disabled={isRestoringBackup}
+                  className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Tutup
                 </button>
-                {restorePendingPayload && !restoreError && (
+                {restorePendingPayload && (
                   <button
                     type="button"
                     onClick={handleConfirmRestore}
-                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                    disabled={isRestoringBackup}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <Check className="w-4 h-4" />
-                    Ya, Pulihkan Data Sekarang
+                    {isRestoringBackup
+                      ? 'Memproses...'
+                      : restoreError
+                      ? 'Coba Lagi'
+                      : 'Ya, Pulihkan Data Sekarang'}
                   </button>
                 )}
               </div>

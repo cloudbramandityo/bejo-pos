@@ -1192,7 +1192,8 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
   };
 
   const handleExportPDF = () => {
-    if (reportTab === 'penjualan') {
+    try {
+      if (reportTab === 'penjualan') {
       if (finalFilteredTransactions.length === 0) {
         alert('Tidak ada data transaksi untuk diekspor ke PDF pada periode ini.');
         return;
@@ -1256,6 +1257,10 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
           finalFilteredAgenSalesTransactions
         );
       }
+      }
+    } catch (err) {
+      console.error('Export PDF error:', err);
+      alert('Gagal membuat file PDF. Silakan periksa data transaksi lalu coba lagi.');
     }
   };
 
@@ -3579,7 +3584,14 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
 
                                     <button
                                       type="button"
-                                      onClick={() => exportSingleStockTransactionToPDF(tx, isPembelian ? 'PEMBELIAN' : 'PENGAMBILAN', { storeName, products })}
+                                      onClick={() => {
+                                        try {
+                                          exportSingleStockTransactionToPDF(tx, isPembelian ? 'PEMBELIAN' : 'PENGAMBILAN', { storeName, products });
+                                        } catch (err) {
+                                          console.error('Download single stock PDF error:', err);
+                                          alert('Gagal membuat PDF transaksi ini. Silakan coba lagi.');
+                                        }
+                                      }}
                                       className="px-2.5 py-1.5 bg-red-600 hover:bg-red-700 active:scale-[0.98] text-white text-[11px] font-bold rounded-lg shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
                                       title={`Download dokumen PDF untuk Transaksi #${tx.id}`}
                                     >

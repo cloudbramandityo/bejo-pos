@@ -10,18 +10,13 @@ import {
   Cloud,
   FolderOpen,
   RefreshCw,
-  Download,
-  Upload,
   CheckCircle,
   AlertCircle,
   X,
   Database,
   Layers,
-  ShieldCheck,
   Zap,
   Check,
-  ChevronDown,
-  ChevronUp,
   Radio,
   Wifi,
   Sparkles,
@@ -33,10 +28,8 @@ import {
   getLocalDatabaseConfig,
   saveLocalDatabaseConfig,
   calculateDatabaseStats,
-  performFullDualSync,
-  exportLocalDatabaseToFile
+  performFullDualSync
 } from '../../utils/localDatabase';
-import { restoreBackupToStorage, validateBackupPayload, PosBackupPayload } from '../../utils/backupUtils';
 
 interface LocalDatabaseSyncModalProps {
   isOpen: boolean;
@@ -54,9 +47,6 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
   const [tempDirPath, setTempDirPath] = useState<string>(config.localDirectoryPath);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [toastMsg, setToastMsg] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-  const [isRestoring, setIsRestoring] = useState<boolean>(false);
-  const [showManualTools, setShowManualTools] = useState<boolean>(false);
-  const hiddenFileInputRef = useRef<HTMLInputElement>(null);
   const hiddenDirInputRef = useRef<HTMLInputElement>(null);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -160,60 +150,6 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
     } finally {
       setIsSyncing(false);
     }
-  };
-
-  // Optional Export JSON Database
-  const handleExportDatabase = () => {
-    try {
-      exportLocalDatabaseToFile();
-      showToast('File backup cadangan .json berhasil diunduh!', 'success');
-    } catch (e) {
-      showToast('Gagal mengekspor database', 'error');
-    }
-  };
-
-  // Optional Restore JSON Database
-  const handleRestoreFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const content = event.target?.result as string;
-        const parsed = JSON.parse(content);
-        const valid = validateBackupPayload(parsed);
-
-        if (!valid) {
-          alert('Format file cadangan database tidak valid atau rusak.');
-          return;
-        }
-
-        if (
-          !window.confirm(
-            `Apakah Anda yakin ingin memulihkan database dari file "${file.name}"? Seluruh data lokal dan cloud akan diperbarui dengan data cadangan ini.`
-          )
-        ) {
-          return;
-        }
-
-        setIsRestoring(true);
-        restoreBackupToStorage(parsed as PosBackupPayload);
-        await performFullDualSync();
-        refreshStats();
-        showToast('Database berhasil dipulihkan secara menyeluruh!', 'success');
-        setTimeout(() => {
-          window.location.reload();
-        }, 1200);
-      } catch (err) {
-        console.error('Failed to parse database backup', err);
-        showToast('Gagal memproses file cadangan database', 'error');
-      } finally {
-        setIsRestoring(false);
-        if (e.target) e.target.value = '';
-      }
-    };
-    reader.readAsText(file);
   };
 
   if (!isOpen) return null;
@@ -483,57 +419,6 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
             </div>
           </div>
 
-          {/* Section 3: Optional Manual Tools (Collapsible / Non-intrusive) */}
-          <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
-            <button
-              type="button"
-              onClick={() => setShowManualTools(!showManualTools)}
-              className="w-full p-3 flex items-center justify-between text-left hover:bg-slate-100 transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-slate-500" />
-                <span className="font-bold text-slate-700 text-xs">
-                  Alat Arsip Eksternal Manual (.json ke Flashdisk) — <span className="text-slate-500 font-normal">Opsional</span>
-                </span>
-              </div>
-              {showManualTools ? (
-                <ChevronUp className="w-4 h-4 text-slate-500" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-slate-500" />
-              )}
-            </button>
-
-            {showManualTools && (
-              <div className="p-3.5 bg-white border-t border-slate-200 space-y-3">
-                <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
-                  Fitur ini hanya diperlukan jika Anda ingin menyimpan salinan database terpisah ke flashdisk fisik atau memulihkan data dari file cadangan komputer lain.
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={handleExportDatabase}
-                    className="p-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-200 rounded-xl font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-95"
-                  >
-                    <Download className="w-4 h-4 text-indigo-600" />
-                    <span>Unduh Cadangan (.json)</span>
-                  </button>
-
-                  <label className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 rounded-xl font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-95">
-                    <Upload className="w-4 h-4 text-emerald-600" />
-                    <span>{isRestoring ? 'Memulihkan...' : 'Pulihkan dari .json'}</span>
-                    <input
-                      type="file"
-                      ref={hiddenFileInputRef}
-                      onChange={handleRestoreFileSelected}
-                      accept=".json"
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Hidden directory input for fallback */}

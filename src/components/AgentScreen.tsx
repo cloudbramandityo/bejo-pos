@@ -411,19 +411,23 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     const agentLabelText = selectedAgent === 'ALL' ? 'Semua Agen' : selectedAgent;
     const finalPeriodLabel = `${periodLabelText} (${agentLabelText})`;
 
-    exportStockTransactionsToPDF(
-      filteredStockTx,
-      'PENGAMBILAN',
-      {
-        periodType: recapPeriodType,
-        periodLabel: finalPeriodLabel,
-        storeName: storeInfo?.storeName || 'BEJO STIKER POS',
-        products: products
-      },
-      filteredCetakTx
-    );
-
-    setShowDownloadRecapModal(false);
+    try {
+      exportStockTransactionsToPDF(
+        filteredStockTx,
+        'PENGAMBILAN',
+        {
+          periodType: recapPeriodType,
+          periodLabel: finalPeriodLabel,
+          storeName: storeInfo?.storeName || 'BEJO STIKER POS',
+          products: products
+        },
+        filteredCetakTx
+      );
+      setShowDownloadRecapModal(false);
+    } catch (err) {
+      console.error('Download recap PDF error:', err);
+      alert('Gagal membuat file PDF rekap. Silakan coba lagi.');
+    }
   };
 
   // Success / Alert message

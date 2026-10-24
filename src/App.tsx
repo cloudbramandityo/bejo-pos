@@ -2076,7 +2076,6 @@ export default function App() {
             onRenameProductCategory={handleRenameProductCategory}
             onDeleteProductCategory={handleDeleteProductCategory}
             userRole={userRole}
-            storeInfo={storeInfo}
           />
         )}
 

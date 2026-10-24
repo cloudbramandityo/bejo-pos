@@ -28,7 +28,6 @@ import {
   Eye,
   RefreshCw,
   Sparkles,
-  HardDriveDownload,
   ChevronDown,
   ChevronUp,
   SlidersHorizontal,
@@ -36,11 +35,10 @@ import {
 } from 'lucide-react';
 import { Product, ProductCategory, ProductCategoryItem, UserRole } from '../types';
 import { formatRupiah, formatNumber, formatNumberInput, parseNumber } from '../utils/formatters';
-import { StoreInfo, DEFAULT_PRODUCT_CATEGORIES, isDefaultProductCategory } from '../utils/storage';
+import { DEFAULT_PRODUCT_CATEGORIES, isDefaultProductCategory } from '../utils/storage';
 import { isDigitalPrintingProduct, isProductionSuppliesProduct, isPaketProduct } from '../utils/productFilters';
 import { getMaterialStockFormula, formatStandardKemasan, formatStockDisplay } from '../utils/stockUtils';
 import { StoreLogo } from './StoreLogo';
-import { downloadBackupJSON } from '../utils/backupUtils';
 import { ProductImageModal } from './modals/ProductImageModal';
 
 interface InventoryScreenProps {
@@ -52,7 +50,6 @@ interface InventoryScreenProps {
   onRenameProductCategory?: (oldIdOrName: string, updated: ProductCategoryItem) => void;
   onDeleteProductCategory?: (categoryId: string) => void;
   userRole?: UserRole;
-  storeInfo?: StoreInfo;
 }
 
 export const InventoryScreen: React.FC<InventoryScreenProps> = ({
@@ -64,7 +61,6 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
   onRenameProductCategory,
   onDeleteProductCategory,
   userRole = 'DEVELOPER',
-  storeInfo,
 }) => {
   const isDeveloper = userRole === 'DEVELOPER';
   const [activeCategory, setActiveCategory] = useState<string>('all');
@@ -560,26 +556,6 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {isDeveloper && (
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  const res = downloadBackupJSON(storeInfo?.storeName);
-                  setNotificationMsg(`Cadangan data offline (${res.fileName}) berhasil diunduh! Total ${res.summary.totalProducts} produk tersimpan.`);
-                } catch (err) {
-                  setNotificationMsg('Gagal mengunduh cadangan data.');
-                }
-              }}
-              className="px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl border border-slate-300 shadow-2xs flex items-center gap-2 transition-all active:scale-[0.98] cursor-pointer"
-              title="Cadangkan seluruh data POS & inventaris ke file JSON (Khusus Developer)"
-            >
-              <HardDriveDownload className="w-4 h-4 text-emerald-600" />
-              <span className="hidden sm:inline">Backup Data (JSON)</span>
-              <span className="sm:hidden">Backup</span>
-            </button>
-          )}
-
           <button
             type="button"
             onClick={handleOpenCategoryModal}

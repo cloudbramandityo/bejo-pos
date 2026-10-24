@@ -96,7 +96,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   const handleDownloadPDF = async () => {
     setIsGeneratingPdf(true);
     try {
-      await exportReceiptToPDF(transaction, true);
+      await exportReceiptToPDF(transaction, true, qrCodeDataUrl || '');
     } catch (err) {
       console.error('Download PDF error:', err);
       alert('Gagal mendownload struk PDF.');
@@ -113,7 +113,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
     // Generate & download matching PDF receipt
     try {
-      await exportReceiptToPDF(transaction, true);
+      await exportReceiptToPDF(transaction, true, qrCodeDataUrl || '');
     } catch (err) {
       console.warn('Auto download PDF notice:', err);
     }

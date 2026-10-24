@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { Transaction, StockTransaction, Product } from '../types';
 import { formatRupiah } from './formatters';
 import { normalizeStockTransaction, calculateStockItemProfit, calculateSalesItemCost } from './stockUtils';
+import { downloadPdfFile, normalizeTransactionForPdf } from './pdfDownload';
 
 
 interface PDFExportOptions {
@@ -18,7 +19,9 @@ export function exportTransactionsToPDF(
   transactions: Transaction[],
   options: PDFExportOptions
 ) {
-  if (!transactions || transactions.length === 0) {
+  transactions = (Array.isArray(transactions) ? transactions : []).map(normalizeTransactionForPdf);
+
+  if (transactions.length === 0) {
     alert('Tidak ada transaksi untuk diekspor ke PDF.');
     return;
   }
@@ -192,7 +195,7 @@ export function exportTransactionsToPDF(
 
   const cleanLabel = options.periodLabel.replace(/[/\\?%*:|"<>]/g, '-');
   const filename = `Laporan_Penjualan_${options.periodType}_${cleanLabel}.pdf`;
-  doc.save(filename);
+  downloadPdfFile(doc, filename);
 }
 
 export function exportStockTransactionsToPDF(
@@ -201,8 +204,11 @@ export function exportStockTransactionsToPDF(
   options: PDFExportOptions,
   cetakAgenTransactions?: Transaction[]
 ) {
-  const hasStockData = stockTransactions && stockTransactions.length > 0;
-  const hasCetakData = cetakAgenTransactions && cetakAgenTransactions.length > 0;
+  const hasStockData = Array.isArray(stockTransactions) && stockTransactions.length > 0;
+  const safeCetakTransactions = (Array.isArray(cetakAgenTransactions) ? cetakAgenTransactions : []).map(
+    normalizeTransactionForPdf
+  );
+  const hasCetakData = safeCetakTransactions.length > 0;
 
   if (!hasStockData && !hasCetakData) {
     alert('Tidak ada data transaksi mutasi stok untuk diekspor ke PDF.');
@@ -290,8 +296,8 @@ export function exportStockTransactionsToPDF(
     doc.text(`Pengambilan: ${formatRupiah(totalAmount)}`, 65, 37);
     doc.text(`Laba Mutasi: ${formatRupiah(totalLaba)}`, 130, 37);
     if (hasCetakData) {
-      const cetakTotal = cetakAgenTransactions!.reduce((acc, t) => acc + (t.total || 0), 0);
-      doc.text(`Trx Cetak Agen: ${cetakAgenTransactions!.length} Trx (${formatRupiah(cetakTotal)})`, 190, 37);
+      const cetakTotal = safeCetakTransactions.reduce((acc, t) => acc + (t.total || 0), 0);
+      doc.text(`Trx Cetak Agen: ${safeCetakTransactions.length} Trx (${formatRupiah(cetakTotal)})`, 190, 37);
     }
   }
 
@@ -389,7 +395,7 @@ export function exportStockTransactionsToPDF(
     doc.text('DAFTAR TRANSAKSI & INVOICE CETAK AGEN', 14, lastY);
     lastY += 4;
 
-    const cetakTableData = cetakAgenTransactions!.map((tx, idx) => {
+    const cetakTableData = safeCetakTransactions.map((tx, idx) => {
       const itemsFormatted = (tx.items || []).map((it, iIdx) => {
         const prod =
           (it.productId ? productMap.get(it.productId) : null) ||
@@ -476,7 +482,7 @@ export function exportStockTransactionsToPDF(
   }
 
   const cleanLabel = options.periodLabel.replace(/[/\\?%*:|"<>]/g, '-');
-  doc.save(`Laporan_${titleLabel.replace(/ /g, '_')}_${options.periodType}_${cleanLabel}.pdf`);
+  downloadPdfFile(doc, `Laporan_${titleLabel.replace(/ /g, '_')}_${options.periodType}_${cleanLabel}.pdf`);
 }
 
 export function exportSingleStockTransactionToPDF(
@@ -757,7 +763,7 @@ export function exportSingleStockTransactionToPDF(
 
   const filePrefix = isPembelian ? 'Faktur_Pembelian' : 'Nota_Pengambilan';
   const cleanId = norm.id.replace(/[/\\?%*:|"<>]/g, '-');
-  doc.save(`${filePrefix}_${cleanId}.pdf`);
+  downloadPdfFile(doc, `${filePrefix}_${cleanId}.pdf`);
 }
 
 

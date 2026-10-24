@@ -6,6 +6,7 @@ import QRCode from 'qrcode';
 import { Transaction } from '../types';
 import { formatRupiah, formatItemTransactionSpec } from './formatters';
 import { getStoredStoreInfo } from './storage';
+import { downloadPdfFile, normalizeTransactionForPdf } from './pdfDownload';
 
 export async function generateReceiptQRDataUrl(phone: string): Promise<string> {
   try {
@@ -30,8 +31,10 @@ export async function generateReceiptQRDataUrl(phone: string): Promise<string> {
 
 export async function exportReceiptToPDF(
   transaction: Transaction,
-  autoDownload: boolean = true
+  autoDownload: boolean = true,
+  qrDataUrl?: string
 ): Promise<{ doc: jsPDF; filename: string }> {
+  transaction = normalizeTransactionForPdf(transaction);
   const storeInfo = getStoredStoreInfo();
   
   // Calculate dynamic height for 80mm thermal receipt
@@ -258,11 +261,13 @@ export async function exportReceiptToPDF(
 
   // QR Code Generation & Embedding
   try {
-    const qrDataUrl = await generateReceiptQRDataUrl(storeInfo.phone);
-    if (qrDataUrl) {
+    const resolvedQr = qrDataUrl !== undefined
+      ? qrDataUrl
+      : await generateReceiptQRDataUrl(storeInfo.phone);
+    if (resolvedQr) {
       const qrSize = 26; // mm
       const qrX = (pageWidth - qrSize) / 2;
-      doc.addImage(qrDataUrl, 'PNG', qrX, y, qrSize, qrSize);
+      doc.addImage(resolvedQr, 'PNG', qrX, y, qrSize, qrSize);
       y += qrSize + 2;
 
       doc.setFont('courier', 'bold');
@@ -284,7 +289,7 @@ export async function exportReceiptToPDF(
   const filename = `Struk_${cleanInvoice}.pdf`;
 
   if (autoDownload) {
-    doc.save(filename);
+    downloadPdfFile(doc, filename);
   }
 
   return { doc, filename };

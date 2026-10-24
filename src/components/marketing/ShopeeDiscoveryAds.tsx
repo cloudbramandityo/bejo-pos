@@ -64,11 +64,11 @@ interface CampaignForm {
   totalBudget: number;
   bidMode: BidMode;
   manualBid: number;
+  keywords: string;
   placements: {
     homeRecommendation: boolean;
     productDetail: boolean;
   };
-  premiumRate: number;
   selectedProduct: ShopeeProduct | null;
 }
 
@@ -79,11 +79,11 @@ const DEFAULT_FORM: CampaignForm = {
   totalBudget: 0,
   bidMode: 'AUTO',
   manualBid: 500,
+  keywords: '',
   placements: {
     homeRecommendation: true,
     productDetail: true,
   },
-  premiumRate: 0,
   selectedProduct: null,
 };
 
@@ -234,8 +234,11 @@ export const ShopeeDiscoveryAds: React.FC = () => {
         bidding: {
           bidMode: form.bidMode,
           manualBid: form.manualBid,
+          keywords: form.keywords
+            .split(',')
+            .map((keyword) => keyword.trim())
+            .filter(Boolean),
           placements: form.placements,
-          premiumRate: form.premiumRate,
         },
         product: form.selectedProduct,
       };
@@ -270,7 +273,10 @@ export const ShopeeDiscoveryAds: React.FC = () => {
     switch (step) {
       case 1: return business.connected;
       case 2: return form.adName.trim().length > 0 && !!form.selectedProduct;
-      case 3: return true;
+      case 3:
+        return form.bidMode === 'AUTO'
+          ? true
+          : form.manualBid > 0 && form.keywords.split(',').some((keyword) => keyword.trim().length > 0);
       case 4: return true;
       default: return true;
     }
@@ -831,21 +837,33 @@ const ShopeeBudgetBidding: React.FC<{
       </div>
 
       {form.bidMode === 'MANUAL' && (
-        <div className="mt-3">
-          <label className="block text-xs font-bold text-slate-700">Bid maksimum per klik</label>
-          <div className="relative mt-1">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
-            <input
-              type="number"
-              value={form.manualBid}
-              onChange={(e) => setField('manualBid', Number(e.target.value))}
-              min={100}
-              className="w-full rounded-md border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 focus:border-[#EE4D2D] focus:outline-none focus:ring-2 focus:ring-[#EE4D2D]/30"
-            />
+        <div className="mt-3 space-y-3">
+          <div>
+            <label className="block text-xs font-bold text-slate-700">Bid maksimum per klik</label>
+            <div className="relative mt-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
+              <input
+                type="number"
+                value={form.manualBid}
+                onChange={(e) => setField('manualBid', Number(e.target.value))}
+                min={100}
+                className="w-full rounded-md border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 focus:border-[#EE4D2D] focus:outline-none focus:ring-2 focus:ring-[#EE4D2D]/30"
+              />
+            </div>
           </div>
-          <p className="mt-1 text-[10px] text-amber-700">
-            API Shopee memerlukan daftar keyword untuk bid manual; iklan akan diterbitkan dengan bidding otomatis.
-          </p>
+          <div>
+            <label className="block text-xs font-bold text-slate-700">Keyword produk</label>
+            <input
+              type="text"
+              value={form.keywords}
+              onChange={(e) => setField('keywords', e.target.value)}
+              placeholder="Contoh: stiker vinyl, stiker custom, cetak stiker"
+              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 focus:border-[#EE4D2D] focus:outline-none focus:ring-2 focus:ring-[#EE4D2D]/30"
+            />
+            <p className="mt-1 text-[10px] text-slate-500">
+              Pisahkan dengan koma. Setiap keyword dikirim ke Shopee dengan match type broad dan bid yang sama.
+            </p>
+          </div>
         </div>
       )}
     </div>
@@ -866,7 +884,7 @@ const ShopeePlacement: React.FC<{
       <ShopeeStepHeader
         step={4}
         title="Penempatan iklan"
-        description="Pilih posisi Discovery Ads di aplikasi Shopee dan atur premium rate."
+        description="Pilih posisi Discovery Ads. Penempatan dikirim ke API Shopee saat strategi bid manual."
       />
 
       <div className="rounded-lg border border-slate-200 bg-white p-4">
@@ -916,23 +934,22 @@ const ShopeePlacement: React.FC<{
         />
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white p-4">
-        <div className="flex items-center justify-between">
-          <label className="text-xs font-bold text-slate-800">Premium rate</label>
-          <span className="rounded bg-[#FFF0EC] px-2 py-0.5 text-[11px] font-bold text-[#EE4D2D]">
-            {form.premiumRate}%
-          </span>
+      {form.bidMode === 'AUTO' ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800">
+          Pada bid otomatis, Shopee menentukan penempatan dan bid sendiri. Pilihan penempatan di atas hanya
+          dikirim saat strategi bid manual.
         </div>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={form.premiumRate}
-          onChange={(e) => setField('premiumRate', Number(e.target.value))}
-          className="mt-3 w-full accent-[#EE4D2D]"
-        />
-        <p className="mt-1 text-[10px] text-slate-400">
-          Premium rate meningkatkan peluang tayang iklan. Nilai 0% mengikuti pengaturan default Shopee Ads.
+      ) : (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[11px] leading-relaxed text-emerald-800">
+          Penempatan yang dipilih dikirim ke Shopee bersama bid per klik pada strategi manual.
+        </div>
+      )}
+
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <p className="text-xs font-bold text-slate-800">Premium rate</p>
+        <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+          Premium rate belum tersedia pada Shopee Open Platform API. Setelah iklan aktif, atur premium rate
+          langsung melalui Shopee Ads Manager.
         </p>
       </div>
     </div>
@@ -1045,26 +1062,49 @@ const ShopeePublishReview: React.FC<{
             />
           )}
           <Row label="Bid" value={form.bidMode === 'AUTO' ? 'Otomatis' : `${formatRupiah(form.manualBid)} / klik`} />
-          <Row label="Premium rate" value={`${form.premiumRate}%`} />
+          {form.bidMode === 'MANUAL' && (
+            <Row
+              label="Keyword"
+              value={
+                form.keywords
+                  .split(',')
+                  .map((keyword) => keyword.trim())
+                  .filter(Boolean)
+                  .join(', ') || '—'
+              }
+            />
+          )}
+          <Row label="Premium rate" value="Diatur di Shopee Ads Manager" />
         </div>
       </div>
 
       <div className="rounded-lg border border-slate-200 p-3">
         <p className="text-[11px] font-bold text-slate-700">Penempatan</p>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {placements.length > 0 ? (
-            placements.map((placement) => (
-              <span
-                key={placement}
-                className="inline-flex items-center gap-1 rounded-full bg-[#FFF0EC] px-2.5 py-1 text-[10px] font-semibold text-[#EE4D2D]"
-              >
-                <Home className="h-3 w-3" /> {placement}
-              </span>
-            ))
-          ) : (
-            <p className="text-[11px] text-slate-500">Belum ada penempatan dipilih.</p>
-          )}
-        </div>
+        {form.bidMode === 'AUTO' ? (
+          <p className="mt-2 text-[11px] text-slate-500">
+            Ditentukan otomatis oleh Shopee karena strategi bid yang dipilih adalah otomatis.
+          </p>
+        ) : (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {placements.length > 0 ? (
+              placements.map((placement) => (
+                <span
+                  key={placement}
+                  className="inline-flex items-center gap-1 rounded-full bg-[#FFF0EC] px-2.5 py-1 text-[10px] font-semibold text-[#EE4D2D]"
+                >
+                  {placement === 'Beranda · Rekomendasi' ? (
+                    <Home className="h-3 w-3" />
+                  ) : (
+                    <Tag className="h-3 w-3" />
+                  )}{' '}
+                  {placement}
+                </span>
+              ))
+            ) : (
+              <p className="text-[11px] text-slate-500">Belum ada penempatan dipilih; Shopee memakai default.</p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="rounded-lg border border-[#FFD9CF] bg-[#FFF8F6] px-3 py-2.5 text-[11px] text-[#B43A20]">

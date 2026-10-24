@@ -13,7 +13,7 @@
     4. npm ci + build produksi
     5. Pasang Caddyfile (batas body 110MB untuk video Marketing) + validasi
     6. Restart service, health check, rollback otomatis bila gagal
-    7. Verifikasi status Meta/TikTok/Shopee
+    7. Verifikasi env dan koneksi API live Meta/TikTok/Shopee
 
   Data yang TIDAK disentuh:
     - .env, data/ (termasuk token Shopee), logs/, backups/
@@ -27,7 +27,7 @@
   Opsi:
     -SkipSourceUpdate   Pakai source lokal (tidak unduh GitHub)
     -SkipCaddy          Jangan ubah/restart Caddy
-    -RequireMarketing   Exit code 2 bila env Marketing belum lengkap
+    -RequireMarketing   Exit code 2 bila env Marketing belum lengkap atau API belum LIVE
     -Force              Lanjut walau repo Git punya perubahan lokal
     -NonInteractive     Jangan buka Notepad saat .env belum ada
 =====================================================================
@@ -91,6 +91,20 @@ function Test-AppHealth([string]$Url, [int]$TimeoutSec = 5) {
     return ($response.StatusCode -eq 200)
   } catch {
     return $false
+  }
+}
+
+# Basic Auth membuat /api/health publik mengembalikan 401 saat proteksi aktif.
+# 401/403 tetap berarti Caddy dan aplikasi terjangkau dari internet.
+function Test-PublicEndpoint([string]$Url) {
+  try {
+    $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 15 -MaximumRedirection 3
+    return [pscustomobject]@{ Ok = ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500); Code = [int]$response.StatusCode }
+  } catch {
+    $status = 0
+    try { $status = [int]$_.Exception.Response.StatusCode } catch { }
+    $ok = $status -in @(200, 301, 302, 401, 403)
+    return [pscustomobject]@{ Ok = $ok; Code = $status }
   }
 }
 
@@ -483,14 +497,28 @@ if ($doCaddy -and $caddyChanged) {
   }
 }
 
+$caddyService = Get-Service -Name 'Caddy' -ErrorAction SilentlyContinue
+if ($caddyService) {
+  if ($caddyService.Status -eq 'Running') {
+    Write-Ok 'Service Caddy berjalan.'
+  } else {
+    Write-Warn2 "Service Caddy berstatus $($caddyService.Status)."
+  }
+} else {
+  Write-Warn2 'Service Caddy belum terdaftar; akses domain publik tidak dapat dipastikan.'
+}
+
 $appUrl = Get-EnvValue $envPath 'APP_URL'
 if ($appUrl -and $appUrl -match '^https?://') {
   $publicHealth = ($appUrl.TrimEnd('/')) + '/api/health'
-  if (Test-AppHealth $publicHealth 15) {
-    Write-Ok "Akses publik sehat: $publicHealth"
+  $public = Test-PublicEndpoint $publicHealth
+  if ($public.Ok) {
+    Write-Ok "Akses publik terjangkau: $publicHealth (HTTP $($public.Code))"
   } else {
-    Write-Warn2 "Health publik belum merespons: $publicHealth (cek DNS/SSL/Caddy)."
+    Write-Warn2 "Akses publik belum merespons: $publicHealth (cek DNS/SSL/Caddy/firewall)."
   }
+} else {
+  Write-Warn2 'APP_URL belum diisi; verifikasi akses domain publik dilewati.'
 }
 
 # ----------------------------------------------------------- 7. marketing
@@ -509,7 +537,7 @@ $channels = @(
 $incomplete = @()
 foreach ($channel in $channels) {
   if ($channel.Configured) {
-    Write-Ok "$($channel.Name): terkonfigurasi"
+    Write-Ok "$($channel.Name): env terkonfigurasi"
   } else {
     $missing = if ($channel.Missing.Count -gt 0) { $channel.Missing -join ', ' } else { 'tidak diketahui' }
     Write-Warn2 "$($channel.Name): belum lengkap (env kosong: $missing)"
@@ -518,6 +546,59 @@ foreach ($channel in $channels) {
 }
 
 if ($marketing.appUrl) { Write-Host "   appUrl: $($marketing.appUrl)" -ForegroundColor DarkGray }
+
+# Diagnostik live memanggil API platform (read-only) untuk memastikan token
+# benar-benar berlaku, bukan sekadar ada di .env.
+$diagnostics = $null
+$diagnosticsFailed = $false
+$notLive = @()
+try {
+  $diagnostics = Invoke-RestMethod -Uri "$localBaseUrl/api/marketing/diagnostics?refresh=1" -TimeoutSec 60
+} catch {
+  $diagnosticsFailed = $true
+  Write-Warn2 "Diagnostik live gagal: $($_.Exception.Message)"
+}
+
+if ($diagnostics) {
+  $liveChannels = @(
+    [pscustomobject]@{ Name = 'WhatsApp (Meta)'; Live = [bool]$diagnostics.meta.live; Error = $diagnostics.meta.error; Warnings = @($diagnostics.meta.warnings); Account = $diagnostics.meta.account },
+    [pscustomobject]@{ Name = 'TikTok'; Live = [bool]$diagnostics.tiktok.live; Error = $diagnostics.tiktok.error; Warnings = @($diagnostics.tiktok.warnings); Account = $diagnostics.tiktok.account },
+    [pscustomobject]@{ Name = 'Shopee'; Live = [bool]$diagnostics.shopee.live; Error = $diagnostics.shopee.error; Warnings = @($diagnostics.shopee.warnings); Account = $diagnostics.shopee.account }
+  )
+  foreach ($channel in $liveChannels) {
+    if ($channel.Live) {
+      Write-Ok "$($channel.Name): LIVE"
+      $detail = @()
+      if ($channel.Account.name) { $detail += [string]$channel.Account.name }
+      if ($channel.Account.currency) { $detail += "mata uang $($channel.Account.currency)" }
+      if ($channel.Name -eq 'Shopee' -and $null -ne $channel.Account.balance) {
+        $detail += "saldo Rp$(([double]$channel.Account.balance).ToString('N0'))"
+      }
+      if ($detail.Count -gt 0) { Write-Host "      $($detail -join ' · ')" -ForegroundColor DarkGray }
+      foreach ($warning in $channel.Warnings) {
+        if ($warning) { Write-Warn2 "$($channel.Name): $warning" }
+      }
+    } else {
+      $reason = if ($channel.Error) {
+        $channel.Error
+      } elseif ($channel.Warnings.Count -gt 0) {
+        ($channel.Warnings | Where-Object { $_ }) -join ' '
+      } else {
+        'tolak ukur live belum terpenuhi'
+      }
+      Write-Warn2 "$($channel.Name): belum LIVE - $reason"
+      $notLive += $channel.Name
+    }
+  }
+}
+
+$marketingSummary = if ($diagnostics) {
+  if ($notLive.Count -eq 0) { '3 kanal LIVE' } else { "$(3 - $notLive.Count)/3 kanal live; belum live: $($notLive -join ', ')" }
+} elseif ($incomplete.Count -eq 0) {
+  'env lengkap, status live belum diverifikasi'
+} else {
+  'belum lengkap: ' + ($incomplete -join ', ')
+}
 
 # ----------------------------------------------------------- cleanup/summary
 if (-not $KeepSourceArchive) {
@@ -531,11 +612,15 @@ Write-Host "   Source   : $sourceLabel"
 Write-Host "   Service  : $ServiceName ($((Get-Service $ServiceName).Status))"
 if ($distBackup) { Write-Host "   Backup   : $distBackup" }
 Write-Host "   Log      : $AppDir\logs\stderr.log"
-Write-Host "   Marketing: $(if ($incomplete.Count -eq 0) { '3 kanal terkonfigurasi' } else { 'belum lengkap: ' + ($incomplete -join ', ') })"
+Write-Host "   Marketing: $marketingSummary"
 Write-Host ''
 
-if ($RequireMarketing -and $incomplete.Count -gt 0) {
-  Write-Host "   [FAIL] Marketing belum lengkap: $($incomplete -join ', ')" -ForegroundColor Red
+if ($RequireMarketing -and ($incomplete.Count -gt 0 -or $notLive.Count -gt 0 -or $diagnosticsFailed)) {
+  $reason = @()
+  if ($incomplete.Count -gt 0) { $reason += "env kosong: $($incomplete -join ', ')" }
+  if ($notLive.Count -gt 0) { $reason += "belum live: $($notLive -join ', ')" }
+  if ($diagnosticsFailed) { $reason += 'diagnostik live gagal' }
+  Write-Host "   [FAIL] Marketing belum terintegrasi penuh: $($reason -join '; ')" -ForegroundColor Red
   exit 2
 }
 exit 0

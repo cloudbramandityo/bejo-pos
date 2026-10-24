@@ -3,7 +3,7 @@
  * Marketing Module — Panel Iklan Resmi WhatsApp Status (Meta Marketing API)
  * Coded by Langgo Bramandityo.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Megaphone,
   MessageCircle,
@@ -34,6 +34,7 @@ import {
   Heart,
   Bookmark,
   Check,
+  RefreshCw,
 } from 'lucide-react';
 
 import { TikTokInFeedAds } from './marketing/TikTokInFeedAds';
@@ -142,6 +143,14 @@ interface ChannelStatus {
   missing: string[];
 }
 
+interface ChannelDiagnostic extends ChannelStatus {
+  live: boolean;
+  checkedAt?: string;
+  account?: Record<string, unknown>;
+  warnings?: string[];
+  error?: string;
+}
+
 interface MarketingStatus {
   success: boolean;
   appUrl?: string;
@@ -150,12 +159,32 @@ interface MarketingStatus {
   shopee: ChannelStatus;
 }
 
+interface MarketingDiagnostics {
+  success: boolean;
+  checkedAt: string;
+  appUrl?: string;
+  meta: ChannelDiagnostic;
+  tiktok: ChannelDiagnostic;
+  shopee: ChannelDiagnostic;
+  configuredCount: number;
+  liveCount: number;
+}
+
+const CHANNEL_LABELS: Record<string, string> = {
+  'whatsapp-status-ads': 'Meta',
+  'tiktok-infeed-ads': 'TikTok',
+  'shopee-discovery-ads': 'Shopee',
+};
+
 /* ------------------------------------------------------------------ */
 /* Main Component                                                     */
 /* ------------------------------------------------------------------ */
 export const MarketingScreen: React.FC = () => {
   const [activeSubMenu, setActiveSubMenu] = useState('whatsapp-status-ads');
   const [status, setStatus] = useState<MarketingStatus | null>(null);
+  const [diagnostics, setDiagnostics] = useState<MarketingDiagnostics | null>(null);
+  const [checkingDiagnostics, setCheckingDiagnostics] = useState(false);
+  const [diagnosticsError, setDiagnosticsError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -170,11 +199,39 @@ export const MarketingScreen: React.FC = () => {
     };
   }, []);
 
+  const checkDiagnostics = useCallback(async () => {
+    setCheckingDiagnostics(true);
+    setDiagnosticsError('');
+    try {
+      const res = await fetch('/api/marketing/diagnostics?refresh=1');
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Gagal memeriksa koneksi API.');
+      }
+      setDiagnostics(data as MarketingDiagnostics);
+    } catch (err: any) {
+      setDiagnosticsError(err?.message || 'Gagal memeriksa koneksi API.');
+    } finally {
+      setCheckingDiagnostics(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void checkDiagnostics();
+  }, [checkDiagnostics]);
+
   const channelOf = (id: string): ChannelStatus | null => {
     if (!status) return null;
     if (id === 'whatsapp-status-ads') return status.meta;
     if (id === 'tiktok-infeed-ads') return status.tiktok;
     return status.shopee;
+  };
+
+  const diagnosticOf = (id: string): ChannelDiagnostic | null => {
+    if (!diagnostics) return null;
+    if (id === 'whatsapp-status-ads') return diagnostics.meta;
+    if (id === 'tiktok-infeed-ads') return diagnostics.tiktok;
+    return diagnostics.shopee;
   };
 
   const simulationChannels = status
@@ -185,6 +242,18 @@ export const MarketingScreen: React.FC = () => {
   const missingVars = status
     ? Array.from(new Set([...status.meta.missing, ...status.tiktok.missing, ...status.shopee.missing]))
     : [];
+
+  const headerState = diagnostics
+    ? diagnostics.liveCount === SUB_MENUS.length
+      ? { dot: 'bg-emerald-500', text: 'Semua kanal API live' }
+      : diagnostics.liveCount > 0
+      ? { dot: 'bg-amber-500', text: `${diagnostics.liveCount}/${SUB_MENUS.length} kanal API live` }
+      : { dot: 'bg-rose-500', text: 'Belum ada kanal API live' }
+    : status
+    ? simulationChannels.length === 0
+      ? { dot: 'bg-emerald-500', text: 'Semua kanal terkonfigurasi' }
+      : { dot: 'bg-amber-500', text: `${simulationChannels.length} kanal dalam mode simulasi` }
+    : { dot: 'bg-amber-500', text: 'Memeriksa koneksi API...' };
 
   return (
     <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 py-6 space-y-5">
@@ -208,15 +277,121 @@ export const MarketingScreen: React.FC = () => {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500">
-          <span className={`w-2 h-2 rounded-full ${status && simulationChannels.length === 0 ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-          {status
-            ? simulationChannels.length === 0
-              ? 'Semua kanal API aktif'
-              : `${simulationChannels.length} kanal dalam mode simulasi`
-            : 'Memeriksa koneksi API...'}
+        <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500">
+            <span className={`w-2 h-2 rounded-full ${headerState.dot}`} />
+            {headerState.text}
+          </div>
+          <button
+            type="button"
+            onClick={() => void checkDiagnostics()}
+            disabled={checkingDiagnostics}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {checkingDiagnostics ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="w-3.5 h-3.5" />
+            )}
+            {checkingDiagnostics ? 'Memeriksa...' : 'Cek koneksi API'}
+          </button>
         </div>
       </div>
+
+      {/* Live API diagnostics */}
+      {(diagnostics || diagnosticsError) && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-bold text-slate-800">Status koneksi API (live)</p>
+              <p className="text-[10px] text-slate-500">
+                {diagnostics
+                  ? `Diperiksa ${new Date(diagnostics.checkedAt).toLocaleString('id-ID')} · ${diagnostics.liveCount}/${SUB_MENUS.length} kanal live`
+                  : 'Pemeriksaan terakhir gagal.'}
+              </p>
+            </div>
+            {diagnostics && (
+              <p className="text-[10px] font-semibold text-slate-400">
+                {diagnostics.configuredCount}/{SUB_MENUS.length} kanal memiliki kredensial
+              </p>
+            )}
+          </div>
+
+          {diagnosticsError && (
+            <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-800">
+              {diagnosticsError}
+            </div>
+          )}
+
+          {diagnostics && (
+            <>
+              <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+                {SUB_MENUS.map((menu) => {
+                  const diag = diagnosticOf(menu.id);
+                  if (!diag) return null;
+                  const badge = diag.live
+                    ? { label: 'LIVE', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' }
+                    : diag.configured
+                    ? { label: 'GAGAL', className: 'border-rose-200 bg-rose-50 text-rose-700' }
+                    : { label: 'SIMULASI', className: 'border-amber-200 bg-amber-50 text-amber-700' };
+                  const account = diag.account || {};
+                  return (
+                    <div key={menu.id} className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold text-slate-800">{CHANNEL_LABELS[menu.id]}</span>
+                        <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold ${badge.className}`}>
+                          {badge.label}
+                        </span>
+                      </div>
+                      <div className="mt-2 space-y-0.5 text-[10px] leading-relaxed text-slate-600">
+                        {menu.id === 'whatsapp-status-ads' && diag.live && (
+                          <>
+                            <p className="font-semibold text-slate-800">{String(account.name || 'Akun Meta')}</p>
+                            <p>Mata uang: {String(account.currency || '—')} · {String(account.timezone || '—')}</p>
+                            <p>Pengguna token: {String(account.tokenUser || '—')}</p>
+                          </>
+                        )}
+                        {menu.id === 'tiktok-infeed-ads' && diag.live && (
+                          <>
+                            <p className="font-semibold text-slate-800">{String(account.name || 'Advertiser TikTok')}</p>
+                            <p>ID: {String(account.id || '—')}</p>
+                            <p>Mata uang: {String(account.currency || '—')} · {String(account.status || '—')}</p>
+                          </>
+                        )}
+                        {menu.id === 'shopee-discovery-ads' && diag.live && (
+                          <>
+                            <p className="font-semibold text-slate-800">{String(account.shopName || 'Toko Shopee')}</p>
+                            <p>Shop ID: {String(account.shopId || '—')}</p>
+                            <p>
+                              Saldo Ads:{' '}
+                              {typeof account.balance === 'number'
+                                ? `Rp${account.balance.toLocaleString('id-ID')}`
+                                : 'tidak terbaca'}
+                            </p>
+                          </>
+                        )}
+                        {diag.missing.length > 0 && (
+                          <p className="text-amber-700">Kurang: {diag.missing.join(', ')}</p>
+                        )}
+                        {diag.error && <p className="text-rose-700">{diag.error}</p>}
+                        {(diag.warnings || []).map((warning) => (
+                          <p key={warning} className="text-amber-700">
+                            {warning}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-[10px] leading-relaxed text-slate-400">
+                Pemeriksaan Shopee memakai SHOPEE_SHOP_ID di server. Koneksi dari form tetap memakai Shop ID yang
+                Anda isi pada langkah Akun Toko.
+              </p>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Integration status */}
       {status && simulationChannels.length > 0 && (
@@ -241,7 +416,19 @@ export const MarketingScreen: React.FC = () => {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {SUB_MENUS.map((m) => {
             const channel = channelOf(m.id);
+            const diag = diagnosticOf(m.id);
             const active = activeSubMenu === m.id;
+            const badge = diag
+              ? diag.live
+                ? { label: 'LIVE', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' }
+                : diag.configured
+                ? { label: 'GAGAL', className: 'border-rose-200 bg-rose-50 text-rose-700' }
+                : { label: 'SIMULASI', className: 'border-amber-200 bg-amber-50 text-amber-700' }
+              : channel
+              ? channel.configured
+                ? { label: 'SIAP', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' }
+                : { label: 'SIMULASI', className: 'border-amber-200 bg-amber-50 text-amber-700' }
+              : null;
             return (
               <button
                 key={m.id}
@@ -266,17 +453,13 @@ export const MarketingScreen: React.FC = () => {
                     {m.subtitle}
                   </p>
                 </div>
-                {channel && (
+                {badge && (
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${
-                      active
-                        ? 'bg-white/15 text-white'
-                        : channel.configured
-                        ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : 'border border-amber-200 bg-amber-50 text-amber-700'
+                    className={`rounded-full border px-2 py-0.5 text-[9px] font-bold ${
+                      active ? 'border-white/20 bg-white/15 text-white' : badge.className
                     }`}
                   >
-                    {channel.configured ? 'LIVE' : 'SIMULASI'}
+                    {badge.label}
                   </span>
                 )}
                 <ChevronRight className={`h-4 w-4 shrink-0 ${active ? 'text-white/60' : 'text-slate-300'}`} />

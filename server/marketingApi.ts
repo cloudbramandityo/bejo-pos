@@ -133,6 +133,20 @@ function toNumber(value: unknown): number {
 /* META — WhatsApp Status Ads                                            */
 /* ===================================================================== */
 
+const ZERO_DECIMAL_CURRENCIES = new Set([
+  'IDR',
+  'VND',
+  'JPY',
+  'KRW',
+  'CLP',
+  'COP',
+  'CRC',
+  'HUF',
+  'ISK',
+  'PYG',
+  'TWD',
+]);
+
 function metaConfig() {
   const versionRaw = env('META_GRAPH_VERSION') || 'v23.0';
   const version = versionRaw.startsWith('v') ? versionRaw : `v${versionRaw}`;
@@ -140,8 +154,22 @@ function metaConfig() {
     token: env('META_ACCESS_TOKEN'),
     adAccountId: env('META_AD_ACCOUNT_ID').replace(/^act_/i, ''),
     version,
-    budgetMultiplier: Number(env('META_BUDGET_MULTIPLIER') || 100) || 100,
   };
+}
+
+let metaAccountCache: { at: number; account: any } | null = null;
+
+async function getMetaAdAccount(force = false): Promise<any> {
+  const config = metaConfig();
+  if (!config.adAccountId) throw new MarketingError('META_AD_ACCOUNT_ID belum disetel.', 400);
+  if (!force && metaAccountCache && Date.now() - metaAccountCache.at < 10 * 60_000) {
+    return metaAccountCache.account;
+  }
+  const account = await graphGet(`act_${config.adAccountId}`, {
+    fields: 'id,name,account_status,currency,timezone_name,disable_reason',
+  });
+  metaAccountCache = { at: Date.now(), account };
+  return account;
 }
 
 function missingMetaConnect(): string[] {
@@ -363,6 +391,24 @@ async function metaPublish(payload: any) {
     });
   }
 
+  // Anggaran form dalam Rupiah. Meta menerima daily_budget pada unit terkecil
+  // mata uang akun; IDR tidak memiliki desimal, sehingga nominal dikirim apa adanya.
+  const accountInfo = await getMetaAdAccount();
+  const accountCurrency = String(accountInfo?.currency || '').toUpperCase();
+  if (!accountCurrency) {
+    throw new MarketingError(
+      'Meta: mata uang akun iklan tidak terbaca. Periksa izin token terhadap akun iklan.',
+      502
+    );
+  }
+  if (accountCurrency !== 'IDR') {
+    throw new MarketingError(
+      `Meta: mata uang akun iklan adalah ${accountCurrency}, sedangkan anggaran form menggunakan Rupiah. ` +
+        'Publikasi dihentikan agar nominal tidak salah. Gunakan akun iklan bermata uang IDR.',
+      400
+    );
+  }
+
   const mediaKind = creative.mediaType === 'video' ? 'video' : 'image';
   const pageId = String(business.facebookPageId);
   const waLink = toWhatsAppLink(String(business.whatsappBusinessNumber));
@@ -395,7 +441,7 @@ async function metaPublish(payload: any) {
   // Click-to-WhatsApp ads require a messaging objective; both UI objectives map to it.
   const objective = 'OUTCOME_ENGAGEMENT';
   const optimizationGoal = 'CONVERSATIONS';
-  const dailyBudget = Math.max(1, Math.round(toNumber(campaign.dailyBudget) * config.budgetMultiplier));
+  const dailyBudget = Math.max(1, Math.round(toNumber(campaign.dailyBudget)));
 
   const campaignRes = await graphPost(`act_${config.adAccountId}/campaigns`, {
     name: String(campaign.name),
@@ -486,6 +532,8 @@ async function metaPublish(payload: any) {
     adSetId,
     creativeId,
     adId,
+    accountCurrency,
+    dailyBudget,
     videoId: videoId || undefined,
     videoReady: mediaKind === 'video' ? videoReady : undefined,
     warnings,
@@ -1198,28 +1246,61 @@ async function shopeePublish(payload: any) {
   }
 
   const warnings: string[] = [];
-  if (bidding?.bidMode === 'MANUAL') {
+  const manualBid = toNumber(bidding?.manualBid);
+  const bidMode = String(bidding?.bidMode || 'AUTO').toUpperCase() === 'MANUAL' ? 'manual' : 'auto';
+  const keywords = Array.from(
+    new Set(
+      (Array.isArray(bidding?.keywords) ? bidding.keywords : String(bidding?.keywords || '').split(','))
+        .map((keyword: unknown) => String(keyword).trim())
+        .filter(Boolean)
+    )
+  ).slice(0, 50);
+  const placements = bidding?.placements || {};
+  const selectedLocations = [
+    { enabled: Boolean(placements.homeRecommendation), location: 'daily_discover' },
+    { enabled: Boolean(placements.productDetail), location: 'you_may_also_like' },
+  ].filter((entry) => entry.enabled);
+
+  const body: Record<string, unknown> = {
+    reference_id: `${String(campaign.adName).slice(0, 200)}-${Date.now()}`,
+    budget: Math.round(budget * 100) / 100,
+    start_date: formatJakartaDate(new Date()),
+    bidding_method: bidMode,
+    item_id: Number(product.itemId),
+  };
+
+  if (bidMode === 'manual') {
+    if (!keywords.length) {
+      throw new MarketingError('Bid manual Shopee memerlukan minimal satu keyword.', 400);
+    }
+    if (!(manualBid > 0)) {
+      throw new MarketingError('Bid manual per klik wajib lebih besar dari 0.', 400);
+    }
+    body.selected_keywords = keywords.map((keyword) => ({
+      keyword,
+      match_type: 'broad',
+      bid_price_per_click: manualBid,
+    }));
+    if (selectedLocations.length) {
+      body.discovery_ads_locations = selectedLocations.map((entry) => ({
+        location: entry.location,
+        bid_price: manualBid,
+      }));
+    } else {
+      warnings.push('Tidak ada penempatan yang dipilih; Shopee menentukan penempatan manual secara default.');
+    }
+  } else if (selectedLocations.length) {
     warnings.push(
-      'Bid manual memerlukan daftar keyword dan lokasi Discovery Ads; iklan ini diterbitkan dengan bidding otomatis.'
+      'Penempatan Discovery Ads hanya dapat dikirim pada bid manual; mode otomatis sepenuhnya diatur Shopee.'
     );
-  }
-  if (bidding?.placements) {
-    warnings.push('Penempatan Discovery Ads ditentukan otomatis oleh Shopee; pengaturan penempatan di form tidak dikirim ke API.');
   }
   if (toNumber(bidding?.premiumRate) > 0) {
     warnings.push('Premium Rate tidak tersedia pada API pembuatan iklan; atur persentasenya melalui Shopee Ads Manager.');
   }
 
-  const referenceId = `${String(campaign.adName).slice(0, 200)}-${Date.now()}`;
   const response = await shopeeRequest(config, '/api/v2/ads/create_manual_product_ads', {
     method: 'POST',
-    body: {
-      reference_id: referenceId,
-      budget: Math.round(budget * 100) / 100,
-      start_date: formatJakartaDate(new Date()),
-      bidding_method: 'auto',
-      item_id: Number(product.itemId),
-    },
+    body,
   });
 
   const campaignId = response?.campaign_id ?? response?.ad_id;
@@ -1235,6 +1316,200 @@ async function shopeePublish(payload: any) {
     warnings,
     message: 'Iklan Shopee Discovery Ads berhasil diaktifkan.',
   };
+}
+
+/* ===================================================================== */
+/* Diagnostics                                                           */
+/* ===================================================================== */
+
+function diagnosticError(err: unknown): string {
+  return err instanceof Error ? err.message : 'Pemeriksaan API gagal.';
+}
+
+function withTimeout<T>(task: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new MarketingError(`${label}: pemeriksaan melebihi ${Math.round(ms / 1000)} detik.`, 504)),
+      ms
+    );
+  });
+  return Promise.race([task, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+async function metaDiagnostics() {
+  const checkedAt = new Date().toISOString();
+  const missing = missingMetaPublish();
+  if (missing.length) return { configured: false, live: false, missing, checkedAt };
+
+  const config = metaConfig();
+  try {
+    const me = await withTimeout(graphGet('me', { fields: 'id,name' }), 15000, 'Meta');
+    const account = await withTimeout(getMetaAdAccount(true), 15000, 'Meta');
+    const status = Number(account?.account_status);
+    const active = status === 1 || status === 201;
+    const currency = String(account?.currency || '').toUpperCase();
+    const warnings: string[] = [];
+    if (!active) {
+      warnings.push(
+        `Status akun iklan Meta: ${account?.account_status ?? 'tidak diketahui'}${
+          account?.disable_reason ? ` (${account.disable_reason})` : ''
+        }.`
+      );
+    }
+    if (currency && currency !== 'IDR') {
+      warnings.push(
+        `Mata uang akun ${currency}; form Marketing memakai Rupiah. Publikasi Meta hanya diizinkan untuk akun IDR.`
+      );
+    }
+    return {
+      configured: true,
+      live: active,
+      missing: [],
+      checkedAt,
+      account: {
+        id: String(account?.id || `act_${config.adAccountId}`),
+        name: String(account?.name || ''),
+        currency,
+        timezone: String(account?.timezone_name || ''),
+        status: account?.account_status ?? null,
+        tokenUser: String(me?.name || me?.id || ''),
+      },
+      warnings,
+    };
+  } catch (err) {
+    return { configured: true, live: false, missing: [], checkedAt, error: diagnosticError(err) };
+  }
+}
+
+async function tiktokDiagnostics() {
+  const checkedAt = new Date().toISOString();
+  const missing = missingTikTok();
+  if (missing.length) return { configured: false, live: false, missing, checkedAt };
+
+  const config = tiktokConfig();
+  const warnings: string[] = [];
+  if (!config.pixelId) {
+    warnings.push('TIKTOK_PIXEL_ID belum disetel; objective Konversi tidak dapat diterbitkan.');
+  }
+  try {
+    const data = await withTimeout(
+      tiktokRequest('/advertiser/info/', { query: { advertiser_ids: [config.advertiserId] } }),
+      15000,
+      'TikTok'
+    );
+    const raw = data?.data?.list ?? data?.data?.advertiser_info ?? data?.data;
+    const account = Array.isArray(raw) ? raw[0] : raw && typeof raw === 'object' ? raw : null;
+    if (!account) {
+      return {
+        configured: true,
+        live: false,
+        missing: [],
+        checkedAt,
+        warnings,
+        error: 'TikTok tidak mengembalikan data advertiser. Periksa TIKTOK_ADVERTISER_ID dan izin token.',
+      };
+    }
+    const status = String(account.status || '');
+    const live = !status || status === 'STATUS_ENABLE';
+    if (!live) warnings.push(`Status advertiser TikTok: ${status}.`);
+    return {
+      configured: true,
+      live,
+      missing: [],
+      checkedAt,
+      account: {
+        id: String(account.advertiser_id || config.advertiserId),
+        name: String(account.advertiser_name || account.name || ''),
+        currency: String(account.currency || ''),
+        timezone: String(account.timezone || ''),
+        status,
+      },
+      warnings,
+    };
+  } catch (err) {
+    return { configured: true, live: false, missing: [], checkedAt, warnings, error: diagnosticError(err) };
+  }
+}
+
+async function shopeeDiagnostics(inputShopId: string) {
+  const checkedAt = new Date().toISOString();
+  let config: ReturnType<typeof shopeeConfig>;
+  let missing: string[] = [];
+  try {
+    config = shopeeConfig(inputShopId);
+    missing = missingShopee(inputShopId);
+  } catch (err) {
+    return { configured: false, live: false, missing: ['SHOPEE_SHOP_ID'], checkedAt, error: diagnosticError(err) };
+  }
+  if (missing.length) return { configured: false, live: false, missing, checkedAt };
+
+  const warnings: string[] = [];
+  try {
+    const shop = await withTimeout(
+      shopeeRequest(config, '/api/v2/shop/get_shop_info'),
+      15000,
+      'Shopee'
+    );
+    let balance: number | null = null;
+    try {
+      balance = parseShopeeBalance(
+        await withTimeout(shopeeRequest(config, '/api/v2/ads/get_total_balance'), 15000, 'Shopee')
+      );
+    } catch (err) {
+      warnings.push(`Saldo Shopee Ads tidak dapat dibaca: ${diagnosticError(err)}`);
+    }
+    const tokenStore = await loadShopeeTokens();
+    if (!config.refreshToken && !tokenStore[config.shopId]?.refreshToken) {
+      warnings.push('SHOPEE_REFRESH_TOKEN belum disetel; access token tidak diperbarui otomatis.');
+    }
+    return {
+      configured: true,
+      live: true,
+      missing: [],
+      checkedAt,
+      account: {
+        shopId: String(shop?.shop_id || config.shopId),
+        shopName: String(shop?.shop_name || ''),
+        region: String(shop?.region || ''),
+        status: shop?.status ?? null,
+        balance,
+      },
+      warnings,
+    };
+  } catch (err) {
+    return { configured: true, live: false, missing: [], checkedAt, warnings, error: diagnosticError(err) };
+  }
+}
+
+const diagnosticsCache = new Map<string, { at: number; data: any }>();
+const DIAGNOSTICS_TTL_MS = 60_000;
+
+async function getMarketingDiagnostics(shopeeSellerId: string, refresh: boolean) {
+  const key = shopeeSellerId || 'env';
+  const cached = diagnosticsCache.get(key);
+  if (!refresh && cached && Date.now() - cached.at < DIAGNOSTICS_TTL_MS) return cached.data;
+
+  const [meta, tiktok, shopee] = await Promise.all([
+    metaDiagnostics(),
+    tiktokDiagnostics(),
+    shopeeDiagnostics(shopeeSellerId),
+  ]);
+  const channels = [meta, tiktok, shopee];
+  const data = {
+    success: true,
+    checkedAt: new Date().toISOString(),
+    appUrl: appUrl(),
+    meta,
+    tiktok,
+    shopee,
+    configuredCount: channels.filter((channel) => channel.configured).length,
+    liveCount: channels.filter((channel) => channel.live).length,
+  };
+  diagnosticsCache.set(key, { at: Date.now(), data });
+  return data;
 }
 
 /* ===================================================================== */
@@ -1262,6 +1537,15 @@ export function registerMarketingRoutes(app: Express): void {
   app.get('/api/marketing/status', (_req, res) => {
     res.json(getMarketingStatus());
   });
+
+  app.get(
+    '/api/marketing/diagnostics',
+    asyncRoute(async (req, res) => {
+      const shopeeSellerId = String(req.query.shopeeSellerId || '').trim();
+      const refresh = String(req.query.refresh || '') === '1';
+      res.json(await getMarketingDiagnostics(shopeeSellerId, refresh));
+    })
+  );
 
   app.post(
     '/api/marketing/whatsapp-status-ads/connect',

@@ -35,6 +35,7 @@ import { TaxScreen } from './components/tax/TaxScreen';
 import { fetchBackendDiagnostics } from './utils/backendDiagnostics';
 import { persistSnapshotToIndexedDb, initAutoDatabaseSync } from './utils/localDatabase';
 import { getStoredLandingConfig, saveStoredLandingConfig } from './utils/landingPageStorage';
+import { closeJournalSession } from './lib/journalApi';
 
 import {
   Product,
@@ -1131,6 +1132,7 @@ export default function App() {
 
   const handleLogout = () => {
     currentUserRef.current = null; // Clear ref immediately to prevent race condition re-logins from PocketBase snapshot listener
+    closeJournalSession().catch(() => {});
     if (currentUser) {
       const offlineUser: AppUser = {
         ...currentUser,
@@ -2144,6 +2146,7 @@ export default function App() {
             customers={customers}
             productCategories={productCategories}
             userRole={userRole}
+            currentUsername={currentUser.username}
             shifts={pastShifts}
             onUpdateStockTransaction={handleUpdateStockTransaction}
             onDeleteStockTransaction={handleDeleteStockTransaction}

@@ -7,7 +7,7 @@
  * sehingga navigasi navbar lebih ringkas (satu tab "Laporan" untuk semua laporan).
  */
 import React, { useState } from 'react';
-import { Receipt, Landmark } from 'lucide-react';
+import { Receipt, Landmark, BookOpen } from 'lucide-react';
 import { TransactionHistoryScreen } from '../TransactionHistoryScreen';
 import { LaporanKeuanganScreen } from './LaporanKeuanganScreen';
 import {
@@ -24,6 +24,10 @@ import {
 } from '../../types';
 import { FinancialSettings } from '../../utils/financialStorage';
 
+const JurnalScreen = React.lazy(() =>
+  import('../journal/JurnalScreen').then((module) => ({ default: module.JurnalScreen }))
+);
+
 interface LaporanScreenProps {
   transactions: Transaction[];
   stockTransactions: StockTransaction[];
@@ -38,6 +42,7 @@ interface LaporanScreenProps {
   customers: any[];
   productCategories: ProductCategoryItem[];
   userRole?: UserRole;
+  currentUsername?: string;
   shifts: Shift[];
   onUpdateStockTransaction?: (updatedTx: StockTransaction) => Promise<void> | void;
   onDeleteStockTransaction?: (transactionId: string) => Promise<void> | void;
@@ -47,14 +52,18 @@ interface LaporanScreenProps {
   onSaveFinancialSettings: (s: FinancialSettings) => void;
 }
 
-type LaporanSubTab = 'penjualan' | 'keuangan';
+type LaporanSubTab = 'penjualan' | 'keuangan' | 'jurnal';
 
 export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
   const [activeSubTab, setActiveSubTab] = useState<LaporanSubTab>('penjualan');
+  const isDeveloper = props.userRole === 'DEVELOPER';
 
   const subTabs: { key: LaporanSubTab; label: string; icon: React.ElementType; desc: string }[] = [
     { key: 'penjualan', label: 'Laporan Penjualan', icon: Receipt, desc: 'Riwayat & analisis transaksi penjualan' },
     { key: 'keuangan', label: 'Laporan Keuangan', icon: Landmark, desc: 'Laba Rugi, Modal, Neraca & Arus Kas' },
+    ...(isDeveloper
+      ? [{ key: 'jurnal' as const, label: 'Jurnal', icon: BookOpen, desc: 'Spreadsheet Kas Utama, Debit & Kredit (khusus DEVELOPER)' }]
+      : []),
   ];
 
   return (
@@ -94,7 +103,23 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
       </div>
 
       {/* Konten sub-tab aktif */}
-      {activeSubTab === 'penjualan' ? (
+      {activeSubTab === 'jurnal' ? (
+        isDeveloper ? (
+          <React.Suspense
+            fallback={
+              <div className="flex items-center justify-center py-24 text-sm text-slate-500">
+                Memuat spreadsheet Jurnal...
+              </div>
+            }
+          >
+            <JurnalScreen currentUsername={props.currentUsername} />
+          </React.Suspense>
+        ) : (
+          <div className="flex items-center justify-center py-24 text-sm text-slate-500">
+            Modul Jurnal hanya dapat diakses oleh DEVELOPER.
+          </div>
+        )
+      ) : activeSubTab === 'penjualan' ? (
         <TransactionHistoryScreen
           transactions={props.transactions}
           stockTransactions={props.stockTransactions}

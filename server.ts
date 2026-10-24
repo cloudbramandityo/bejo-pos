@@ -4,6 +4,7 @@ import http from "http";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import { registerMarketingRoutes } from "./server/marketingApi";
+import { registerJournalRoutes } from "./server/journalApi";
 
 dotenv.config();
 
@@ -1733,6 +1734,7 @@ process.on('uncaughtException', (err) => {
   console.error('[Server] Uncaught exception:', err);
 });
 
+registerJournalRoutes(app);
 registerMarketingRoutes(app);
 
 setupVite();

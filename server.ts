@@ -3,6 +3,7 @@ import path from "path";
 import http from "http";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
+import { registerMarketingRoutes } from "./server/marketingApi";
 
 dotenv.config();
 
@@ -120,7 +121,7 @@ if (REMOTE_ACCESS_ENABLED) {
   console.log('[Keamanan] Proteksi akses luar NONAKTIF Ã¢â‚¬â€ set REMOTE_ACCESS_PASS di .env untuk mengaktifkan.');
 }
 
-app.use(express.json());
+app.use(express.json({ limit: "100mb" }));
 
 // Initialize GoogleGenAI client according to official guidelines
 const ai = new GoogleGenAI({
@@ -1691,227 +1692,6 @@ async function setupVite() {
         }
       }
     }));
-  // -----------------------------------------------------------------------
-  // MARKETING - WhatsApp Status Ads (Meta Marketing API proxy)
-  // -----------------------------------------------------------------------
-  // Verifikasi & hubungkan akun bisnis ke Meta
-  app.post('/api/marketing/whatsapp-status-ads/connect', async (req, res) => {
-    try {
-      const { metaBusinessId, facebookPageId, whatsappBusinessNumber } = req.body || {};
-      if (!metaBusinessId || !facebookPageId || !whatsappBusinessNumber) {
-        return res.status(400).json({ error: 'Semua field akun bisnis wajib diisi.' });
-      }
-
-      const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN || '';
-
-      if (!META_ACCESS_TOKEN) {
-        console.warn('[Marketing] META_ACCESS_TOKEN belum disetel. Mode simulasi connect.');
-        return res.json({
-          success: true,
-          simulated: true,
-          message: 'Akun bisnis terverifikasi (mode simulasi - kredensial Meta belum disetel).',
-        });
-      }
-
-      // TODO: Implementasi nyata:
-      // 1. GET https://graph.facebook.com/v19.0/{metaBusinessId}?access_token=...
-      // 2. GET https://graph.facebook.com/v19.0/{facebookPageId}?access_token=...
-      // 3. Verifikasi nomor WA Business via WhatsApp Business Management API
-
-      return res.json({ success: true, message: 'Akun bisnis terhubung ke Meta.' });
-    } catch (err: any) {
-      console.error('[Marketing] Connect error:', err?.message || err);
-      res.status(500).json({ error: err?.message || 'Gagal menghubungkan akun bisnis.' });
-    }
-  });
-
-  app.post('/api/marketing/whatsapp-status-ads/publish', async (req, res) => {
-    try {
-      const payload = req.body || {};
-      const { business, campaign, targeting, creative } = payload;
-
-      if (!business?.connected) {
-        return res.status(400).json({ error: 'Akun bisnis belum terhubung.' });
-      }
-      if (!campaign?.name || !campaign?.dailyBudget) {
-        return res.status(400).json({ error: 'Nama kampanye dan anggaran harian wajib diisi.' });
-      }
-      if (!creative?.mediaType) {
-        return res.status(400).json({ error: 'Media iklan (foto/video 9:16) wajib diunggah.' });
-      }
-
-      const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN || '';
-      const META_AD_ACCOUNT_ID = process.env.META_AD_ACCOUNT_ID || '';
-
-      if (!META_ACCESS_TOKEN || !META_AD_ACCOUNT_ID) {
-        console.warn('[Marketing] META_ACCESS_TOKEN / META_AD_ACCOUNT_ID belum disetel. Mode simulasi.');
-        const mockCampaignId = 'MOCK-CAMPAIGN-' + Date.now();
-        return res.json({
-          success: true,
-          simulated: true,
-          campaignId: mockCampaignId,
-          message: 'Iklan berhasil disimulasikan (kredensial Meta belum disetel).',
-        });
-      }
-
-      // TODO: Implementasi nyata ke Meta Marketing API:
-      // 1. POST /act_{ad_account_id}/campaigns  -> Campaign (objective)
-      // 2. POST /act_{ad_account_id}/adsets    -> AdSet (targeting, budget, placements)
-      // 3. POST /act_{ad_account_id}/adcreatives -> AdCreative (media, caption, CTA)
-      // 4. POST /act_{ad_account_id}/ads       -> Ad (link creative ke adset)
-
-      return res.json({ success: true, campaignId: 'PENDING-META-IMPLEMENTATION' });
-    } catch (err: any) {
-      console.error('[Marketing] Publish error:', err?.message || err);
-      res.status(500).json({ error: err?.message || 'Gagal menerbitkan iklan.' });
-    }
-  });
-
-  // -----------------------------------------------------------------------
-  // TIKTOK — In-Feed Ads (TikTok Marketing API proxy)
-  // -----------------------------------------------------------------------
-  app.post('/api/marketing/tiktok-infeed-ads/connect', async (req, res) => {
-    try {
-      const { tiktokForBusinessId, tiktokAdsManagerId, tiktokOrganicHandle } = req.body || {};
-      if (!tiktokForBusinessId || !tiktokAdsManagerId || !tiktokOrganicHandle) {
-        return res.status(400).json({ error: 'Semua field akun bisnis TikTok wajib diisi.' });
-      }
-
-      const TIKTOK_ACCESS_TOKEN = process.env.TIKTOK_ACCESS_TOKEN || '';
-
-      if (!TIKTOK_ACCESS_TOKEN) {
-        console.warn('[Marketing] TIKTOK_ACCESS_TOKEN belum disetel. Mode simulasi connect.');
-        return res.json({
-          success: true,
-          simulated: true,
-          message: 'Akun bisnis TikTok terverifikasi (mode simulasi).',
-        });
-      }
-
-      // TODO: Implementasi nyata:
-      // 1. GET https://business-api.tiktok.com/open_api/v1.3/user/info/
-      // 2. Verifikasi advertiser_id & organic account
-
-      return res.json({ success: true, message: 'Akun bisnis TikTok terhubung.' });
-    } catch (err: any) {
-      console.error('[Marketing] TikTok connect error:', err?.message || err);
-      res.status(500).json({ error: err?.message || 'Gagal menghubungkan akun TikTok.' });
-    }
-  });
-
-  app.post('/api/marketing/tiktok-infeed-ads/publish', async (req, res) => {
-    try {
-      const payload = req.body || {};
-      const { business, campaign, targeting, creative } = payload;
-
-      if (!business?.connected) {
-        return res.status(400).json({ error: 'Akun bisnis TikTok belum terhubung.' });
-      }
-      if (!campaign?.name || !campaign?.dailyBudget) {
-        return res.status(400).json({ error: 'Nama kampanye dan anggaran harian wajib diisi.' });
-      }
-      if (!creative?.mediaType) {
-        return res.status(400).json({ error: 'Video iklan (9:16) wajib diunggah.' });
-      }
-
-      const TIKTOK_ACCESS_TOKEN = process.env.TIKTOK_ACCESS_TOKEN || '';
-      const TIKTOK_ADVERTISER_ID = process.env.TIKTOK_ADVERTISER_ID || '';
-
-      if (!TIKTOK_ACCESS_TOKEN || !TIKTOK_ADVERTISER_ID) {
-        console.warn('[Marketing] TIKTOK_ACCESS_TOKEN / TIKTOK_ADVERTISER_ID belum disetel. Mode simulasi.');
-        const mockCampaignId = 'MOCK-TIKTOK-CAMPAIGN-' + Date.now();
-        return res.json({
-          success: true,
-          simulated: true,
-          campaignId: mockCampaignId,
-          message: 'Iklan TikTok berhasil disimulasikan (kredensial TikTok belum disetel).',
-        });
-      }
-
-      // TODO: Implementasi nyata ke TikTok Marketing API:
-      // 1. POST /open_api/v1.3/campaign/create/ -> Campaign
-      // 2. POST /open_api/v1.3/adgroup/create/  -> AdGroup (targeting, budget, placements)
-      // 3. POST /open_api/v1.3/ad/create/       -> Ad (video, text, CTA)
-
-      return res.json({ success: true, campaignId: 'PENDING-TIKTOK-IMPLEMENTATION' });
-    } catch (err: any) {
-      console.error('[Marketing] TikTok publish error:', err?.message || err);
-      res.status(500).json({ error: err?.message || 'Gagal menerbitkan iklan TikTok.' });
-    }
-  });
-
-  // -----------------------------------------------------------------------
-  // SHOPEE — Discovery Ads (Shopee Open Platform API proxy)
-  // -----------------------------------------------------------------------
-  app.post('/api/marketing/shopee-discovery-ads/connect', async (req, res) => {
-    try {
-      const { shopeeSellerId } = req.body || {};
-      if (!shopeeSellerId) {
-        return res.status(400).json({ error: 'Shopee Seller Account ID wajib diisi.' });
-      }
-
-      const SHOPEE_ACCESS_TOKEN = process.env.SHOPEE_ACCESS_TOKEN || '';
-
-      if (!SHOPEE_ACCESS_TOKEN) {
-        console.warn('[Marketing] SHOPEE_ACCESS_TOKEN belum disetel. Mode simulasi connect.');
-        return res.json({
-          success: true,
-          simulated: true,
-          balance: 500000,
-          message: 'Akun toko Shopee terverifikasi (mode simulasi).',
-        });
-      }
-
-      // TODO: Implementasi nyata:
-      // 1. GET https://partner.shopeemobile.com/api/v2/shop/get_shop_info
-      // 2. GET https://partner.shopeemobile.com/api/v2/ads/get_shop_ads_balance
-
-      return res.json({ success: true, balance: 0, message: 'Akun toko Shopee terhubung.' });
-    } catch (err: any) {
-      console.error('[Marketing] Shopee connect error:', err?.message || err);
-      res.status(500).json({ error: err?.message || 'Gagal menghubungkan akun Shopee.' });
-    }
-  });
-
-  app.post('/api/marketing/shopee-discovery-ads/publish', async (req, res) => {
-    try {
-      const payload = req.body || {};
-      const { business, campaign, bidding, product } = payload;
-
-      if (!business?.connected) {
-        return res.status(400).json({ error: 'Akun toko Shopee belum terhubung.' });
-      }
-      if (!campaign?.adName) {
-        return res.status(400).json({ error: 'Nama iklan wajib diisi.' });
-      }
-      if (!product) {
-        return res.status(400).json({ error: 'Pilih produk yang akan diiklankan.' });
-      }
-
-      const SHOPEE_ACCESS_TOKEN = process.env.SHOPEE_ACCESS_TOKEN || '';
-
-      if (!SHOPEE_ACCESS_TOKEN) {
-        console.warn('[Marketing] SHOPEE_ACCESS_TOKEN belum disetel. Mode simulasi.');
-        const mockAdId = 'MOCK-SHOPEE-AD-' + Date.now();
-        return res.json({
-          success: true,
-          simulated: true,
-          adId: mockAdId,
-          message: 'Iklan Shopee berhasil disimulasikan (kredensial Shopee belum disetel).',
-        });
-      }
-
-      // TODO: Implementasi nyata ke Shopee Open Platform API:
-      // 1. POST /api/v2/ads/create_campaign -> Campaign (ad name, budget)
-      // 2. POST /api/v2/ads/create_adgroup  -> AdGroup (bidding, placements, targeting)
-      // 3. POST /api/v2/ads/create_ad       -> Ad (product item, creative auto from Shopee)
-
-      return res.json({ success: true, adId: 'PENDING-SHOPEE-IMPLEMENTATION' });
-    } catch (err: any) {
-      console.error('[Marketing] Shopee publish error:', err?.message || err);
-      res.status(500).json({ error: err?.message || 'Gagal menerbitkan iklan Shopee.' });
-    }
-  });
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
@@ -1952,5 +1732,7 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (err) => {
   console.error('[Server] Uncaught exception:', err);
 });
+
+registerMarketingRoutes(app);
 
 setupVite();

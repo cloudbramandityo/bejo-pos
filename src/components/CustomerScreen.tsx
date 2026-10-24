@@ -1621,7 +1621,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
               </div>
               <div className="text-xs space-y-1">
                 <div className="font-black text-amber-950 flex items-center gap-2 flex-wrap">
-                  <span>ðŸ‘‘ Profil Toko BEJO Polsek adalah Master Database (Stok Terpusat)</span>
+                  <span>👑 Profil Toko BEJO Polsek adalah Master Database (Stok Terpusat)</span>
                   <span className="px-2 py-0.5 bg-amber-200/90 text-amber-900 font-bold text-[10px] rounded-md border border-amber-300">
                     SINKRONISASI AKTIF
                   </span>
@@ -1653,11 +1653,11 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                       <div className="flex items-center justify-between gap-2 mb-2">
                         {isMaster ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300">
-                            ðŸ‘‘ MASTER DATABASE
+                            👑 MASTER DATABASE
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                            ðŸ¢ DATABASE MANDIRI
+                            🏢 DATABASE MANDIRI
                           </span>
                         )}
 
@@ -1698,7 +1698,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                       {/* Address preview */}
                       {prof.address && (
                         <div className="mt-2.5 text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200 line-clamp-2">
-                          ðŸ“ {prof.address}
+                          📍 {prof.address}
                         </div>
                       )}
                     </div>
@@ -1813,7 +1813,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                           Logo Default Toko (Aktif)
                         </span>
                         <div className="text-[10px] text-emerald-700 font-bold">
-                          âœ“ Ditetapkan sebagai Logo Default
+                          ✓ Ditetapkan sebagai Logo Default
                         </div>
                       </div>
                     ) : (
@@ -2148,7 +2148,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                         PENGATURAN PRINTER THERMAL POS & AUTO-PRINT
                       </h3>
                       <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md">
-                        {printSettingsForm.paperSize} â€¢ Margin: {printSettingsForm.printMarginMm || 0}mm
+                        {printSettingsForm.paperSize} • Margin: {printSettingsForm.printMarginMm || 0}mm
                       </span>
                     </div>
                     <p className="text-xs text-slate-600 mt-0.5">
@@ -2276,7 +2276,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                   PENGATURAN PRINTER THERMAL POS & FORMAT STRUK
                 </h2>
                 <span className="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-md">
-                  {printSettingsForm.paperSize} â€¢ {printSettingsForm.printMarginMm || 0}mm Margin
+                  {printSettingsForm.paperSize} • {printSettingsForm.printMarginMm || 0}mm Margin
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
@@ -2423,7 +2423,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                       <div>
                         <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                           <Sliders className="w-4 h-4 text-indigo-600" />
-                          Format Margin Cetak (0mm â€“ 10mm)
+                          Format Margin Cetak (0mm – 10mm)
                         </h3>
                         <p className="text-[11px] text-slate-500 mt-0.5">
                           Atur jarak batas tepi (margin) kertas. <strong>0mm adalah rekomendasi utama</strong> untuk printer thermal POS agar hasil cetak rapat dan hemat kertas.
@@ -3186,7 +3186,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                             <td className="py-3.5 px-4 font-mono text-xs">
                               <div className="flex items-center gap-2">
                                 <span className="bg-slate-100 px-2 py-0.5 rounded font-semibold text-slate-800">
-                                  {isVisible ? u.password : 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢'}
+                                  {isVisible ? u.password : '••••••••'}
                                 </span>
                                 <button
                                   type="button"

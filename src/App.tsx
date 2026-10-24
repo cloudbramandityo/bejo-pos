@@ -58,7 +58,12 @@ import {
   SpkOrder,
   Invoice
 } from './types';
-import { getStoredInvoices, saveStoredInvoices } from './utils/invoiceStorage';
+import {
+  getStoredInvoices,
+  saveStoredInvoices,
+  getStoredInvoiceStoreIdentity,
+  saveStoredInvoiceStoreIdentity
+} from './utils/invoiceStorage';
 import {
   generateStockTransactionNumber,
   normalizeStockTransaction,
@@ -184,10 +189,39 @@ import {
   subscribeSpkOrders,
   subscribeMachines,
   subscribeInvoices,
+  saveInvoiceStoreIdentityCloud,
   subscribeLandingConfig,
   saveLandingConfigCloud
 } from './backend/pocketbaseBackend';
 import { DEFAULT_AGENTS_LIST } from './utils/agentMapping';
+
+/**
+ * Samakan kop faktur Invoice dengan profil toko yang aktif.
+ * Identitas juga dipush ke PocketBase dan API server karena InvoiceScreen
+ * melakukan polling /api/invoices/store-identity yang bisa menimpa localStorage.
+ */
+function syncInvoiceIdentityFromStore(store: {
+  storeName: string;
+  address: string;
+  phone: string;
+  logoUrl?: string;
+}) {
+  const current = getStoredInvoiceStoreIdentity();
+  const merged = {
+    ...current,
+    storeName: store.storeName || current.storeName,
+    address: store.address || current.address,
+    phone: store.phone || current.phone,
+    logoUrl: store.logoUrl || current.logoUrl,
+  };
+  saveStoredInvoiceStoreIdentity(merged);
+  saveInvoiceStoreIdentityCloud(merged).catch(console.error);
+  fetch('/api/invoices/store-identity', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(merged),
+  }).catch(() => {});
+}
 
 export default function App() {
   // Authentication State
@@ -217,7 +251,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // NOTE: Mode Terang / Gelap (dark mode) telah dihapus â€” aplikasi selalu memakai tema terang.
+  // NOTE: Mode Terang / Gelap (dark mode) telah dihapus — aplikasi selalu memakai tema terang.
 
   // Heartbeat to update current logged in user's online presence in PocketBase
   // Optimized to 5 minutes (300,000ms) to conserve PocketBase daily read/write quota
@@ -1130,7 +1164,7 @@ export default function App() {
     recordActivityLog(
       'USER_MANAGEMENT',
       `Simpan/Edit Akun (@${userToSave.username})`,
-      `Nama: ${userToSave.name} â€¢ Role: ${userToSave.role} â€¢ Status: ${userToSave.isActive !== false ? 'Aktif' : 'Non-aktif'}`
+      `Nama: ${userToSave.name} • Role: ${userToSave.role} • Status: ${userToSave.isActive !== false ? 'Aktif' : 'Non-aktif'}`
     );
 
     // If updating currently logged in user
@@ -1293,7 +1327,7 @@ export default function App() {
 
     // Record Activity Log
     const labelType = txData.type === 'PEMBELIAN' ? 'Pembelian Bahan' : 'Pengambilan Bahan';
-    const detailLog = `Sistem mencatat transaksi ${labelType} #${txId} â€¢ Total Unit: ${txData.totalQty || txData.qty || 0} â€¢ Supplier/Agen: ${txData.supplierName}${isBackdated ? ' (Lupa diinput Kasir / Backdated oleh Developer)' : ''}`;
+    const detailLog = `Sistem mencatat transaksi ${labelType} #${txId} • Total Unit: ${txData.totalQty || txData.qty || 0} • Supplier/Agen: ${txData.supplierName}${isBackdated ? ' (Lupa diinput Kasir / Backdated oleh Developer)' : ''}`;
     recordActivityLog('STOCK_MUTATION', `Mutasi Stok: ${labelType}`, detailLog);
   };
 
@@ -1346,7 +1380,7 @@ export default function App() {
       // Record Activity Log
       const isBackdated = tx.isBackdated;
       const labelType = tx.type === 'PEMBELIAN' ? 'Pembelian Bahan' : 'Pengambilan Bahan';
-      const detailLog = `Sistem mencatat transaksi batch ${labelType} #${tx.id} â€¢ Total Unit: ${tx.totalQty || tx.qty || 0} â€¢ Supplier/Agen: ${tx.supplierName}${isBackdated ? ' (Lupa diinput Kasir / Backdated oleh Developer)' : ''}`;
+      const detailLog = `Sistem mencatat transaksi batch ${labelType} #${tx.id} • Total Unit: ${tx.totalQty || tx.qty || 0} • Supplier/Agen: ${tx.supplierName}${isBackdated ? ' (Lupa diinput Kasir / Backdated oleh Developer)' : ''}`;
       recordActivityLog('STOCK_MUTATION', `Mutasi Stok (Batch): ${labelType}`, detailLog);
     });
   };
@@ -1557,12 +1591,13 @@ export default function App() {
       setStoreInfo(updatedInfo);
       saveStoredStoreInfo(updatedInfo);
       saveStoreInfoCloud(updatedInfo).catch(console.error);
+      syncInvoiceIdentityFromStore(updatedInfo);
     }
 
     recordActivityLog(
       'STORE_SETTINGS',
       `Simpan Profil Toko "${profile.storeName}"`,
-      `Oleh: ${currentUser?.name || 'Admin'} â€¢ Cabang: ${profile.branch || '-'}`
+      `Oleh: ${currentUser?.name || 'Admin'} • Cabang: ${profile.branch || '-'}`
     );
   };
 
@@ -1600,6 +1635,8 @@ export default function App() {
     };
     setStoreInfo(updatedInfo);
     saveStoredStoreInfo(updatedInfo);
+    saveStoreInfoCloud(updatedInfo).catch(console.error);
+    syncInvoiceIdentityFromStore(updatedInfo);
 
     // Load profile-specific transactions and shifts
     const profTx = getStoredTransactionsForProfile(target.id);
@@ -1613,7 +1650,7 @@ export default function App() {
     recordActivityLog(
       'STORE_SETTINGS',
       `Beralih ke Profil Toko "${target.storeName}"`,
-      `Aktif sekarang: ${target.storeName} (${target.branch}) â€¢ Database Transaksi Stand-alone`
+      `Aktif sekarang: ${target.storeName} (${target.branch}) • Database Transaksi Stand-alone`
     );
   };
 
@@ -1674,7 +1711,7 @@ export default function App() {
     recordActivityLog(
       'SHIFT_OPEN',
       `Membuka Shift Kasir (${shiftName})`,
-      `Kasir: ${cashierName} â€¢ Kas Awal: Rp ${initialCash.toLocaleString('id-ID')} â€¢ Toko: ${store || storeInfo.storeName}`
+      `Kasir: ${cashierName} • Kas Awal: Rp ${initialCash.toLocaleString('id-ID')} • Toko: ${store || storeInfo.storeName}`
     );
   };
 
@@ -1714,7 +1751,7 @@ export default function App() {
     recordActivityLog(
       'SHIFT_CLOSE',
       `Menutup Shift Kasir (${currentActive.shiftName})`,
-      `Kasir: ${currentActive.cashierName} â€¢ Kas Fisik: Rp ${actualCashInDrawer.toLocaleString('id-ID')} â€¢ Total Penjualan Kas: Rp ${shiftCashSales.toLocaleString('id-ID')}`
+      `Kasir: ${currentActive.cashierName} • Kas Fisik: Rp ${actualCashInDrawer.toLocaleString('id-ID')} • Total Penjualan Kas: Rp ${shiftCashSales.toLocaleString('id-ID')}`
     );
 
     setActiveShift(null);
@@ -1849,7 +1886,7 @@ export default function App() {
     recordActivityLog(
       'TRANSACTION',
       `Transaksi POS #${tx.id}`,
-      `Total: Rp ${tx.total.toLocaleString('id-ID')} (${tx.totalQty} item) â€¢ Pelanggan: ${tx.customer?.name || 'Umum'} â€¢ Metode: ${methodStr}${backdatedSuffix}`
+      `Total: Rp ${tx.total.toLocaleString('id-ID')} (${tx.totalQty} item) • Pelanggan: ${tx.customer?.name || 'Umum'} • Metode: ${methodStr}${backdatedSuffix}`
     );
 
     // 3. Update Shift stats if active and NOT backdated
@@ -1897,7 +1934,7 @@ export default function App() {
     recordActivityLog(
       'TRANSACTION',
       `Edit Transaksi Penjualan #${updatedTx.id}`,
-      `Total: Rp ${updatedTx.total.toLocaleString('id-ID')} â€¢ Pelanggan: ${updatedTx.customer?.name || 'Umum'} â€¢ Tgl: ${updatedTx.date}`
+      `Total: Rp ${updatedTx.total.toLocaleString('id-ID')} • Pelanggan: ${updatedTx.customer?.name || 'Umum'} • Tgl: ${updatedTx.date}`
     );
   };
 
@@ -2163,6 +2200,7 @@ export default function App() {
             categories={categories}
             currentUser={currentUser}
             users={users}
+            storeInfo={storeInfo}
             initialTab={spkInitialTab}
             onSaveUser={handleSaveAppUser}
             onDeleteUser={handleDeleteAppUser}

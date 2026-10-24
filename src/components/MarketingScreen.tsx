@@ -3,7 +3,7 @@
  * Marketing Module — Panel Iklan Resmi WhatsApp Status (Meta Marketing API)
  * Coded by Langgo Bramandityo.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Megaphone,
   MessageCircle,
@@ -34,6 +34,12 @@ import {
 
 import { TikTokInFeedAds } from './marketing/TikTokInFeedAds';
 import { ShopeeDiscoveryAds } from './marketing/ShopeeDiscoveryAds';
+import {
+  fileToBase64Payload,
+  formatMb,
+  MARKETING_MAX_IMAGE_BYTES,
+  MARKETING_MAX_VIDEO_BYTES,
+} from '../utils/marketingMedia';
 
 /* ------------------------------------------------------------------ */
 /* Types                                                              */
@@ -47,6 +53,7 @@ interface BusinessAccount {
   facebookPageId: string;
   whatsappBusinessNumber: string;
   connected: boolean;
+  simulated: boolean;
 }
 
 interface CampaignForm {
@@ -97,11 +104,54 @@ const SUB_MENUS = [
   { id: 'shopee-discovery-ads', label: 'Shopee Discovery Ads', icon: ShoppingBag },
 ];
 
+interface ChannelStatus {
+  configured: boolean;
+  missing: string[];
+}
+
+interface MarketingStatus {
+  success: boolean;
+  appUrl?: string;
+  meta: ChannelStatus;
+  tiktok: ChannelStatus;
+  shopee: ChannelStatus;
+}
+
 /* ------------------------------------------------------------------ */
 /* Main Component                                                     */
 /* ------------------------------------------------------------------ */
 export const MarketingScreen: React.FC = () => {
   const [activeSubMenu, setActiveSubMenu] = useState('whatsapp-status-ads');
+  const [status, setStatus] = useState<MarketingStatus | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/marketing/status')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.success) setStatus(data as MarketingStatus);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const channelOf = (id: string): ChannelStatus | null => {
+    if (!status) return null;
+    if (id === 'whatsapp-status-ads') return status.meta;
+    if (id === 'tiktok-infeed-ads') return status.tiktok;
+    return status.shopee;
+  };
+
+  const simulationChannels = status
+    ? SUB_MENUS.filter((menu) => !channelOf(menu.id)?.configured).map((menu) =>
+        menu.label.replace(' Ads', '')
+      )
+    : [];
+  const missingVars = status
+    ? Array.from(new Set([...status.meta.missing, ...status.tiktok.missing, ...status.shopee.missing]))
+    : [];
 
   return (
     <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 py-6 space-y-6">
@@ -113,14 +163,37 @@ export const MarketingScreen: React.FC = () => {
           </div>
           <div>
             <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
-              Marketing — Iklan WhatsApp Status
+              Marketing — Iklan Multi-Kanal
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Buat iklan resmi Meta yang tayang di jeda interval Status WhatsApp pengguna lain.
+              Kelola iklan resmi WhatsApp Status (Meta), TikTok In-Feed, dan Shopee Discovery Ads.
             </p>
           </div>
         </div>
       </div>
+
+      {/* Integration status */}
+      {status && simulationChannels.length > 0 && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-bold">Mode simulasi aktif: {simulationChannels.join(', ')}.</p>
+            <p className="text-[11px] leading-relaxed text-amber-800">
+              Isi kredensial berikut di <span className="font-mono font-semibold">.env</span> VPS lalu restart
+              server: <span className="font-mono font-semibold">{missingVars.join(', ')}</span>. Selama belum
+              diisi, iklan hanya dibuat sebagai data simulasi dan tidak dikirim ke platform.
+            </p>
+          </div>
+        </div>
+      )}
+      {status && simulationChannels.length === 0 && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 shrink-0" />
+          <p className="font-semibold">
+            Semua kanal API (Meta, TikTok, Shopee) terkonfigurasi dan siap menerbitkan iklan live.
+          </p>
+        </div>
+      )}
 
       {/* Sub-menu tabs */}
       <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200 self-start w-fit">
@@ -137,12 +210,17 @@ export const MarketingScreen: React.FC = () => {
           >
             <m.icon className="w-4 h-4" />
             {m.label}
+            {status && !channelOf(m.id)?.configured && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Mode simulasi" />
+            )}
           </button>
         ))}
       </div>
 
       {activeSubMenu === 'whatsapp-status-ads' && <WhatsAppStatusAds />}
-      {activeSubMenu === 'tiktok-infeed-ads' && <TikTokInFeedAds />}
+      {activeSubMenu === 'tiktok-infeed-ads' && (
+        <TikTokInFeedAds defaultLandingUrl={status?.appUrl || ''} />
+      )}
       {activeSubMenu === 'shopee-discovery-ads' && <ShopeeDiscoveryAds />}
     </div>
   );
@@ -158,6 +236,7 @@ const WhatsAppStatusAds: React.FC = () => {
     facebookPageId: '',
     whatsappBusinessNumber: '',
     connected: false,
+    simulated: false,
   });
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState('');
@@ -186,10 +265,10 @@ const WhatsAppStatusAds: React.FC = () => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Gagal menghubungkan.');
-      setBusiness((prev) => ({ ...prev, connected: true }));
+      setBusiness((prev) => ({ ...prev, connected: true, simulated: Boolean(data.simulated) }));
     } catch (err: any) {
       setConnectError(err?.message || 'Terjadi kesalahan saat menghubungkan.');
-      setBusiness((prev) => ({ ...prev, connected: false }));
+      setBusiness((prev) => ({ ...prev, connected: false, simulated: false }));
     } finally {
       setConnecting(false);
     }
@@ -226,6 +305,13 @@ const WhatsAppStatusAds: React.FC = () => {
     const isVideo = file.type.startsWith('video/');
     if (!isImage && !isVideo) {
       alert('Hanya file gambar atau video yang diperbolehkan.');
+      return;
+    }
+    const maxBytes = isImage ? MARKETING_MAX_IMAGE_BYTES : MARKETING_MAX_VIDEO_BYTES;
+    if (file.size > maxBytes) {
+      alert(
+        `Ukuran file terlalu besar. Maksimal ${formatMb(maxBytes)} untuk ${isImage ? 'gambar' : 'video'}.`
+      );
       return;
     }
     // Validasi rasio 9:16 (cek via Image/Video metadata)
@@ -270,10 +356,15 @@ const WhatsAppStatusAds: React.FC = () => {
       setPublishMessage('Hubungkan akun bisnis terlebih dahulu (Step 1).');
       return;
     }
+    if (!form.mediaFile) {
+      setPublishStatus('error');
+      setPublishMessage('Media iklan (foto/video 9:16) wajib diunggah.');
+      return;
+    }
     setPublishing(true);
     setPublishStatus('idle');
     try {
-      // Payload yang akan dikirim ke backend (Meta Marketing API)
+      const media = await fileToBase64Payload(form.mediaFile);
       const payload = {
         business: business,
         campaign: {
@@ -287,11 +378,10 @@ const WhatsAppStatusAds: React.FC = () => {
           ageMax: form.ageMax,
           gender: form.gender,
           interests: form.interests,
-          placements: 'ADVANTAGE_PLUS',
-          priorityPlacements: ['WHATSAPP_STATUS', 'INSTAGRAM_STORIES'],
         },
         creative: {
           mediaType: form.mediaType,
+          media,
           caption: form.caption,
           cta: form.cta,
         },
@@ -305,8 +395,14 @@ const WhatsAppStatusAds: React.FC = () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Gagal menerbitkan iklan.');
 
+      const warnings =
+        Array.isArray(data.warnings) && data.warnings.length ? ` Catatan: ${data.warnings.join(' ')}` : '';
       setPublishStatus('success');
-      setPublishMessage(`Iklan berhasil diterbitkan! Campaign ID: ${data.campaignId || '-'}`);
+      setPublishMessage(
+        `${data.message || 'Iklan berhasil diterbitkan.'}${
+          data.campaignId ? ` Campaign ID: ${data.campaignId}.` : ''
+        }${warnings}`
+      );
       setStep(1);
       setForm(DEFAULT_FORM);
     } catch (err: any) {
@@ -533,8 +629,17 @@ const BusinessAccountSetup: React.FC<{
     )}
 
     {business.connected && (
-      <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 flex items-center gap-2">
-        <CheckCircle2 className="w-4 h-4" /> Akun bisnis berhasil terhubung ke Meta.
+      <div
+        className={`text-xs rounded-xl px-3 py-2 flex items-center gap-2 ${
+          business.simulated
+            ? 'text-amber-800 bg-amber-50 border border-amber-200'
+            : 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+        }`}
+      >
+        {business.simulated ? <AlertCircle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+        {business.simulated
+          ? 'Mode simulasi: kredensial Meta belum disetel di server. Alur dapat diuji, tetapi iklan tidak dikirim ke Meta.'
+          : 'Akun bisnis berhasil terhubung ke Meta.'}
       </div>
     )}
   </div>
@@ -673,7 +778,7 @@ const TargetingPlacement: React.FC<{
       <div className="flex gap-4">
         <input
           type="range"
-          min={13}
+          min={18}
           max={65}
           value={form.ageMin}
           onChange={(e) => setField('ageMin', Math.min(Number(e.target.value), form.ageMax - 1))}
@@ -681,7 +786,7 @@ const TargetingPlacement: React.FC<{
         />
         <input
           type="range"
-          min={13}
+          min={18}
           max={65}
           value={form.ageMax}
           onChange={(e) => setField('ageMax', Math.max(Number(e.target.value), form.ageMin + 1))}
@@ -736,9 +841,9 @@ const TargetingPlacement: React.FC<{
     <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-800 flex items-start gap-2">
       <Globe className="w-4 h-4 shrink-0 mt-0.5" />
       <div>
-        <p className="font-bold">Penempatan dioptimalkan otomatis untuk WhatsApp Status</p>
+        <p className="font-bold">Penempatan WhatsApp Status + Instagram Stories</p>
         <p className="text-[11px] text-blue-700 mt-0.5">
-          Backend menggunakan Advantage+ Placements dengan prioritas WhatsApp Status & Instagram Stories (rasio 9:16).
+          Meta mewajibkan Instagram Stories berpasangan dengan WhatsApp Status; keduanya memakai media vertikal 9:16 di perangkat mobile.
         </p>
       </div>
     </div>
@@ -790,17 +895,15 @@ const AdCreative: React.FC<{
     </div>
 
     {/* CTA */}
-    <div>
-      <label className="block text-xs font-bold text-slate-700 mb-1">Call to Action (CTA)</label>
-      <select
-        value={form.cta}
-        onChange={(e) => setField('cta', e.target.value as CTA)}
-        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-      >
-        {Object.entries(CTA_LABELS).map(([k, v]) => (
-          <option key={k} value={k}>{v}</option>
-        ))}
-      </select>
+    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800 flex items-start gap-2">
+      <MessageCircle className="w-4 h-4 shrink-0 mt-0.5" />
+      <div>
+        <p className="font-bold">Tombol: Kirim Pesan WhatsApp</p>
+        <p className="text-[11px] text-emerald-700 mt-0.5">
+          WhatsApp Status Ads selalu mengarahkan klik ke chat WhatsApp Business. Nomor tujuan diambil dari
+          akun bisnis pada Step 1.
+        </p>
+      </div>
     </div>
   </div>
 );
@@ -819,6 +922,7 @@ const PublishReview: React.FC<{
 
     <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3 text-xs">
       <Row label="Akun Bisnis" value={business.connected ? business.facebookPageId : 'Belum terhubung'} />
+      <Row label="Mode" value={business.simulated ? 'Simulasi (belum live)' : 'Live API Meta'} />
       <Row label="Nama Kampanye" value={form.name || '—'} />
       <Row label="Tujuan" value={form.objective === 'AWARENESS' ? 'Kesadaran Merek' : 'Penjualan / Pesan Masuk'} />
       <Row label="Anggaran Harian" value={`Rp ${form.dailyBudget.toLocaleString('id-ID')}`} />

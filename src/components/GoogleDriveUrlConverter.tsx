@@ -887,7 +887,7 @@ export const GoogleDriveUrlConverter: React.FC<GoogleDriveUrlConverterProps> = (
             {/* Modal Footer */}
             <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
               <span className="text-slate-500 text-[11px] text-center sm:text-left">
-                ðŸ’¡ Foto produk yang diterapkan akan langsung diperbarui di <strong>Katalog Produk</strong>, <strong>POS Kasir</strong>, dan tersinkronisasi ke server cloud.
+                💡 Foto produk yang diterapkan akan langsung diperbarui di <strong>Katalog Produk</strong>, <strong>POS Kasir</strong>, dan tersinkronisasi ke server cloud.
               </span>
               <button
                 type="button"

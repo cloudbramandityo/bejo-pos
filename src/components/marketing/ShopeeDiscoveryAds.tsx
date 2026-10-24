@@ -38,6 +38,7 @@ interface BusinessAccount {
   shopeeSellerId: string;
   shopeeAdsBalance: number;
   connected: boolean;
+  simulated: boolean;
 }
 
 interface ShopeeProduct {
@@ -94,6 +95,7 @@ export const ShopeeDiscoveryAds: React.FC = () => {
     shopeeSellerId: '',
     shopeeAdsBalance: 0,
     connected: false,
+    simulated: false,
   });
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState('');
@@ -103,8 +105,43 @@ export const ShopeeDiscoveryAds: React.FC = () => {
   const [publishing, setPublishing] = useState(false);
   const [publishStatus, setPublishStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [publishMessage, setPublishMessage] = useState('');
+  const [products, setProducts] = useState<ShopeeProduct[]>(MOCK_PRODUCTS);
+  const [productsSimulated, setProductsSimulated] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [productsError, setProductsError] = useState('');
 
   const totalSteps = 5;
+
+  const loadProducts = async (shopId: string) => {
+    if (!shopId.trim()) return;
+    setProductsLoading(true);
+    setProductsError('');
+    try {
+      const res = await fetch(
+        `/api/marketing/shopee-discovery-ads/products?shopeeSellerId=${encodeURIComponent(shopId)}`
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Gagal memuat produk Shopee.');
+      const remote = Array.isArray(data.products) ? (data.products as ShopeeProduct[]) : [];
+      if (remote.length) {
+        setProducts(remote);
+        setProductsSimulated(Boolean(data.simulated));
+      } else if (data.simulated) {
+        setProducts(MOCK_PRODUCTS);
+        setProductsSimulated(true);
+      } else {
+        setProducts([]);
+        setProductsSimulated(false);
+        setProductsError('Belum ada produk aktif di toko Shopee.');
+      }
+    } catch (err: any) {
+      setProducts(MOCK_PRODUCTS);
+      setProductsSimulated(true);
+      setProductsError(`${err?.message || 'Gagal memuat produk Shopee.'} Menampilkan produk contoh.`);
+    } finally {
+      setProductsLoading(false);
+    }
+  };
 
   /* ---- Step 1: Business Account Setup ---- */
   const handleConnect = async () => {
@@ -120,17 +157,23 @@ export const ShopeeDiscoveryAds: React.FC = () => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Gagal menghubungkan.');
-      setBusiness((prev) => ({ ...prev, connected: true, shopeeAdsBalance: data?.balance ?? 0 }));
+      setBusiness((prev) => ({
+        ...prev,
+        connected: true,
+        simulated: Boolean(data.simulated),
+        shopeeAdsBalance: data?.balance ?? 0,
+      }));
+      void loadProducts(business.shopeeSellerId);
     } catch (err: any) {
       setConnectError(err?.message || 'Terjadi kesalahan saat menghubungkan.');
-      setBusiness((prev) => ({ ...prev, connected: false }));
+      setBusiness((prev) => ({ ...prev, connected: false, simulated: false }));
     } finally {
       setConnecting(false);
     }
   };
 
   const handleBusinessField = (key: keyof BusinessAccount, value: string) => {
-    setBusiness((prev) => ({ ...prev, [key]: value, connected: false }));
+    setBusiness((prev) => ({ ...prev, [key]: value, connected: false, simulated: false }));
   };
 
   /* ---- Step 2 helpers ---- */
@@ -143,7 +186,7 @@ export const ShopeeDiscoveryAds: React.FC = () => {
     setProductModalOpen(false);
   };
 
-  const filteredProducts = MOCK_PRODUCTS.filter((p) =>
+  const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(productSearch.toLowerCase())
   );
 
@@ -187,8 +230,14 @@ export const ShopeeDiscoveryAds: React.FC = () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Gagal menerbitkan iklan.');
 
+      const warnings =
+        Array.isArray(data.warnings) && data.warnings.length ? ` Catatan: ${data.warnings.join(' ')}` : '';
       setPublishStatus('success');
-      setPublishMessage(`Iklan Shopee berhasil diaktifkan! Ad ID: ${data.adId || '-'}`);
+      setPublishMessage(
+        `${data.message || 'Iklan Shopee berhasil diaktifkan.'}${
+          data.adId ? ` Ad ID: ${data.adId}.` : ''
+        }${warnings}`
+      );
       setStep(1);
       setForm(DEFAULT_FORM);
     } catch (err: any) {
@@ -283,7 +332,7 @@ export const ShopeeDiscoveryAds: React.FC = () => {
           {step === 3 && (
             <ShopeeBidding form={form} setField={setField} />
           )}
-          {step === 4 && <ShopeeAdCreative form={form} />}
+          {step === 4 && <ShopeeAdCreative form={form} simulated={productsSimulated} />}
           {step === 5 && (
             <ShopeePublishReview business={business} form={form} publishing={publishing} onPublish={handlePublish} />
           )}
@@ -343,16 +392,34 @@ export const ShopeeDiscoveryAds: React.FC = () => {
                 />
               </div>
             </div>
+            {(productsSimulated || productsError) && (
+              <div className="px-4 pt-4">
+                <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                  {productsError ||
+                    'Menampilkan produk contoh (mode simulasi). Produk asli dimuat otomatis setelah kredensial Shopee aktif.'}
+                </div>
+              </div>
+            )}
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              {filteredProducts.map((p) => (
+              {productsLoading && (
+                <div className="flex items-center justify-center gap-2 py-6 text-xs text-slate-500">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Memuat produk dari Shopee...
+                </div>
+              )}
+              {!productsLoading &&
+                filteredProducts.map((p) => (
                 <button
                   key={p.itemId}
                   type="button"
                   onClick={() => selectProduct(p)}
                   className="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-orange-300 hover:bg-orange-50 transition-all cursor-pointer text-left"
                 >
-                  <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                    <Package className="w-5 h-5 text-slate-400" />
+                  <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden shrink-0">
+                    {p.imageUrl ? (
+                      <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <Package className="w-5 h-5 text-slate-400" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-slate-900 truncate">{p.name}</p>
@@ -361,7 +428,7 @@ export const ShopeeDiscoveryAds: React.FC = () => {
                   <span className="text-[10px] text-slate-400">Stok: {p.stock}</span>
                 </button>
               ))}
-              {filteredProducts.length === 0 && (
+              {!productsLoading && filteredProducts.length === 0 && (
                 <p className="text-xs text-slate-400 text-center py-4">Produk tidak ditemukan.</p>
               )}
             </div>
@@ -404,7 +471,7 @@ const ShopeeBusinessSetup: React.FC<{
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <StatusCard label="Akun Toko Shopee" value={business.shopeeSellerId || '—'} connected={business.connected} />
       <StatusCard
-        label="Saldo Shopee Ads"
+        label={business.simulated ? 'Saldo Shopee Ads (simulasi)' : 'Saldo Shopee Ads'}
         value={business.connected ? `Rp ${business.shopeeAdsBalance.toLocaleString('id-ID')}` : '—'}
         connected={business.connected}
       />
@@ -427,8 +494,17 @@ const ShopeeBusinessSetup: React.FC<{
     )}
 
     {business.connected && (
-      <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 flex items-center gap-2">
-        <CheckCircle2 className="w-4 h-4" /> Akun toko Shopee berhasil terhubung.
+      <div
+        className={`text-xs rounded-xl px-3 py-2 flex items-center gap-2 ${
+          business.simulated
+            ? 'text-amber-800 bg-amber-50 border border-amber-200'
+            : 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+        }`}
+      >
+        {business.simulated ? <AlertCircle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+        {business.simulated
+          ? 'Mode simulasi: kredensial Shopee belum disetel di server. Alur dapat diuji, tetapi iklan tidak dikirim ke Shopee.'
+          : 'Akun toko Shopee berhasil terhubung.'}
       </div>
     )}
   </div>
@@ -605,6 +681,9 @@ const ShopeeBidding: React.FC<{
             min={100}
             className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
           />
+          <p className="text-[10px] text-amber-700 mt-1">
+            API Shopee memerlukan daftar keyword untuk bid manual; iklan akan diterbitkan dengan bidding otomatis.
+          </p>
         </div>
       )}
     </div>
@@ -653,7 +732,9 @@ const ShopeeBidding: React.FC<{
         onChange={(e) => setField('premiumRate', Number(e.target.value))}
         className="w-full accent-orange-500"
       />
-      <p className="text-[10px] text-slate-400 mt-1">Tambahan biaya untuk prioritas penempatan (0-100%)</p>
+      <p className="text-[10px] text-slate-400 mt-1">
+        Penempatan dan Premium Rate diatur otomatis oleh Shopee Ads Manager.
+      </p>
     </div>
   </div>
 );
@@ -661,7 +742,7 @@ const ShopeeBidding: React.FC<{
 /* ------------------------------------------------------------------ */
 /* Step 4: Ad Creative & Preview                                     */
 /* ------------------------------------------------------------------ */
-const ShopeeAdCreative: React.FC<{ form: CampaignForm }> = ({ form }) => {
+const ShopeeAdCreative: React.FC<{ form: CampaignForm; simulated: boolean }> = ({ form, simulated }) => {
   const product = form.selectedProduct;
   return (
     <div className="space-y-4">
@@ -673,8 +754,12 @@ const ShopeeAdCreative: React.FC<{ form: CampaignForm }> = ({ form }) => {
       {product ? (
         <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3">
           <div className="flex items-center gap-3">
-            <div className="w-16 h-16 rounded-lg bg-slate-200 flex items-center justify-center shrink-0">
-              <Package className="w-6 h-6 text-slate-400" />
+            <div className="w-16 h-16 rounded-lg bg-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+              {product.imageUrl ? (
+                <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+              ) : (
+                <Package className="w-6 h-6 text-slate-400" />
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-slate-900">{product.name}</p>
@@ -682,10 +767,20 @@ const ShopeeAdCreative: React.FC<{ form: CampaignForm }> = ({ form }) => {
               <p className="text-[10px] text-slate-400 mt-0.5">Stok: {product.stock} | Item ID: {product.itemId}</p>
             </div>
           </div>
-          <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
-            <p className="font-bold">Data diambil real-time dari Shopee</p>
-            <p className="text-[11px] text-blue-600 mt-0.5">
-              Foto produk utama, judul, dan harga disinkronkan otomatis dari sistem Shopee.
+          <div
+            className={`text-xs rounded-xl px-3 py-2 border ${
+              simulated
+                ? 'text-amber-800 bg-amber-50 border-amber-200'
+                : 'text-blue-700 bg-blue-50 border-blue-200'
+            }`}
+          >
+            <p className="font-bold">
+              {simulated ? 'Produk contoh (mode simulasi)' : 'Data diambil real-time dari Shopee'}
+            </p>
+            <p className={`text-[11px] mt-0.5 ${simulated ? 'text-amber-700' : 'text-blue-600'}`}>
+              {simulated
+                ? 'Kredensial Shopee belum disetel. Produk di atas adalah contoh; iklan tidak dikirim ke Shopee.'
+                : 'Foto produk utama, judul, dan harga disinkronkan otomatis dari sistem Shopee.'}
             </p>
           </div>
         </div>
@@ -713,6 +808,7 @@ const ShopeePublishReview: React.FC<{
 
     <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3 text-xs">
       <Row label="Akun Toko" value={business.connected ? business.shopeeSellerId : 'Belum terhubung'} />
+      <Row label="Mode" value={business.simulated ? 'Simulasi (belum live)' : 'Live API Shopee'} />
       <Row label="Saldo Ads" value={business.connected ? `Rp ${business.shopeeAdsBalance.toLocaleString('id-ID')}` : '—'} />
       <Row label="Nama Iklan" value={form.adName || '—'} />
       <Row label="Produk" value={form.selectedProduct?.name || '—'} />
@@ -771,8 +867,12 @@ const ShopeeLivePreview: React.FC<{ form: CampaignForm }> = ({ form }) => {
       <p className="text-[10px] font-bold text-slate-500 text-center mb-2">Pratinjau di Aplikasi Shopee</p>
       {/* Product card */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-        <div className="relative w-full aspect-square bg-slate-100 flex items-center justify-center">
-          <Package className="w-10 h-10 text-slate-300" />
+        <div className="relative w-full aspect-square bg-slate-100 flex items-center justify-center overflow-hidden">
+          {product?.imageUrl ? (
+            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+          ) : (
+            <Package className="w-10 h-10 text-slate-300" />
+          )}
           <span className="absolute top-2 left-2 bg-orange-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded">
             Ad
           </span>

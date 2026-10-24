@@ -664,7 +664,7 @@ export interface LandingProductItem {
   name: string;
   brand: string;
   category: 'roll' | 'meteran' | 'print' | 'laser';
-  unit: string; // e.g. "per meter", "per roll (50m)", "per cmÂ²"
+  unit: string; // e.g. "per meter", "per roll (50m)", "per cm²"
   priceEstimated: string; // e.g. "Mulai Rp 25.000 / m" atau "Rp 850.000 / roll"
   specs: string;
   description: string;

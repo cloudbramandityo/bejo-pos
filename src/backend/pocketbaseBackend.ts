@@ -795,15 +795,20 @@ function subscribeRecord(
     }, 150);
   };
 
-  const unsub = subscribeRealtime(service as any, id, (e) => {
-    if (e?.action === 'delete') {
-      if (!cancelled) onData(null);
-      return;
+  // Subscribe ke '*' lalu filter apakah record yang berubah sesuai dengan ID yang dicari
+  const unsub = subscribeRealtime(service as any, '*', (e) => {
+    const recId = e?.record?.id;
+    const legId = e?.record?.[LEGACY_ID_FIELD];
+    if (recId === id || legId === id) {
+      if (e?.action === 'delete') {
+        if (!cancelled) onData(null);
+        return;
+      }
+      schedule();
     }
-    schedule();
   });
 
-  // Snapshot awal (settings/singleton) tanpa menunggu event realtime.
+  // Snapshot awal tanpa menunggu event
   void load();
 
   return () => {

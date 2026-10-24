@@ -175,7 +175,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
       const cleanText = text
         .replace(/!\[.*?\]\(.*?\)/g, '')
         .replace(/\[.*?\]\(.*?\)/g, '')
-        .replace(/[*_~`#>â€¢-]/g, '')
+        .replace(/[*_~`#>•-]/g, '')
         .replace(/https?:\/\/\S+/g, '')
         .replace(/\n+/g, '. ')
         .trim();
@@ -226,7 +226,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
 
   const getWelcomeGreeting = (callName: string) => {
     const title = callName.startsWith('Pak') ? callName : `Kak ${callName || 'Fira'}`;
-    return `Sugeng Rawuh ${title} ðŸ˜Š Saya SI BEJO AI, asisten virtual Bejo Stiker. Ada yang bisa saya bantu terkait operasional POS? Saya juga diprogram sebagai teman curhat lho ${callName.startsWith('Pak') ? 'Pak' : 'Kak'}! He..he..he..`;
+    return `Sugeng Rawuh ${title} 😊 Saya SI BEJO AI, asisten virtual Bejo Stiker. Ada yang bisa saya bantu terkait operasional POS? Saya juga diprogram sebagai teman curhat lho ${callName.startsWith('Pak') ? 'Pak' : 'Kak'}! He..he..he..`;
   };
 
   const getFormattedTime = () => {
@@ -243,7 +243,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
       {
         id: 'msg_welcome_sys',
         role: 'assistant',
-        content: `ðŸ‘‹ Selamat datang di Chat Internal Bejo Stiker! Kamu bisa ngobrol langsung dengan tim, atau gunakan @mention anggota tim untuk memberi notifikasi. Tag @SiBejoAI jika ingin bantuan AI ya!`,
+        content: `👋 Selamat datang di Chat Internal Bejo Stiker! Kamu bisa ngobrol langsung dengan tim, atau gunakan @mention anggota tim untuk memberi notifikasi. Tag @SiBejoAI jika ingin bantuan AI ya!`,
         timestamp: getFormattedTime(),
         createdAt: Date.now() - 60000,
         senderName: 'SI BEJO AI',
@@ -351,8 +351,8 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
           if (!activeDeadlinePopup || activeDeadlinePopup.id !== unreadAlert.id) {
             setActiveDeadlinePopup(unreadAlert);
             playMentionChime();
-            sendSystemNotification(`Si BEJO AI: Peringatan Deadline SPK! â°`, {
-              body: `${unreadAlert.jobName} (${unreadAlert.customerName}) â€¢ ${unreadAlert.timeRemainingText}`,
+            sendSystemNotification(`Si BEJO AI: Peringatan Deadline SPK! ⏰`, {
+              body: `${unreadAlert.jobName} (${unreadAlert.customerName}) • ${unreadAlert.timeRemainingText}`,
               tag: unreadAlert.id
             });
           }
@@ -1291,7 +1291,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                       onClick={async () => {
                         const granted = await requestSystemNotificationPermission();
                         if (granted) {
-                          sendSystemNotification('Notifikasi System Bejo POS Aktif ðŸ””', {
+                          sendSystemNotification('Notifikasi System Bejo POS Aktif 🔔', {
                             body: 'Notifikasi SI BEJO AI terhubung dengan OS Windows / iOS!',
                             tag: 'bejo_notif_test'
                           });
@@ -1475,7 +1475,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                   }}
                   className="bg-white/20 hover:bg-white text-white hover:text-rose-900 text-[10px] font-black px-2 py-0.5 rounded-md transition-colors shrink-0 cursor-pointer ml-2"
                 >
-                  Lihat SPK âž”
+                  Lihat SPK ➔
                 </button>
               </div>
             )}
@@ -1484,12 +1484,12 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
             <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/60">
               {activeMessages.map((msg) => {
                 // System notification pill
-                if (msg.senderRole === 'SYSTEM' || msg.content.startsWith('ðŸŸ¢')) {
+                if (msg.senderRole === 'SYSTEM' || msg.content.startsWith('🟢')) {
                   return (
                     <div key={msg.id} className="flex justify-center my-1.5">
                       <div className="bg-emerald-50/95 text-emerald-800 text-[10.5px] font-semibold px-3 py-1 rounded-full border border-emerald-200 shadow-2xs flex items-center gap-1.5 animate-in fade-in">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        <span>{msg.content.replace(/^ðŸŸ¢\s*\*\*System\*\*:\s*/i, '').replace(/\*\*/g, '')}</span>
+                        <span>{msg.content.replace(/^🟢\s*\*\*System\*\*:\s*/i, '').replace(/\*\*/g, '')}</span>
                         <span className="text-[9.5px] text-emerald-600 font-mono font-medium ml-1">({msg.timestamp})</span>
                       </div>
                     </div>
@@ -1623,7 +1623,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                       >
                         <div className="flex items-center gap-2">
                           <div className="w-5 h-5 rounded bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">
-                            {candidate.isAi ? 'ðŸ¤–' : candidate.isAll ? 'ðŸ“¢' : candidate.username.charAt(0).toUpperCase()}
+                            {candidate.isAi ? '🤖' : candidate.isAll ? '📢' : candidate.username.charAt(0).toUpperCase()}
                           </div>
                           <div>
                             <span className="text-xs font-bold text-slate-900">@{candidate.username}</span>
@@ -1687,7 +1687,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                         </div>
                         <div>
                           <h4 className="text-xs font-bold text-slate-900">@{mentionChoiceCandidate.username}</h4>
-                          <p className="text-[10px] text-slate-500 font-medium">{mentionChoiceCandidate.name} â€¢ {mentionChoiceCandidate.role}</p>
+                          <p className="text-[10px] text-slate-500 font-medium">{mentionChoiceCandidate.name} • {mentionChoiceCandidate.role}</p>
                         </div>
                       </div>
                       <button
@@ -1813,13 +1813,13 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-black text-slate-900 tracking-tight">SI BEJO AI â€¢ Panggilan Tag</span>
+                    <span className="text-xs font-black text-slate-900 tracking-tight">SI BEJO AI • Panggilan Tag</span>
                     <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
                       @{activeMentionPopup.targetUsername}
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-400 font-medium">
-                    Pesan Internal Tim â€¢ {activeMentionPopup.formattedTime || 'Baru Saja'}
+                    Pesan Internal Tim • {activeMentionPopup.formattedTime || 'Baru Saja'}
                   </p>
                 </div>
               </div>
@@ -1888,7 +1888,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-black text-slate-900 tracking-tight">SI BEJO AI â€¢ Notifikasi Pesanan</span>
+                    <span className="text-xs font-black text-slate-900 tracking-tight">SI BEJO AI • Notifikasi Pesanan</span>
                     <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
                       activeAgentNotifPopup.orderType === 'CETAK_AGEN'
                         ? 'bg-rose-50 text-rose-700 border-rose-200'
@@ -1898,7 +1898,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-400 font-medium">
-                    Sinkronisasi Real-Time Database â€¢ {activeAgentNotifPopup.time} WIB
+                    Sinkronisasi Real-Time Database • {activeAgentNotifPopup.time} WIB
                   </p>
                 </div>
               </div>
@@ -1998,7 +1998,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-black text-slate-900 tracking-tight">SI BEJO AI â€¢ Peringatan Deadline</span>
+                    <span className="text-xs font-black text-slate-900 tracking-tight">SI BEJO AI • Peringatan Deadline</span>
                     <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${
                       activeDeadlinePopup.isOverdue
                         ? 'bg-red-100 text-red-900 border border-red-300'
@@ -2008,7 +2008,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-500 font-medium">
-                    Batas: {activeDeadlinePopup.deadlineDate} â€¢ {activeDeadlinePopup.deadlineTime} WIB
+                    Batas: {activeDeadlinePopup.deadlineDate} • {activeDeadlinePopup.deadlineTime} WIB
                   </p>
                 </div>
               </div>
@@ -2127,7 +2127,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                     <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
                       isNetworkOnline ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'
                     }`}>
-                      {isNetworkOnline ? 'â— Internet Terhubung' : 'â—‹ Offline Mode'}
+                      {isNetworkOnline ? '● Internet Terhubung' : '○ Offline Mode'}
                     </span>
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -2142,7 +2142,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                     >
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-bold text-xs flex items-center gap-1">
-                          âš¡ Hybrid Auto
+                          ⚡ Hybrid Auto
                         </span>
                         {aiSettings.engineMode === 'HYBRID_AUTO' && <Check size={14} className="text-indigo-600" />}
                       </div>
@@ -2162,7 +2162,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                     >
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-bold text-xs flex items-center gap-1">
-                          ðŸŒ Cloud Gemini
+                          🌐 Cloud Gemini
                         </span>
                         {aiSettings.engineMode === 'ONLINE_ONLY' && <Check size={14} className="text-indigo-600" />}
                       </div>
@@ -2182,7 +2182,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                     >
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-bold text-xs flex items-center gap-1">
-                          ðŸ’¾ Offline Instan
+                          💾 Offline Instan
                         </span>
                         {aiSettings.engineMode === 'OFFLINE_ONLY' && <Check size={14} className="text-indigo-600" />}
                       </div>
@@ -2357,10 +2357,10 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-[10px] text-indigo-200 pt-1">
-                    <div>â€¢ Engine: <strong>Gemini Flash + Local Engine</strong></div>
-                    <div>â€¢ Status Jaringan: <strong>{isNetworkOnline ? 'ðŸŸ¢ Online' : 'ðŸŸ  Offline'}</strong></div>
-                    <div>â€¢ Respon Waktu: <strong>&lt; 100ms (Instan)</strong></div>
-                    <div>â€¢ Akses Database POS: <strong>Real-Time Terkoneksi</strong></div>
+                    <div>• Engine: <strong>Gemini Flash + Local Engine</strong></div>
+                    <div>• Status Jaringan: <strong>{isNetworkOnline ? '🟢 Online' : '🟠 Offline'}</strong></div>
+                    <div>• Respon Waktu: <strong>&lt; 100ms (Instan)</strong></div>
+                    <div>• Akses Database POS: <strong>Real-Time Terkoneksi</strong></div>
                   </div>
                 </div>
               </div>
@@ -2397,7 +2397,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
         whileTap={{ scale: 0.95 }}
         className="bg-slate-900 hover:bg-slate-800 text-white p-3.5 rounded-2xl shadow-xl flex items-center justify-center cursor-pointer relative group border border-slate-700/80 transition-all duration-200"
         id="bejo-ai-trigger-btn"
-        title="SI BEJO AI â€¢ Chat Tim & Asisten POS"
+        title="SI BEJO AI • Chat Tim & Asisten POS"
       >
         {isOpen ? (
           <X size={20} className="text-slate-200" />
@@ -2439,7 +2439,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                 ? `${spkDeadlineAlerts.length} SPK Mendekati Deadline!`
                 : activeAgentNotifPopup && (userRole === 'DEVELOPER' || userRole === 'ADMIN')
                 ? 'Pesanan Agen Masuk!'
-                : 'SI BEJO AI â€¢ Chat Tim'}
+                : 'SI BEJO AI • Chat Tim'}
             </span>
           </div>
         )}

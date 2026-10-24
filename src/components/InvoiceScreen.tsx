@@ -349,7 +349,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
         importedItems.push({
           id: `item-oa-${ord.id}-${it.id || idx}`,
           itemName: `[${ord.orderNumber}] ${it.jobName || it.materialName}`,
-          description: `${it.materialName} â€¢ ${it.lengthMeters}x${it.widthMeters}m (${qty} pcs)${ord.dpPaid > 0 ? ` (DP: -Rp ${ord.dpPaid.toLocaleString('id-ID')})` : ''}`,
+          description: `${it.materialName} • ${it.lengthMeters}x${it.widthMeters}m (${qty} pcs)${ord.dpPaid > 0 ? ` (DP: -Rp ${ord.dpPaid.toLocaleString('id-ID')})` : ''}`,
           quantity: qty,
           unit: it.saleMode === 'lembar' ? 'lembar' : `${it.lengthMeters}x${it.widthMeters}m`,
           unitPrice: it.unitPrice || Math.round(total / qty),
@@ -2967,7 +2967,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                         <div>
                           <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
-                            Skema Down Payment (DP) â€” Pembayaran Dibagi dalam 2 Tahap
+                            Skema Down Payment (DP) — Pembayaran Dibagi dalam 2 Tahap
                           </span>
                           <p className="text-[11px] text-amber-800">
                             Waktu pembayaran dan nominal tiap tahap dapat ditentukan manual.
@@ -3113,7 +3113,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                         <div>
                           <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block"></span>
-                            Skema Pembayaran Termin â€” Dibagi Atas Beberapa Tahap
+                            Skema Pembayaran Termin — Dibagi Atas Beberapa Tahap
                           </span>
                           <p className="text-[11px] text-indigo-800">
                             Waktu pembayaran tiap termin dapat ditentukan secara manual.
@@ -3359,7 +3359,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                           )}
                           <p className="text-[9.5px] text-slate-500 max-w-xs mt-0.5 leading-snug">{storeIdentity.address}</p>
                           <p className="text-[9.5px] text-slate-600 font-medium mt-0.5">
-                            Telp/WA: {storeIdentity.phone} {storeIdentity.email ? `â€¢ ${storeIdentity.email}` : ''}
+                            Telp/WA: {storeIdentity.phone} {storeIdentity.email ? `• ${storeIdentity.email}` : ''}
                           </p>
                           {storeIdentity.npwp && (
                             <p className="text-[8.5px] text-slate-500 font-semibold">NPWP Toko: {storeIdentity.npwp}</p>
@@ -3398,7 +3398,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                         <div className="space-y-1 font-sans text-[10px]">
                           <div className="flex items-start gap-1.5">
                             <span className="font-bold text-slate-900 shrink-0">
-                              â€¢ {formDocType === 'PROFORMA' ? 'Berdasarkan Purchase Order :' : 'Berdasarkan Proforma Invoice :'}
+                              • {formDocType === 'PROFORMA' ? 'Berdasarkan Purchase Order :' : 'Berdasarkan Proforma Invoice :'}
                             </span>
                             <span className="font-black text-indigo-950">
                               {formSourceProformaNumber || '-'}
@@ -3406,7 +3406,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                           </div>
                           <div className="flex items-start gap-1.5">
                             <span className="font-bold text-slate-900 shrink-0">
-                              â€¢ Keterangan :
+                              • Keterangan :
                             </span>
                             <span className="font-semibold text-slate-800">
                               {formReferenceDescription || '-'}
@@ -3415,7 +3415,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                         </div>
                         {formContractTotalAmount > 0 && (
                           <div className="mt-1.5 pt-1 border-t border-slate-200 flex justify-between items-center text-[9.5px]">
-                            <span className="text-slate-600 font-medium">â€¢ Total Nilai Kontrak Induk (100%):</span>
+                            <span className="text-slate-600 font-medium">• Total Nilai Kontrak Induk (100%):</span>
                             <strong className="text-indigo-950 font-black">
                               Rp {formContractTotalAmount.toLocaleString('id-ID')}
                             </strong>
@@ -3440,7 +3440,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                           {formCustomer.address || 'Alamat Penagihan Instansi'}
                         </p>
                         <p className="text-[9.5px] text-slate-600 font-medium mt-0.5">
-                          Telp/WA: {formCustomer.phone || '-'} {formCustomer.email ? `â€¢ ${formCustomer.email}` : ''}
+                          Telp/WA: {formCustomer.phone || '-'} {formCustomer.email ? `• ${formCustomer.email}` : ''}
                         </p>
                         {formCustomer.npwp && (
                           <p className="text-[9px] font-semibold text-slate-500 mt-0.5">NPWP: {formCustomer.npwp}</p>
@@ -4417,7 +4417,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                       : 'Pembatalan Invoice Final & Penerbitan Credit Note'}
                   </h3>
                   <p className="text-xs text-white/80">
-                    Dokumen No: {cancellingInvoice.documentNumber} â€¢ {cancellingInvoice.projectTitle}
+                    Dokumen No: {cancellingInvoice.documentNumber} • {cancellingInvoice.projectTitle}
                   </p>
                 </div>
               </div>
@@ -4563,7 +4563,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                         Pemberitahuan Wajib Pajak (e-Faktur PPN):
                       </div>
                       <p className="text-[11px] leading-relaxed font-semibold">
-                        â€œWajib melakukan Pembatalan Faktur Pajak melalui aplikasi e-Faktur Pajak resmi pemerintah agar Perusahaan tidak terutang PPN atas transaksi yang batal.â€
+                        “Wajib melakukan Pembatalan Faktur Pajak melalui aplikasi e-Faktur Pajak resmi pemerintah agar Perusahaan tidak terutang PPN atas transaksi yang batal.”
                       </p>
                       <div className="pt-2 border-t border-rose-200">
                         <label className="block text-[11px] font-bold text-slate-900 mb-1">
@@ -4755,11 +4755,11 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                   <h3 className="text-sm font-extrabold flex items-center gap-2">
                     <span>Pratinjau Cetak & Unduh PDF</span>
                     <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/30 text-indigo-200 font-bold uppercase">
-                      {paperSize.toUpperCase()} â€¢ {paperOrientation === 'portrait' ? 'Vertikal' : 'Horizontal'}
+                      {paperSize.toUpperCase()} • {paperOrientation === 'portrait' ? 'Vertikal' : 'Horizontal'}
                     </span>
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    {selectedInvoice.documentType === 'PROFORMA' ? 'Proforma Invoice' : 'Invoice Komersial Final'} â€” {selectedInvoice.documentNumber}
+                    {selectedInvoice.documentType === 'PROFORMA' ? 'Proforma Invoice' : 'Invoice Komersial Final'} — {selectedInvoice.documentNumber}
                   </p>
                 </div>
               </div>
@@ -4907,7 +4907,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                           )}
                           <p className="text-[10px] text-slate-500 max-w-sm mt-1 leading-snug">{storeIdentity.address}</p>
                           <p className="text-[10px] text-slate-600 font-medium mt-0.5">
-                            Telp/WA: {storeIdentity.phone} {storeIdentity.email ? `â€¢ ${storeIdentity.email}` : ''}
+                            Telp/WA: {storeIdentity.phone} {storeIdentity.email ? `• ${storeIdentity.email}` : ''}
                           </p>
                           {storeIdentity.npwp && (
                             <p className="text-[9px] text-slate-500 font-semibold">NPWP Toko: {storeIdentity.npwp}</p>
@@ -4969,7 +4969,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                         <div className="space-y-1.5 text-xs font-sans">
                           <div className="flex items-start gap-2">
                             <span className="font-bold text-slate-900 min-w-[210px] shrink-0">
-                              â€¢ {selectedInvoice.documentType === 'PROFORMA' ? 'Berdasarkan Purchase Order :' : 'Berdasarkan Proforma Invoice :'}
+                              • {selectedInvoice.documentType === 'PROFORMA' ? 'Berdasarkan Purchase Order :' : 'Berdasarkan Proforma Invoice :'}
                             </span>
                             <span className="font-black text-indigo-950 text-xs">
                               {selectedInvoice.sourceProformaNumber || '-'}
@@ -4977,7 +4977,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                           </div>
                           <div className="flex items-start gap-2">
                             <span className="font-bold text-slate-900 min-w-[210px] shrink-0">
-                              â€¢ Keterangan :
+                              • Keterangan :
                             </span>
                             <span className="font-semibold text-slate-800 text-xs">
                               {selectedInvoice.referenceDescription || (selectedInvoice.terminStageName ? `Pembayaran ${selectedInvoice.terminStageName} (${selectedInvoice.terminPercentage || 0}%) dari Total Kontrak` : '-')}
@@ -4986,7 +4986,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                         </div>
                         {selectedInvoice.contractTotalAmount && selectedInvoice.contractTotalAmount > 0 && (
                           <div className="mt-2.5 pt-2 border-t border-slate-200 flex justify-between items-center text-[11px]">
-                            <span className="text-slate-600 font-medium">â€¢ Total Nilai Kontrak Proforma (100%):</span>
+                            <span className="text-slate-600 font-medium">• Total Nilai Kontrak Proforma (100%):</span>
                             <strong className="text-indigo-950 font-black">
                               Rp {selectedInvoice.contractTotalAmount.toLocaleString('id-ID')}
                             </strong>
@@ -5007,7 +5007,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                         )}
                         <p className="text-[10px] text-slate-600 mt-0.5 leading-snug">{selectedInvoice.customer.address}</p>
                         <p className="text-[10px] text-slate-600 font-medium mt-0.5">
-                          Telp/WA: {selectedInvoice.customer.phone} {selectedInvoice.customer.email ? `â€¢ ${selectedInvoice.customer.email}` : ''}
+                          Telp/WA: {selectedInvoice.customer.phone} {selectedInvoice.customer.email ? `• ${selectedInvoice.customer.email}` : ''}
                         </p>
                         {selectedInvoice.customer.npwp && (
                           <p className="text-[9.5px] font-semibold text-slate-500 mt-0.5">NPWP: {selectedInvoice.customer.npwp}</p>
@@ -5213,7 +5213,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                                 {selectedInvoice.payments.map((p, pIdx) => (
                                   <div key={p.id || pIdx} className="flex justify-between text-slate-600">
                                     <span>
-                                      {p.paymentDate} â€¢ {p.paymentType === 'DOWN_PAYMENT' ? 'DP' : 'Pelunasan'} ({p.paymentMethod})
+                                      {p.paymentDate} • {p.paymentType === 'DOWN_PAYMENT' ? 'DP' : 'Pelunasan'} ({p.paymentMethod})
                                       {p.referenceNumber ? ` [${p.referenceNumber}]` : ''}
                                     </span>
                                     <strong className="text-emerald-700 font-bold">Rp {p.amount.toLocaleString('id-ID')}</strong>

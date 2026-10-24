@@ -3,7 +3,7 @@
  * Marketing Module — TikTok In-Feed Ads (TikTok Marketing API)
  * Coded by Langgo Bramandityo.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Music2,
   CheckCircle2,
@@ -28,6 +28,11 @@ import {
   Bookmark,
   X,
 } from 'lucide-react';
+import {
+  fileToBase64Payload,
+  formatMb,
+  MARKETING_MAX_VIDEO_BYTES,
+} from '../../utils/marketingMedia';
 
 /* ------------------------------------------------------------------ */
 /* Types                                                              */
@@ -41,6 +46,7 @@ interface BusinessAccount {
   tiktokAdsManagerId: string;
   tiktokOrganicHandle: string;
   connected: boolean;
+  simulated: boolean;
 }
 
 interface CampaignForm {
@@ -55,6 +61,7 @@ interface CampaignForm {
   mediaPreviewUrl: string;
   mediaDuration: number;
   adText: string;
+  landingPageUrl: string;
   cta: CTA;
 }
 
@@ -70,6 +77,7 @@ const DEFAULT_FORM: CampaignForm = {
   mediaPreviewUrl: '',
   mediaDuration: 0,
   adText: '',
+  landingPageUrl: '',
   cta: 'LEARN_MORE',
 };
 
@@ -99,13 +107,18 @@ const OBJECTIVE_LABELS: Record<CampaignObjective, { label: string; desc: string 
 /* ------------------------------------------------------------------ */
 /* Main Component                                                     */
 /* ------------------------------------------------------------------ */
-export const TikTokInFeedAds: React.FC = () => {
+interface TikTokInFeedAdsProps {
+  defaultLandingUrl?: string;
+}
+
+export const TikTokInFeedAds: React.FC<TikTokInFeedAdsProps> = ({ defaultLandingUrl = '' }) => {
   const [step, setStep] = useState(1);
   const [business, setBusiness] = useState<BusinessAccount>({
     tiktokForBusinessId: '',
     tiktokAdsManagerId: '',
     tiktokOrganicHandle: '',
     connected: false,
+    simulated: false,
   });
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState('');
@@ -117,6 +130,13 @@ export const TikTokInFeedAds: React.FC = () => {
   const [publishMessage, setPublishMessage] = useState('');
 
   const totalSteps = 5;
+
+  useEffect(() => {
+    if (!defaultLandingUrl) return;
+    setForm((prev) =>
+      prev.landingPageUrl ? prev : { ...prev, landingPageUrl: defaultLandingUrl }
+    );
+  }, [defaultLandingUrl]);
 
   /* ---- Step 1: Business Account Setup ---- */
   const handleConnect = async () => {
@@ -134,10 +154,10 @@ export const TikTokInFeedAds: React.FC = () => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Gagal menghubungkan.');
-      setBusiness((prev) => ({ ...prev, connected: true }));
+      setBusiness((prev) => ({ ...prev, connected: true, simulated: Boolean(data.simulated) }));
     } catch (err: any) {
       setConnectError(err?.message || 'Terjadi kesalahan saat menghubungkan.');
-      setBusiness((prev) => ({ ...prev, connected: false }));
+      setBusiness((prev) => ({ ...prev, connected: false, simulated: false }));
     } finally {
       setConnecting(false);
     }
@@ -185,6 +205,10 @@ export const TikTokInFeedAds: React.FC = () => {
       alert('Hanya file video yang diperbolehkan untuk TikTok In-Feed Ads.');
       return;
     }
+    if (file.size > MARKETING_MAX_VIDEO_BYTES) {
+      alert(`Ukuran video terlalu besar. Maksimal ${formatMb(MARKETING_MAX_VIDEO_BYTES)}.`);
+      return;
+    }
     const url = URL.createObjectURL(file);
     const video = document.createElement('video');
     video.onloadedmetadata = () => {
@@ -212,9 +236,15 @@ export const TikTokInFeedAds: React.FC = () => {
       setPublishMessage('Hubungkan akun bisnis terlebih dahulu (Step 1).');
       return;
     }
+    if (!form.mediaFile) {
+      setPublishStatus('error');
+      setPublishMessage('Video iklan (9:16) wajib diunggah.');
+      return;
+    }
     setPublishing(true);
     setPublishStatus('idle');
     try {
+      const media = await fileToBase64Payload(form.mediaFile);
       const payload = {
         business: business,
         campaign: {
@@ -232,8 +262,10 @@ export const TikTokInFeedAds: React.FC = () => {
         },
         creative: {
           mediaType: 'video',
+          media,
           duration: form.mediaDuration,
           adText: form.adText,
+          landingPageUrl: form.landingPageUrl,
           cta: form.cta,
         },
       };
@@ -246,10 +278,17 @@ export const TikTokInFeedAds: React.FC = () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Gagal menerbitkan iklan.');
 
+      const warnings =
+        Array.isArray(data.warnings) && data.warnings.length ? ` Catatan: ${data.warnings.join(' ')}` : '';
+      const ids = [
+        data.campaignId ? `Campaign ID: ${data.campaignId}` : '',
+        data.adGroupId ? `Ad Group ID: ${data.adGroupId}` : '',
+        data.adId ? `Ad ID: ${data.adId}` : '',
+      ].filter(Boolean).join(' | ');
       setPublishStatus('success');
-      setPublishMessage(`Iklan TikTok berhasil diterbitkan! Campaign ID: ${data.campaignId || '-'}`);
+      setPublishMessage(`${data.message || 'Iklan TikTok berhasil diterbitkan.'}${ids ? ` ${ids}.` : ''}${warnings}`);
       setStep(1);
-      setForm(DEFAULT_FORM);
+      setForm({ ...DEFAULT_FORM, landingPageUrl: form.landingPageUrl || defaultLandingUrl });
     } catch (err: any) {
       setPublishStatus('error');
       setPublishMessage(err?.message || 'Terjadi kesalahan saat menerbitkan iklan.');
@@ -263,7 +302,7 @@ export const TikTokInFeedAds: React.FC = () => {
       case 1: return business.connected;
       case 2: return form.name.trim().length > 0 && form.dailyBudget > 0;
       case 3: return form.locations.length > 0 && form.ageGroups.length > 0;
-      case 4: return !!form.mediaFile && form.adText.trim().length > 0;
+      case 4: return !!form.mediaFile && form.adText.trim().length > 0 && form.landingPageUrl.trim().length > 0;
       default: return true;
     }
   };
@@ -465,8 +504,17 @@ const TikTokBusinessSetup: React.FC<{
     )}
 
     {business.connected && (
-      <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 flex items-center gap-2">
-        <CheckCircle2 className="w-4 h-4" /> Akun bisnis TikTok berhasil terhubung.
+      <div
+        className={`text-xs rounded-xl px-3 py-2 flex items-center gap-2 ${
+          business.simulated
+            ? 'text-amber-800 bg-amber-50 border border-amber-200'
+            : 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+        }`}
+      >
+        {business.simulated ? <AlertCircle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+        {business.simulated
+          ? 'Mode simulasi: kredensial TikTok belum disetel di server. Alur dapat diuji, tetapi iklan tidak dikirim ke TikTok.'
+          : 'Akun bisnis TikTok berhasil terhubung.'}
       </div>
     )}
   </div>
@@ -548,6 +596,13 @@ const TikTokCampaignSetup: React.FC<{
       </div>
       <p className="text-[10px] text-slate-400 mt-1">Minimum Rp 10.000 / hari</p>
     </div>
+
+    {form.objective === 'CONVERSIONS' && (
+      <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+        Objective Konversi memerlukan <span className="font-mono font-semibold">TIKTOK_PIXEL_ID</span> pada
+        konfigurasi server. Tanpa pixel, pilih Lalu Lintas atau Penayangan Video.
+      </div>
+    )}
   </div>
 );
 
@@ -708,14 +763,35 @@ const TikTokAdCreative: React.FC<{
 
     {/* Ad Text */}
     <div>
-      <label className="block text-xs font-bold text-slate-700 mb-1">Teks Iklan (TikTok Caption)</label>
+      <div className="flex items-center justify-between mb-1">
+        <label className="block text-xs font-bold text-slate-700">Teks Iklan (TikTok Caption)</label>
+        <span className={`text-[10px] font-mono ${form.adText.length > 100 ? 'text-rose-600' : 'text-slate-400'}`}>
+          {form.adText.length}/100
+        </span>
+      </div>
       <textarea
         value={form.adText}
-        onChange={(e) => setField('adText', e.target.value)}
+        onChange={(e) => setField('adText', e.target.value.slice(0, 100))}
         rows={4}
+        maxLength={100}
         placeholder="Tulis caption menarik untuk iklan TikTok Anda..."
         className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-black resize-none"
       />
+    </div>
+
+    {/* Landing page */}
+    <div>
+      <label className="block text-xs font-bold text-slate-700 mb-1">Landing Page URL</label>
+      <input
+        type="url"
+        value={form.landingPageUrl}
+        onChange={(e) => setField('landingPageUrl', e.target.value)}
+        placeholder="https://bejodigitalprint.com"
+        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-black"
+      />
+      <p className="text-[10px] text-slate-400 mt-1">
+        Tujuan klik tombol CTA. Terisi otomatis dari APP_URL server; dapat diubah.
+      </p>
     </div>
 
     {/* CTA */}
@@ -748,6 +824,7 @@ const TikTokPublishReview: React.FC<{
 
     <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3 text-xs">
       <Row label="Akun Bisnis" value={business.connected ? business.tiktokAdsManagerId : 'Belum terhubung'} />
+      <Row label="Mode" value={business.simulated ? 'Simulasi (belum live)' : 'Live API TikTok'} />
       <Row label="Nama Kampanye" value={form.name || '—'} />
       <Row label="Tujuan" value={OBJECTIVE_LABELS[form.objective].label} />
       <Row label="Anggaran Harian" value={`Rp ${form.dailyBudget.toLocaleString('id-ID')}`} />
@@ -755,6 +832,7 @@ const TikTokPublishReview: React.FC<{
       <Row label="Usia" value={form.ageGroups.join(', ') || '—'} />
       <Row label="Gender" value={form.gender === 'ALL' ? 'Semua' : form.gender === 'MALE' ? 'Laki-laki' : 'Perempuan'} />
       <Row label="Minat" value={form.interests.join(', ') || '—'} />
+      <Row label="Landing Page" value={form.landingPageUrl || '—'} />
       <Row label="Media" value={form.mediaFile ? `${form.mediaFile.name} (${form.mediaDuration}s)` : '—'} />
       <Row label="CTA" value={CTA_LABELS[form.cta]} />
     </div>

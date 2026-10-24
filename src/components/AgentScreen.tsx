@@ -470,13 +470,13 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
 
     if (specificProduct) {
       const avail = getProductAvailabilityStatus(specificProduct);
-      defaultMsg = `Halo Admin Pusat Bejo Stiker,\nSaya ${agentName}.\n\nKak, mau cek donk produk ini ready stock ga ya?:\nâ€¢ *Nama Produk:* ${specificProduct.name}\nâ€¢ *Kode SKU:* ${specificProduct.code || '-'}\nâ€¢ *Status Ketersediaan di POS:* ${avail.text}\n\nApakah stok siap diambil sekarang? Lek Amin mau titip dibawaain apa :) Terima kasih!`;
+      defaultMsg = `Halo Admin Pusat Bejo Stiker,\nSaya ${agentName}.\n\nKak, mau cek donk produk ini ready stock ga ya?:\n• *Nama Produk:* ${specificProduct.name}\n• *Kode SKU:* ${specificProduct.code || '-'}\n• *Status Ketersediaan di POS:* ${avail.text}\n\nApakah stok siap diambil sekarang? Lek Amin mau titip dibawaain apa :) Terima kasih!`;
       setChatTemplateKey('stok_produk');
     } else if (presetType === 'order_cart' && orderItems.length > 0) {
       const itemsList = orderItems
         .map(
           (it, idx) =>
-            `${idx + 1}. *${it.productName}*\n   - Qty: ${it.qty} ${it.unit}${it.lengthMeters && it.widthMeters ? ` (${it.lengthMeters}x${it.widthMeters}m = ${it.sqm?.toFixed(2)} mÂ²)` : ''}`
+            `${idx + 1}. *${it.productName}*\n   - Qty: ${it.qty} ${it.unit}${it.lengthMeters && it.widthMeters ? ` (${it.lengthMeters}x${it.widthMeters}m = ${it.sqm?.toFixed(2)} m²)` : ''}`
         )
         .join('\n');
       defaultMsg = `Halo Mba Fira,\nSaya ${agentName}.\n\nIni ya Kak detail pesanan ambil bahan dan cetak yang udah aku buat di Portal Agen:\n\n${itemsList}\n\n*TOTAL BARANG: ${orderTotalQty} Unit*\n${generalOrderNotes ? `*Catatan Khusus:* ${generalOrderNotes}\n` : ''}\nMohon dicek dan dipersiapkan barangnya ya mba Fira. Terima kasih!`;
@@ -731,7 +731,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
       notes: item.notes
         ? `${item.notes}${item.lengthMeters && item.widthMeters ? ` (${item.lengthMeters}x${item.widthMeters}m)` : ''}`
         : item.lengthMeters && item.widthMeters
-        ? `Dimensi: ${item.lengthMeters}m x ${item.widthMeters}m (${item.sqm?.toFixed(2)} mÂ²)`
+        ? `Dimensi: ${item.lengthMeters}m x ${item.widthMeters}m (${item.sqm?.toFixed(2)} m²)`
         : undefined
     }));
 
@@ -963,7 +963,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         unit: it.unit || 'pcs',
         price: it.price,
         totalPrice: it.totalPrice || (it.qty * it.price),
-        notes: it.notes || (it.length && it.width ? `Dimensi: ${it.length}x${it.width}m (${it.sqm?.toFixed(2)} mÂ²)` : undefined),
+        notes: it.notes || (it.length && it.width ? `Dimensi: ${it.length}x${it.width}m (${it.sqm?.toFixed(2)} m²)` : undefined),
         lengthMeters: it.length,
         widthMeters: it.width,
         sqm: it.sqm
@@ -1217,7 +1217,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 uppercase">
-                {isAgentUser ? `Portal Agen â€¢ ${assignedAgentName}` : 'Portal Agen & Pengambilan Bahan'}
+                {isAgentUser ? `Portal Agen • ${assignedAgentName}` : 'Portal Agen & Pengambilan Bahan'}
               </h1>
               {isAgentUser ? (
                 <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
@@ -1550,7 +1550,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                               </h3>
                               <div className="text-[11px] text-slate-500 mt-1 capitalize flex items-center gap-1 font-medium truncate">
                                 <span>{product.category}</span>
-                                {product.dimensions && <span>â€¢ {product.dimensions}</span>}
+                                {product.dimensions && <span>• {product.dimensions}</span>}
                               </div>
                             </div>
                           </div>
@@ -1787,10 +1787,10 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                                 </h4>
                                 <div className="text-[10px] text-slate-500 flex items-center gap-1.5 mt-0.5 font-medium truncate">
                                   <span className="font-mono">{item.code || 'SKU'}</span>
-                                  <span>â€¢ Satuan: {item.unit}</span>
+                                  <span>• Satuan: {item.unit}</span>
                                   {item.lengthMeters && item.widthMeters && (
                                     <span className="text-slate-700 font-bold">
-                                      ({item.lengthMeters}m x {item.widthMeters}m = {item.sqm?.toFixed(2)} mÂ²)
+                                      ({item.lengthMeters}m x {item.widthMeters}m = {item.sqm?.toFixed(2)} m²)
                                     </span>
                                   )}
                                 </div>
@@ -1939,10 +1939,10 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                   className="bg-transparent text-xs text-slate-800 font-bold focus:outline-none cursor-pointer"
                   title="Filter pengambilan bahan berdasarkan bulan"
                 >
-                  <option value="ALL">ðŸ“… Semua Bulan ({availableMonths.length} Periode)</option>
+                  <option value="ALL">📅 Semua Bulan ({availableMonths.length} Periode)</option>
                   {availableMonths.map((mKey) => (
                     <option key={mKey} value={mKey}>
-                      ðŸ“… {formatMonthYearLabel(mKey)} {mKey === new Date().toISOString().slice(0, 7) ? 'â€¢ Bulan Ini' : ''}
+                      📅 {formatMonthYearLabel(mKey)} {mKey === new Date().toISOString().slice(0, 7) ? '• Bulan Ini' : ''}
                     </option>
                   ))}
                 </select>
@@ -2098,7 +2098,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                 <span>
                   Menampilkan data periode: <strong className="font-bold text-indigo-900">{formatMonthYearLabel(historyMonthFilter)}</strong>
                 </span>
-                <span className="text-slate-400">â€¢</span>
+                <span className="text-slate-400">•</span>
                 <span className="text-indigo-800 font-bold">
                   Total Bahan: {formatRupiah(statsBahan.totalAmount)} ({statsBahan.count}x ambil, {statsBahan.totalQty} barang)
                 </span>
@@ -2440,7 +2440,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                               #{tx.transactionNumber || tx.id}
                             </div>
                             <div className="text-[10px] text-slate-400 mt-0.5">
-                              {tx.date} â€¢ {tx.time}
+                              {tx.date} • {tx.time}
                             </div>
                           </td>
 
@@ -2490,7 +2490,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                                     <span>{it.productName}</span>
                                     {it.lengthMeters && it.widthMeters ? (
                                       <span className="text-purple-700 font-semibold text-[10px] ml-1">
-                                        ({it.lengthMeters}x{it.widthMeters}m = {it.sqm?.toFixed(2)} mÂ²)
+                                        ({it.lengthMeters}x{it.widthMeters}m = {it.sqm?.toFixed(2)} m²)
                                       </span>
                                     ) : null}
                                     {it.notes ? (
@@ -2685,7 +2685,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                   <div className="text-xs font-bold text-slate-800 flex items-center justify-between">
                     <span>Hitung Ukuran Meteran (Panjang x Lebar)</span>
                     <span className="text-[10px] bg-slate-200 text-slate-800 font-mono font-bold px-1.5 py-0.2 rounded">
-                      Luas: {(parseFloat(configLength.replace(',', '.')) || 0) * (parseFloat(configWidth.replace(',', '.')) || 0)} mÂ²
+                      Luas: {(parseFloat(configLength.replace(',', '.')) || 0) * (parseFloat(configWidth.replace(',', '.')) || 0)} m²
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -2848,7 +2848,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                         <span>
                           Jumlah: <strong className="text-slate-950 font-bold">{it.qty} {it.unit}</strong>
                           {it.lengthMeters && it.widthMeters && (
-                            <span> â€¢ {it.lengthMeters}x{it.widthMeters}m</span>
+                            <span> • {it.lengthMeters}x{it.widthMeters}m</span>
                           )}
                         </span>
                       </div>
@@ -2988,7 +2988,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                         : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
                     }`}
                   >
-                    ðŸ’¬ Pesan Umum
+                    💬 Pesan Umum
                   </button>
 
                   {orderItems.length > 0 && (
@@ -3001,7 +3001,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                           : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
                       }`}
                     >
-                      ðŸ“¦ Rincian Pesanan ({orderItems.length} Item)
+                      📦 Rincian Pesanan ({orderItems.length} Item)
                     </button>
                   )}
 
@@ -3014,7 +3014,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                         : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
                     }`}
                   >
-                    ðŸ·ï¸ Tanya Stok Bahan
+                    🏷️ Tanya Stok Bahan
                   </button>
 
                   <button
@@ -3026,7 +3026,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                         : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
                     }`}
                   >
-                    ðŸšš Konfirmasi Pengambilan
+                    🚚 Konfirmasi Pengambilan
                   </button>
 
                   <button
@@ -3038,7 +3038,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                         : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
                     }`}
                   >
-                    ðŸ–¨ï¸ Order Jasa Cetak
+                    🖨️ Order Jasa Cetak
                   </button>
                 </div>
               </div>

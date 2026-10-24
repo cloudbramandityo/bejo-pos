@@ -4,6 +4,8 @@ dist/
 backups/
 .env
 *.log
+# Token OAuth hasil refresh (rahasia, jangan di-commit)
+data/shopee-tokens.json
 # File backup data (besar, dipakai skrip import; jangan di-commit)
 backup_pos_bejo_stiker_*.json
 .bejo-*.mjs

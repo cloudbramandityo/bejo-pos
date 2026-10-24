@@ -493,7 +493,7 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-slate-500" />
                 <span className="font-bold text-slate-700 text-xs">
-                  Alat Arsip Eksternal Manual (.json ke Flashdisk) â€” <span className="text-slate-500 font-normal">Opsional</span>
+                  Alat Arsip Eksternal Manual (.json ke Flashdisk) — <span className="text-slate-500 font-normal">Opsional</span>
                 </span>
               </div>
               {showManualTools ? (

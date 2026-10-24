@@ -273,7 +273,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
     order.items.forEach((item, idx) => {
       const finishingsText = item.finishings.length > 0 ? ` + ${item.finishings.map((f) => f.name).join(', ')}` : '';
       const dpText = order.dpPaid > 0 ? ` (DP: -${formatRupiah(order.dpPaid)})` : '';
-      const specLabel = `${item.materialName} â€¢ ${item.lengthMeters}x${item.widthMeters}m (${item.qty || 1} pcs)${finishingsText}${dpText}`;
+      const specLabel = `${item.materialName} • ${item.lengthMeters}x${item.widthMeters}m (${item.qty || 1} pcs)${finishingsText}${dpText}`;
 
       // Hitung harga tagihan dengan memperhitungkan DP jika ada
       let chargedPrice = item.totalPrice;
@@ -296,7 +296,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         dimensions: `${item.lengthMeters}x${item.widthMeters}m`,
         qty: item.qty || 1,
         itemCount: item.qty || 1,
-        unit: `${item.lengthMeters}x${item.widthMeters}m (${item.areaM2} mÂ²)`,
+        unit: `${item.lengthMeters}x${item.widthMeters}m (${item.areaM2} m²)`,
         formattedSpec: specLabel,
         unitPrice: chargedPrice,
         totalPrice: chargedPrice,
@@ -305,8 +305,8 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         lengthMeters: item.lengthMeters,
         widthMeters: item.widthMeters,
         sqm: item.areaM2,
-        notes: `SPK: ${order.orderNumber} â€¢ ${item.materialName}${finishingsText}${
-          order.dpPaid > 0 ? ` â€¢ DP: -Rp ${formatNumber(order.dpPaid)}` : ''
+        notes: `SPK: ${order.orderNumber} • ${item.materialName}${finishingsText}${
+          order.dpPaid > 0 ? ` • DP: -Rp ${formatNumber(order.dpPaid)}` : ''
         }`
       };
 
@@ -415,7 +415,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
       order.items.forEach((item, idx) => {
         const finishingsText = item.finishings.length > 0 ? ` + ${item.finishings.map((f) => f.name).join(', ')}` : '';
         const dpText = order.dpPaid > 0 ? ` (DP: -${formatRupiah(order.dpPaid)})` : '';
-        const specLabel = `${item.materialName} â€¢ ${item.lengthMeters}x${item.widthMeters}m (${item.qty || 1} pcs)${finishingsText}${dpText}`;
+        const specLabel = `${item.materialName} • ${item.lengthMeters}x${item.widthMeters}m (${item.qty || 1} pcs)${finishingsText}${dpText}`;
         const chargedPrice = order.items.length === 1 && order.dpPaid > 0 ? order.remainingAmount : item.totalPrice;
 
         const newCartItem: CartItem = {
@@ -430,7 +430,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           dimensions: `${item.lengthMeters}x${item.widthMeters}m`,
           qty: item.qty || 1,
           itemCount: item.qty || 1,
-          unit: `${item.lengthMeters}x${item.widthMeters}m (${item.areaM2} mÂ²)`,
+          unit: `${item.lengthMeters}x${item.widthMeters}m (${item.areaM2} m²)`,
           formattedSpec: specLabel,
           unitPrice: chargedPrice,
           totalPrice: chargedPrice,
@@ -439,7 +439,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           lengthMeters: item.lengthMeters,
           widthMeters: item.widthMeters,
           sqm: item.areaM2,
-          notes: `SPK: ${order.orderNumber} â€¢ ${item.materialName}${finishingsText}`
+          notes: `SPK: ${order.orderNumber} • ${item.materialName}${finishingsText}`
         };
 
         onAddToCart(newCartItem);
@@ -476,7 +476,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
     }
 
     // 3. Set ringkasan notes dan auto-fill jumlah bayar
-    const notesSummary = `Tagihan Open Account (${group.orders.length} SPK): ${group.orders.map((o: any) => o.orderNumber).join(', ')}${group.notes ? ` â€¢ Catatan: ${group.notes}` : ''}${group.adjustmentReason ? ` â€¢ Sisa Tagihan: ${group.adjustmentReason}` : ''}`;
+    const notesSummary = `Tagihan Open Account (${group.orders.length} SPK): ${group.orders.map((o: any) => o.orderNumber).join(', ')}${group.notes ? ` • Catatan: ${group.notes}` : ''}${group.adjustmentReason ? ` • Sisa Tagihan: ${group.adjustmentReason}` : ''}`;
     setCashierNotes(notesSummary);
     setCashAmount(formatNumber(group.totalAmount));
     setTransferAmount('0');
@@ -1061,7 +1061,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                         Konsolidasi ({loadedOpenAccountNotice.orders?.length || 0} SPK)
                       </span>
                       <span className="bg-rose-600 text-white text-[10px] font-bold px-2 py-0.2 rounded-full shadow-2xs">
-                        ðŸ”’ Mode Khusus Open Account
+                        🔒 Mode Khusus Open Account
                       </span>
                     </div>
 

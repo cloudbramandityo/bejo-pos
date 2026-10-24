@@ -411,7 +411,7 @@ export const BackendDiagnosticsModal: React.FC<BackendDiagnosticsModalProps> = (
                   {diagnostics?.recentFixLogs && diagnostics.recentFixLogs.length > 0 ? (
                     diagnostics.recentFixLogs.map((log, idx) => (
                       <div key={idx} className="text-slate-300 text-[11px] leading-relaxed">
-                        <span className="text-emerald-400">âœ”</span> {log}
+                        <span className="text-emerald-400">✔</span> {log}
                       </div>
                     ))
                   ) : (

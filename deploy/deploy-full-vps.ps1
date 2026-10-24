@@ -244,7 +244,12 @@ if (-not $SkipSourceUpdate) {
   if (Test-Path (Join-Path $AppDir '.git')) {
     $gitCmd = Get-Command git -ErrorAction SilentlyContinue
     if ($gitCmd) {
-      $dirty = @(& git -C $AppDir status --porcelain --untracked-files=no)
+      # data/, logs/, backups/, dist/ memang berubah saat runtime dan tidak pernah
+      # ditimpa updater, jadi bukan penghalang deploy.
+      $dirty = @(& git -C $AppDir status --porcelain --untracked-files=no | Where-Object {
+        $path = $_.Substring(3).Trim('"')
+        $path -notmatch '^(data|logs|backups|dist)/'
+      })
       if ($dirty.Count -gt 0) {
         Write-Host ($dirty -join "`n") -ForegroundColor DarkYellow
         if (-not $Force) {

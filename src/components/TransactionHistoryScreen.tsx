@@ -581,6 +581,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
   const totalTransfer = finalFilteredTransactions.reduce((acc, t) => acc + (t.paymentMethods?.transfer || 0), 0);
   const totalQris = finalFilteredTransactions.reduce((acc, t) => acc + (t.paymentMethods?.qris || 0), 0);
   const totalDiskon = finalFilteredTransactions.reduce((acc, t) => acc + (t.discount || 0), 0);
+  const totalPajak = finalFilteredTransactions.reduce((acc, t) => acc + (t.tax || 0), 0);
 
   // Total Realisasi Kas / Pembayaran Masuk yang sudah terkumpul
   const totalCollectedPayment = totalCash + totalTransfer + totalQris;
@@ -653,15 +654,17 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
       });
     });
 
-    const netProfit = totalOmzet - sumCost;
-    const margin = totalOmzet > 0 ? (netProfit / totalOmzet) * 100 : 0;
+    // PPN yang dipungut bukan pendapatan, jadi laba dihitung dari omzet neto PPN
+    const netRevenue = totalOmzet - totalPajak;
+    const netProfit = netRevenue - sumCost;
+    const margin = netRevenue > 0 ? (netProfit / netRevenue) * 100 : 0;
 
     return {
       totalHpp: sumCost,
       totalLabaBersih: netProfit,
       marginLabaPercent: margin,
     };
-  }, [finalFilteredTransactions, totalOmzet, productMap, productByCodeMap, productByNameMap]);
+  }, [finalFilteredTransactions, totalOmzet, totalPajak, productMap, productByCodeMap, productByNameMap]);
 
   // Stock mutasi stats (per transaction aggregated)
   const totalStockTransactionsCount = finalFilteredStockTransactions.length;
@@ -884,6 +887,14 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
       // Lewati invoice yang dibatalkan agar tidak menambah volume rekap bahan
       if (tx.isInvoice && (tx.invoiceStatus === 'CANCELLED' || tx.total === 0)) return;
 
+      const txItemsRevenue = (tx.items || []).reduce((acc, it) => {
+        const qty = Number(it.qty ?? it.quantity) || 1;
+        return acc + (it.totalPrice !== undefined && it.totalPrice !== null ? Number(it.totalPrice) : (Number(it.unitPrice) || 0) * qty);
+      }, 0);
+      const txNetRevenue = Math.max(0, (Number(tx.total) || 0) - (Number(tx.tax) || 0));
+      // Alokasikan diskon transaksi & buang PPN secara proporsional ke tiap item
+      const revenueFactor = txItemsRevenue > 0 ? txNetRevenue / txItemsRevenue : 1;
+
       tx.items?.forEach((it) => {
         const prod =
           (it.productId ? productMap.get(it.productId) : null) ||
@@ -923,10 +934,12 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
         const totalSqm = it.sqm && it.sqm > 0 ? it.sqm : squareMetersPerItem * (it.itemCount || qty);
 
         const profitRes = calculateSalesItemCost(it, prod);
-        const itemRevenue =
+        const rawItemRevenue =
           it.totalPrice !== undefined && it.totalPrice !== null
             ? Number(it.totalPrice)
             : (Number(it.unitPrice) || 0) * qty;
+        const itemRevenue = rawItemRevenue * revenueFactor;
+        const itemProfit = itemRevenue - profitRes.totalCost;
 
         const existing = map.get(key);
         if (existing) {
@@ -935,7 +948,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
           existing.trxCount += 1;
           existing.totalRevenue += itemRevenue;
           existing.totalCost += profitRes.totalCost;
-          existing.totalProfit += profitRes.itemProfit;
+          existing.totalProfit += itemProfit;
         } else {
           map.set(key, {
             id: key,
@@ -948,7 +961,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
             trxCount: 1,
             totalRevenue: itemRevenue,
             totalCost: profitRes.totalCost,
-            totalProfit: profitRes.itemProfit,
+            totalProfit: itemProfit,
           });
         }
       });

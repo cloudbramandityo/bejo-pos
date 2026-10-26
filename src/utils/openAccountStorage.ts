@@ -308,5 +308,25 @@ export function buildOpenAccountInvoiceItems(group: OpenAccountCustomerGroup): I
     });
   }
 
+  // Pastikan total seluruh baris tepat sama dengan total tagihan grup.
+  // Selisih muncul bila penyesuaian negatif melebihi subtotal (total grup dibatasi 0)
+  // atau karena pembulatan nilai per order.
+  const itemsTotal = items.reduce((sum, it) => sum + (Number(it.totalPrice) || 0), 0);
+  const groupDifference = Math.round(group.totalAmount) - Math.round(itemsTotal);
+  if (groupDifference !== 0) {
+    items.push({
+      id: `item-oa-balance-${group.customerId}`,
+      itemName: 'Penyesuaian Pembulatan Tagihan Open Account',
+      description: `Selisih pembulatan agar total rincian sama dengan total tagihan Open Account (Rp ${group.totalAmount.toLocaleString('id-ID')})`,
+      quantity: 1,
+      unit: 'paket',
+      unitPrice: groupDifference,
+      discountPercent: 0,
+      discountAmount: 0,
+      isTaxable: true,
+      totalPrice: groupDifference
+    });
+  }
+
   return items;
 }

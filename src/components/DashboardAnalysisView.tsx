@@ -88,6 +88,28 @@ const CHART_COLORS = {
 
 const PIE_PALETTE = ['#2563eb', '#e11d48', '#059669', '#d97706', '#7c3aed', '#0891b2', '#4f46e5', '#db2777'];
 
+/**
+ * Laba penjualan bersih: pendapatan setelah PPN dikurangi HPP item.
+ * PPN adalah kewajiban pajak, bukan pendapatan, sehingga tidak boleh menambah laba.
+ */
+function calculateNetSalesProfit(
+  tx: Transaction,
+  productMap: Map<string, Product>,
+  productByCodeMap: Map<string, Product>,
+  productByNameMap: Map<string, Product>
+): number {
+  let totalCost = 0;
+  tx.items?.forEach((it) => {
+    const prod =
+      (it.productId ? productMap.get(it.productId) : null) ||
+      (it.code ? productByCodeMap.get(it.code.trim().toLowerCase()) : null) ||
+      (it.name ? productByNameMap.get(it.name.trim().toLowerCase()) : null);
+    totalCost += calculateSalesItemCost(it, prod).totalCost;
+  });
+  const netRevenue = (Number(tx.total) || 0) - (Number(tx.tax) || 0);
+  return netRevenue - totalCost;
+}
+
 const AGENT_COLORS = [
   '#d97706', // Amber 600
   '#7c3aed', // Violet 600
@@ -174,7 +196,12 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
       return true; // SEMUA
     };
 
-    const sales = transactions.filter((t) => isMatch(t.timestamp, t.date));
+    // Invoice batal / bernilai nol tidak boleh menambah omzet maupun HPP
+    const sales = transactions.filter(
+      (t) =>
+        isMatch(t.timestamp, t.date) &&
+        !(t.isInvoice && (t.invoiceStatus === 'CANCELLED' || t.total === 0))
+    );
     const purchases = normalizedStockTxs.filter((st) => st.type === 'PEMBELIAN' && isMatch(st.timestamp, st.date));
     const agentTakes = normalizedStockTxs.filter((st) => st.type === 'PENGAMBILAN' && isMatch(st.timestamp, st.date));
 
@@ -193,6 +220,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
     let totalTransfer = 0;
     let totalQris = 0;
     let totalDiscount = 0;
+    let totalTax = 0;
     let totalEstimatedCost = 0;
 
     filteredSales.forEach((t) => {
@@ -201,6 +229,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
       totalTransfer += t.paymentMethods?.transfer || 0;
       totalQris += t.paymentMethods?.qris || 0;
       totalDiscount += t.discount || 0;
+      totalTax += t.tax || 0;
 
       t.items?.forEach((it) => {
         totalItemsSold += it.qty || it.quantity || 1;
@@ -214,7 +243,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
       });
     });
 
-    const totalEstimatedProfit = totalOmset - totalEstimatedCost;
+    const totalEstimatedProfit = totalOmset - totalTax - totalEstimatedCost;
 
     return {
       trxCount: filteredSales.length,
@@ -406,15 +435,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
         const slot = hourMap.get(h);
         if (slot) {
           slot.sales += s.total;
-          let salesProfit = 0;
-          s.items?.forEach((it) => {
-            const prod =
-              (it.productId ? productMap.get(it.productId) : null) ||
-              (it.code ? productByCodeMap.get(it.code.trim().toLowerCase()) : null) ||
-              (it.name ? productByNameMap.get(it.name.trim().toLowerCase()) : null);
-            salesProfit += calculateSalesItemCost(it, prod).itemProfit;
-          });
-          slot.profit += salesProfit;
+          slot.profit += calculateNetSalesProfit(s, productMap, productByCodeMap, productByNameMap);
         }
       });
 
@@ -492,15 +513,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
         const slot = dayMap.get(dateKey);
         if (slot) {
           slot.sales += s.total;
-          let salesProfit = 0;
-          s.items?.forEach((it) => {
-            const prod =
-              (it.productId ? productMap.get(it.productId) : null) ||
-              (it.code ? productByCodeMap.get(it.code.trim().toLowerCase()) : null) ||
-              (it.name ? productByNameMap.get(it.name.trim().toLowerCase()) : null);
-            salesProfit += calculateSalesItemCost(it, prod).itemProfit;
-          });
-          slot.profit += salesProfit;
+          slot.profit += calculateNetSalesProfit(s, productMap, productByCodeMap, productByNameMap);
         }
       });
 
@@ -566,15 +579,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
         const slot = dayMap.get(dateKey);
         if (slot) {
           slot.sales += s.total;
-          let salesProfit = 0;
-          s.items?.forEach((it) => {
-            const prod =
-              (it.productId ? productMap.get(it.productId) : null) ||
-              (it.code ? productByCodeMap.get(it.code.trim().toLowerCase()) : null) ||
-              (it.name ? productByNameMap.get(it.name.trim().toLowerCase()) : null);
-            salesProfit += calculateSalesItemCost(it, prod).itemProfit;
-          });
-          slot.profit += salesProfit;
+          slot.profit += calculateNetSalesProfit(s, productMap, productByCodeMap, productByNameMap);
         }
       });
 
@@ -636,18 +641,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
       const key = getDayKey(s.timestamp, s.date);
       const cur = dayMap.get(key) || { date: key, displayDate: formatDisplay(key), sales: 0, agent: 0, purchase: 0, profit: 0 };
       cur.sales += s.total;
-
-      let salesProfit = 0;
-      s.items?.forEach((it) => {
-        const prod =
-          (it.productId ? productMap.get(it.productId) : null) ||
-          (it.code ? productByCodeMap.get(it.code.trim().toLowerCase()) : null) ||
-          (it.name ? productByNameMap.get(it.name.trim().toLowerCase()) : null);
-
-        salesProfit += calculateSalesItemCost(it, prod).itemProfit;
-      });
-
-      cur.profit += salesProfit;
+      cur.profit += calculateNetSalesProfit(s, productMap, productByCodeMap, productByNameMap);
       dayMap.set(key, cur);
     });
 
@@ -742,6 +736,13 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
     >();
 
     filteredSales.forEach((s) => {
+      const txItemsRevenue = (s.items || []).reduce((acc, it) => {
+        const qty = Number(it.qty ?? it.quantity) || 1;
+        return acc + (it.totalPrice !== undefined && it.totalPrice !== null ? Number(it.totalPrice) : (Number(it.unitPrice) || 0) * qty);
+      }, 0);
+      const txNetRevenue = Math.max(0, (Number(s.total) || 0) - (Number(s.tax) || 0));
+      const revenueFactor = txItemsRevenue > 0 ? txNetRevenue / txItemsRevenue : 1;
+
       s.items?.forEach((it) => {
         const key = (it.productId || it.code || it.name || 'unknown').trim().toLowerCase();
         const prod =
@@ -759,18 +760,20 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
         const qty = Number(it.qty ?? it.quantity) || 1;
 
         const profitRes = calculateSalesItemCost(it, prod);
-        const revenue =
+        const rawRevenue =
           it.totalPrice !== undefined && it.totalPrice !== null
             ? Number(it.totalPrice)
             : (Number(it.unitPrice) || 0) * qty;
+        const revenue = rawRevenue * revenueFactor;
+        const itemProfit = revenue - profitRes.totalCost;
 
         const existing = map.get(key);
         if (existing) {
           existing.qty += qty;
           existing.totalRevenue += revenue;
-          existing.totalProfit += profitRes.itemProfit;
+          existing.totalProfit += itemProfit;
         } else {
-          map.set(key, { name, category, qty, unit, totalRevenue: revenue, totalProfit: profitRes.itemProfit });
+          map.set(key, { name, category, qty, unit, totalRevenue: revenue, totalProfit: itemProfit });
         }
       });
     });

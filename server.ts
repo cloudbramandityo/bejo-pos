@@ -1166,6 +1166,9 @@ app.post("/api/invoices", (req, res) => {
     
     // Sanitasi item & kalkulasi matematis
     const financials = calculateBackendInvoiceFinancials(body.items || [], taxRate, dpPercent, 0);
+    const explicitDpAmount = typeof body.dpRequiredAmount === 'number' && Number.isFinite(body.dpRequiredAmount)
+      ? Math.max(0, Math.min(financials.grandTotal, Math.round(body.dpRequiredAmount)))
+      : undefined;
 
     const now = Date.now();
     const issueDate = sanitizeText(body.issueDate) || new Date().toISOString().slice(0, 10);
@@ -1198,7 +1201,7 @@ app.post("/api/invoices", (req, res) => {
       paymentScheme: (body.paymentScheme === 'TERMIN' || body.paymentScheme === 'DP' || body.paymentScheme === 'FULL') ? body.paymentScheme : (docType === 'PROFORMA' ? 'DP' : 'FULL'),
       paymentSchedules: Array.isArray(body.paymentSchedules) ? body.paymentSchedules : undefined,
       dpRequiredPercent: financials.dpRequiredPercent,
-      dpRequiredAmount: financials.dpRequiredAmount,
+      dpRequiredAmount: explicitDpAmount ?? financials.dpRequiredAmount,
       amountPaid: 0,
       balanceDue: financials.grandTotal,
       payments: [],
@@ -1477,6 +1480,9 @@ app.put("/api/invoices/:id", (req, res) => {
       dpPercent,
       invoice.amountPaid || 0
     );
+    const explicitDpAmount = typeof body.dpRequiredAmount === 'number' && Number.isFinite(body.dpRequiredAmount)
+      ? Math.max(0, Math.min(financials.grandTotal, Math.round(body.dpRequiredAmount)))
+      : undefined;
 
     if (body.projectTitle) invoice.projectTitle = sanitizeText(body.projectTitle);
     if (body.issueDate) invoice.issueDate = sanitizeText(body.issueDate);
@@ -1514,7 +1520,7 @@ app.put("/api/invoices/:id", (req, res) => {
     invoice.taxAmount = financials.taxAmount;
     invoice.grandTotal = financials.grandTotal;
     invoice.dpRequiredPercent = financials.dpRequiredPercent;
-    invoice.dpRequiredAmount = financials.dpRequiredAmount;
+    invoice.dpRequiredAmount = explicitDpAmount ?? financials.dpRequiredAmount;
     invoice.balanceDue = financials.balanceDue;
     invoice.updatedAt = Date.now();
 

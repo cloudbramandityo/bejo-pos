@@ -250,15 +250,14 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
   const handleGrossChange = (monthIdx: number, valStr: string) => {
     const grossNum = parseInt(valStr.replace(/\D/g, ''), 10) || 0;
     const listCopy = [...currentYearBillings];
-    const tariff = listCopy[monthIdx].tariffRatePercent || 0.5;
-    const calculatedPph = Math.round(grossNum * (tariff / 100));
 
     listCopy[monthIdx] = {
       ...listCopy[monthIdx],
       grossRevenue: grossNum,
-      taxableBaseDpp: grossNum,
-      pphFinalPaid: calculatedPph,
-      isPaid: calculatedPph > 0,
+      taxableBaseDpp: 0,
+      // PPh dihitung ulang otomatis dengan pembebasan kumulatif Rp500 juta/tahun
+      pphFinalPaid: 0,
+      isPaid: false,
     };
     const recomputed = recomputeMonthlyBillingYear(listCopy);
     const updatedAll = {
@@ -320,6 +319,8 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
     const matchingReturn = allReturns.find(r => r.taxYear === selectedBillingYear) || currentReturn;
     const totalGross = summary.totalGross;
     const totalPph = summary.totalPph;
+    const exemptThreshold = matchingReturn.businessActivity.umkmTaxExemptThreshold || 500000000;
+    const taxableRevenue = Math.max(0, totalGross - exemptThreshold);
 
     const updated: TaxAnnualReturn1770 = {
       ...matchingReturn,
@@ -327,7 +328,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
         ...matchingReturn.businessActivity,
         grossRevenue: totalGross,
         isUmkmPp55: true,
-        umkmTaxableRevenue: totalGross,
+        umkmTaxableRevenue: taxableRevenue,
         umkmTaxAmount: totalPph,
       },
       auditTrail: [

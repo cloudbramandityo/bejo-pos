@@ -898,13 +898,15 @@ export function getProformaEffectivePaymentInfo(
     };
   }
 
-  // Cari seluruh child invoice komersial yang terhubung ke proforma ini (kecuali yang dibatalkan)
+  // Cari seluruh child invoice komersial yang terhubung ke proforma ini
   let totalChildPaid = 0;
   const childPaymentRefIds = new Set<string>();
+  const childPaymentSignatures = new Set<string>();
+  let hasLinkedChildren = false;
 
   if (allInvoices && allInvoices.length > 0) {
-    const childInvoices = allInvoices.filter(ci =>
-      ci.documentType === 'COMMERCIAL' && ci.status !== 'CANCELLED' && (
+    const linkedChildInvoices = allInvoices.filter(ci =>
+      ci.documentType === 'COMMERCIAL' && (
         (ci.sourceProformaId && ci.sourceProformaId === inv.id) ||
         (ci.sourceProformaNumber && ci.sourceProformaNumber === inv.documentNumber) ||
         (inv.childInvoiceIds && inv.childInvoiceIds.includes(ci.id)) ||
@@ -913,23 +915,46 @@ export function getProformaEffectivePaymentInfo(
         (inv.convertedInvoiceNumber && inv.convertedInvoiceNumber === ci.documentNumber)
       )
     );
+    hasLinkedChildren = linkedChildInvoices.length > 0;
 
+    const childInvoices = linkedChildInvoices.filter(ci => ci.status !== 'CANCELLED');
     totalChildPaid = childInvoices.reduce((acc, ci) => acc + (ci.amountPaid || 0), 0);
     childInvoices.forEach(ci => {
       (ci.payments || []).forEach(p => {
         if (p.id) childPaymentRefIds.add(p.id);
         if (p.referenceNumber) childPaymentRefIds.add(p.referenceNumber);
+        if (p.paymentDate && p.amount) {
+          childPaymentSignatures.add(
+            `${p.paymentDate}|${p.amount}|${(p.paymentMethod || '').toUpperCase()}`
+          );
+        }
       });
     });
   }
 
   // Hitung pembayaran langsung pada proforma yang tidak duplikasi dengan child invoice
   const directPaid = (inv.payments || [])
-    .filter(p => !((p.id && childPaymentRefIds.has(p.id)) || (p.referenceNumber && childPaymentRefIds.has(p.referenceNumber))))
+    .filter(p => {
+      if ((p.id && childPaymentRefIds.has(p.id)) || (p.referenceNumber && childPaymentRefIds.has(p.referenceNumber))) {
+        return false;
+      }
+      const signature = p.paymentDate && p.amount
+        ? `${p.paymentDate}|${p.amount}|${(p.paymentMethod || '').toUpperCase()}`
+        : '';
+      return !(signature && childPaymentSignatures.has(signature));
+    })
     .reduce((acc, p) => acc + (p.amount || 0), 0);
 
-  // Total terbayar: akumulasi pembayaran child invoice (Termin 1, Termin 2, DP, dll) dan pembayaran langsung
-  const totalPaid = Math.min(inv.grandTotal, Math.max(inv.amountPaid || 0, directPaid + totalChildPaid));
+  // Jika proforma sudah memiliki child invoice, nilai amountPaid lama bisa saja
+  // masih memuat pembayaran child yang kemudian dibatalkan. Gunakan rekonsiliasi
+  // berbasis pembayaran agar tidak terjadi double counting / overstated.
+  const reconciledPaid = directPaid + totalChildPaid;
+  const totalPaid = Math.min(
+    inv.grandTotal,
+    hasLinkedChildren
+      ? reconciledPaid
+      : Math.max(inv.amountPaid || 0, reconciledPaid)
+  );
   const balanceDue = Math.max(0, inv.grandTotal - totalPaid);
 
   let status: InvoiceStatus = inv.status;

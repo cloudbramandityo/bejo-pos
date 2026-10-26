@@ -59,6 +59,36 @@ import {
   formatItemTransactionSpec
 } from '../utils/formatters';
 
+/**
+ * Membagi sisa tagihan SPK/Open Account (setelah DP) ke setiap item secara
+ * proporsional. Sisa pembulatan ditaruh di item terakhir supaya jumlah nilai
+ * item selalu sama dengan tagihan order.
+ */
+function allocateOrderItemCharges(order: SpkOrder): number[] {
+  const items = order.items || [];
+  if (items.length === 0) return [];
+
+  const itemsTotal = items.reduce((acc, it) => acc + (Number(it.totalPrice) || 0), 0);
+  const billable = order.remainingAmount > 0
+    ? Number(order.remainingAmount) || 0
+    : (order.isPaid ? 0 : (Number(order.totalAmount) || itemsTotal));
+
+  if (billable <= 0) return items.map(() => 0);
+  if (Math.abs(billable - itemsTotal) < 0.01) return items.map((it) => Number(it.totalPrice) || 0);
+
+  if (itemsTotal <= 0) {
+    return items.map((_, idx) => (idx === items.length - 1 ? billable : 0));
+  }
+
+  let allocated = 0;
+  return items.map((it, idx) => {
+    if (idx === items.length - 1) return Math.max(0, billable - allocated);
+    const share = Math.round(billable * ((Number(it.totalPrice) || 0) / itemsTotal));
+    allocated += share;
+    return share;
+  });
+}
+
 interface PosScreenProps {
   cartItems: CartItem[];
   onAddToCart: (item: CartItem) => void;
@@ -134,6 +164,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
 
   // Monetary calculations
   const [discountInput, setDiscountInput] = useState('0');
+  const [discountIsManual, setDiscountIsManual] = useState(false);
   const [cashierNotes, setCashierNotes] = useState('');
 
   // Payment Breakdown
@@ -154,6 +185,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
     setShowCustomerDropdown(false);
     setProductSearchInput('');
     setShowProductDropdown(false);
+    setDiscountIsManual(false);
     setDiscountInput('0');
     setCashierNotes('');
     setCashAmount('0');
@@ -217,7 +249,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
   }, [spkOrdersList]);
 
   // Handle Loading SPK Order into POS Cart (Mendukung Lebih dari 1 SPK)
-  const handleLoadSpkToCart = (order: SpkOrder) => {
+  const handleLoadSpkToCart = (order: SpkOrder, options?: { skipAutoFill?: boolean }) => {
     // 1. Validasi Aturan: Open Account tidak boleh digabung dengan transaksi lainnya
     if (cartItems.some((it) => it.isOpenAccount)) {
       setBlockingErrorModal('Transaksi Open Account tidak boleh digabung dengan transaksi lainnya.');
@@ -270,21 +302,22 @@ export const PosScreen: React.FC<PosScreenProps> = ({
     setLoadedOpenAccountNotice(null);
 
     let spkChargedTotal = 0;
+    const chargedPrices = allocateOrderItemCharges(order);
+    const orderCharge = chargedPrices.reduce((acc, val) => acc + val, 0);
+
+    if (orderCharge <= 0) {
+      setBlockingErrorModal(
+        `SPK ${order.orderNumber} tidak memiliki sisa tagihan yang perlu dibayar. Periksa status pembayaran SPK tersebut.`
+      );
+      return;
+    }
+
     order.items.forEach((item, idx) => {
       const finishingsText = item.finishings.length > 0 ? ` + ${item.finishings.map((f) => f.name).join(', ')}` : '';
       const dpText = order.dpPaid > 0 ? ` (DP: -${formatRupiah(order.dpPaid)})` : '';
       const specLabel = `${item.materialName} • ${item.lengthMeters}x${item.widthMeters}m (${item.qty || 1} pcs)${finishingsText}${dpText}`;
 
-      // Hitung harga tagihan dengan memperhitungkan DP jika ada
-      let chargedPrice = item.totalPrice;
-      if (order.dpPaid > 0) {
-        if (order.items.length === 1) {
-          chargedPrice = order.remainingAmount;
-        } else if (order.totalAmount > 0) {
-          const ratio = item.totalPrice / order.totalAmount;
-          chargedPrice = Math.round(order.remainingAmount * ratio);
-        }
-      }
+      const chargedPrice = chargedPrices[idx] ?? 0;
       spkChargedTotal += chargedPrice;
 
       const newCartItem: CartItem = {
@@ -328,13 +361,15 @@ export const PosScreen: React.FC<PosScreenProps> = ({
     });
 
     // 7. Auto-fill jumlah bayar kasir ke akumulasi total keranjang baru
-    const currentSubtotal = cartItems.reduce((acc, it) => acc + it.totalPrice, 0);
-    const newGrandTotal = Math.max(0, currentSubtotal + spkChargedTotal - discountVal);
-    setCashAmount(formatNumber(newGrandTotal));
-    setTransferAmount('0');
-    setQrisAmount('0');
-    setActivePaymentMethod('CASH');
-    setFocusedKeypadTarget('cash');
+    if (!options?.skipAutoFill) {
+      const currentSubtotal = cartItems.reduce((acc, it) => acc + it.totalPrice, 0);
+      const newGrandTotal = Math.max(0, currentSubtotal + spkChargedTotal - discountVal);
+      setCashAmount(formatNumber(newGrandTotal));
+      setTransferAmount('0');
+      setQrisAmount('0');
+      setActivePaymentMethod('CASH');
+      setFocusedKeypadTarget('cash');
+    }
   };
 
   // Handle Loading Multiple SPK Orders sekaligus ke POS Cart
@@ -357,9 +392,21 @@ export const PosScreen: React.FC<PosScreenProps> = ({
       return;
     }
 
+    let batchCharge = 0;
     unadded.forEach((o) => {
-      handleLoadSpkToCart(o);
+      const charge = allocateOrderItemCharges(o).reduce((acc, val) => acc + val, 0);
+      if (charge <= 0) return;
+      batchCharge += charge;
+      handleLoadSpkToCart(o, { skipAutoFill: true });
     });
+
+    const currentSubtotal = cartItems.reduce((acc, it) => acc + it.totalPrice, 0);
+    const newGrandTotal = Math.max(0, currentSubtotal + batchCharge - discountVal);
+    setCashAmount(formatNumber(newGrandTotal));
+    setTransferAmount('0');
+    setQrisAmount('0');
+    setActivePaymentMethod('CASH');
+    setFocusedKeypadTarget('cash');
   };
 
   // Handle Loading Consolidated Open Account Billing into POS Cart
@@ -410,13 +457,18 @@ export const PosScreen: React.FC<PosScreenProps> = ({
     // 2. Kosongkan keranjang dan masukkan seluruh item SPK konsolidasi Open Account
     onClearCart();
     setLoadedSpkOrders([]);
+    setDiscountIsManual(false);
 
     (group.orders || []).forEach((order: SpkOrder) => {
+      const chargedPrices = allocateOrderItemCharges(order);
+      const orderCharge = chargedPrices.reduce((acc, val) => acc + val, 0);
+      if (orderCharge <= 0) return;
+
       order.items.forEach((item, idx) => {
         const finishingsText = item.finishings.length > 0 ? ` + ${item.finishings.map((f) => f.name).join(', ')}` : '';
         const dpText = order.dpPaid > 0 ? ` (DP: -${formatRupiah(order.dpPaid)})` : '';
         const specLabel = `${item.materialName} • ${item.lengthMeters}x${item.widthMeters}m (${item.qty || 1} pcs)${finishingsText}${dpText}`;
-        const chargedPrice = order.items.length === 1 && order.dpPaid > 0 ? order.remainingAmount : item.totalPrice;
+        const chargedPrice = chargedPrices[idx] ?? 0;
 
         const newCartItem: CartItem = {
           id: `cart_oa_${order.id}_${item.id || idx}`,
@@ -470,6 +522,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         setDiscountInput('0');
       } else {
         setDiscountInput(formatNumber(Math.abs(group.adjustment)));
+        setDiscountIsManual(true);
       }
     } else {
       setDiscountInput('0');
@@ -518,20 +571,23 @@ export const PosScreen: React.FC<PosScreenProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // When customer changes, apply category discount automatically if set
+  // Diskon kategori pelanggan hanya untuk transaksi retail, bukan pelunasan SPK/Open Account
   useEffect(() => {
-    if (selectedCustomer) {
-      const category = categories.find((c) => c.id === selectedCustomer.categoryId);
-      if (category && category.discountPercent > 0) {
-        const sub = cartItems.reduce((acc, it) => acc + it.totalPrice, 0);
-        const autoDiscount = Math.round((sub * category.discountPercent) / 100);
-        // Only set if not manually altered
-        if (discountInput === '0' || discountInput === '21.000') {
-          setDiscountInput(formatNumber(autoDiscount));
-        }
-      }
-    }
-  }, [selectedCustomer, cartItems, categories]);
+    if (discountIsManual) return;
+
+    const hasSpkOrOpenAccountItem = cartItems.some(
+      (it) => !!it.spkId || it.isOpenAccount || it.code === 'CETAK' || it.code === 'OPEN_ACCOUNT' || it.code === 'PENYESUAIAN_OA'
+    );
+    const category = selectedCustomer
+      ? categories.find((c) => c.id === selectedCustomer.categoryId)
+      : undefined;
+    const sub = cartItems.reduce((acc, it) => acc + it.totalPrice, 0);
+    const autoDiscount = !hasSpkOrOpenAccountItem && category && category.discountPercent > 0
+      ? Math.round((sub * category.discountPercent) / 100)
+      : 0;
+
+    setDiscountInput(autoDiscount > 0 ? formatNumber(autoDiscount) : '0');
+  }, [selectedCustomer, cartItems, categories, discountIsManual]);
 
   // Derived calculations
   const totalQty = cartItems.reduce((acc, item) => acc + (item.qty || 1), 0);
@@ -560,6 +616,12 @@ export const PosScreen: React.FC<PosScreenProps> = ({
       onClearCart();
       setLoadedSpkOrders([]);
       setLoadedOpenAccountNotice(null);
+      setDiscountIsManual(false);
+      setDiscountInput('0');
+      setCashAmount('0');
+      setTransferAmount('0');
+      setQrisAmount('0');
+      setCashierNotes('');
     }
   };
 
@@ -605,6 +667,8 @@ export const PosScreen: React.FC<PosScreenProps> = ({
 
   // Virtual Keypad handling
   const handleKeypadPress = (val: string) => {
+    if (focusedKeypadTarget === 'discount') setDiscountIsManual(true);
+
     let currentVal = '';
     if (focusedKeypadTarget === 'cash') currentVal = cashAmount;
     if (focusedKeypadTarget === 'transfer') currentVal = transferAmount;
@@ -797,6 +861,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
 
       // Reset after success
       onClearCart();
+      setDiscountIsManual(false);
       setDiscountInput('0');
       setCashAmount('0');
       setTransferAmount('0');
@@ -1199,7 +1264,10 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                     type="text"
                     value={discountInput}
                     onFocus={() => setFocusedKeypadTarget('discount')}
-                    onChange={(e) => setDiscountInput(formatNumberInput(e.target.value) || '0')}
+                    onChange={(e) => {
+                      setDiscountIsManual(true);
+                      setDiscountInput(formatNumberInput(e.target.value) || '0');
+                    }}
                     className={`w-full bg-slate-50 border rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 transition-all ${
                       focusedKeypadTarget === 'discount'
                         ? 'border-blue-600 ring-2 ring-blue-500/20 bg-white'

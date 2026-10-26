@@ -92,6 +92,28 @@ interface InvoiceScreenProps {
   onClearPendingOpenAccountGroup?: () => void;
 }
 
+function parseLocalizedDecimal(value: string): number {
+  const normalized = String(value ?? '')
+    .replace(',', '.')
+    .replace(/[^0-9.]/g, '');
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function clampDpPercent(value: number): number {
+  return Math.max(0, Math.min(100, Number(value) || 0));
+}
+
+function dpPercentFromAmount(amount: number, grandTotal: number): number {
+  if (grandTotal <= 0) return 0;
+  return (amount / grandTotal) * 100;
+}
+
+function formatPercentInput(value: number): string {
+  const rounded = Math.round((Number(value) || 0) * 10000) / 10000;
+  return String(rounded).replace('.', ',');
+}
+
 export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
   products,
   customers,
@@ -313,6 +335,10 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
   const [formPaymentScheme, setFormPaymentScheme] = useState<InvoicePaymentMethodType>('DP');
   const [formDpPercent, setFormDpPercent] = useState<number>(50);
   const [formPaymentSchedules, setFormPaymentSchedules] = useState<InvoiceTerminSchedule[]>([]);
+  // Input DP dua mode: persentase (boleh desimal) atau nominal bulat
+  const [dpPercentInput, setDpPercentInput] = useState<string>('50');
+  const [dpAmountInput, setDpAmountInput] = useState<string>('0');
+  const [isDpInputFocused, setIsDpInputFocused] = useState<boolean>(false);
   const [formPaymentTerms, setFormPaymentTerms] = useState<string>(storeIdentity.defaultTerms || '');
   const [formNotes, setFormNotes] = useState<string>('');
 
@@ -624,6 +650,97 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
     });
   };
 
+  // Sinkronkan tampilan input DP saat jadwal berubah dari luar (ganti skema, load invoice, grand total berubah)
+  useEffect(() => {
+    if (formPaymentScheme !== 'DP' || isDpInputFocused) return;
+    const dp = formPaymentSchedules[0];
+    if (!dp) return;
+    setDpPercentInput(formatPercentInput(dp.percentage));
+    setDpAmountInput(String(Math.round(dp.amount || 0)));
+  }, [formPaymentScheme, formPaymentSchedules, isDpInputFocused]);
+
+  const applyDpSchedules = (rawAmount: number, rawPercent: number) => {
+    const grandTotal = calculatedTotals.grandTotal;
+    const dpAmount = Math.max(0, Math.min(grandTotal, Math.round(rawAmount || 0)));
+    const balanceAmount = Math.max(0, grandTotal - dpAmount);
+    const dpPercent = Math.max(0, Math.min(100, Number(rawPercent) || 0));
+    const balancePercent = dpPercentFromAmount(balanceAmount, grandTotal);
+    const dpLabel = formatPercentInput(dpPercent);
+    const balanceLabel = formatPercentInput(balancePercent);
+
+    setFormDpPercent(dpPercent);
+    setFormPaymentSchedules(prev => {
+      if (prev.length < 2) return prev;
+      const next = prev.map(item => ({ ...item }));
+      next[0] = {
+        ...next[0],
+        name: `DP (Down Payment) ${dpLabel}%`,
+        percentage: dpPercent,
+        amount: dpAmount
+      };
+      next[1] = {
+        ...next[1],
+        name: `Pelunasan ${balanceLabel}%`,
+        percentage: balancePercent,
+        amount: balanceAmount
+      };
+      return next;
+    });
+
+    return { dpAmount, balanceAmount };
+  };
+
+  const applyDpPercentInput = (raw: string, keepRawText: boolean) => {
+    const percent = clampDpPercent(parseLocalizedDecimal(raw));
+    const grandTotal = calculatedTotals.grandTotal;
+    const dpAmount = grandTotal > 0 ? Math.round((grandTotal * percent) / 100) : 0;
+    applyDpSchedules(dpAmount, percent);
+    if (!keepRawText) setDpPercentInput(formatPercentInput(percent));
+    setDpAmountInput(String(dpAmount));
+  };
+
+  const applyDpAmountInput = (rawDigits: string, keepRawText: boolean) => {
+    const grandTotal = calculatedTotals.grandTotal;
+    const dpAmount = Math.max(0, Math.min(grandTotal, Math.round(Number(rawDigits) || 0)));
+    const percent = dpPercentFromAmount(dpAmount, grandTotal);
+    applyDpSchedules(dpAmount, percent);
+    setDpPercentInput(formatPercentInput(percent));
+    if (!keepRawText) setDpAmountInput(String(dpAmount));
+  };
+
+  const handleDpPercentChange = (raw: string) => {
+    setDpPercentInput(raw);
+    applyDpPercentInput(raw, true);
+  };
+
+  const handleDpPercentBlur = () => {
+    const parsed = clampDpPercent(parseLocalizedDecimal(dpPercentInput));
+    const current = formPaymentSchedules[0]?.percentage || 0;
+    if (Math.abs(parsed - current) > 0.00005) {
+      applyDpPercentInput(dpPercentInput, false);
+    } else {
+      setDpPercentInput(formatPercentInput(current));
+    }
+    setIsDpInputFocused(false);
+  };
+
+  const handleDpAmountChange = (raw: string) => {
+    const digits = raw.replace(/\D/g, '');
+    setDpAmountInput(digits);
+    applyDpAmountInput(digits, true);
+  };
+
+  const handleDpAmountBlur = () => {
+    const current = Math.round(formPaymentSchedules[0]?.amount || 0);
+    const typed = Math.round(Number(dpAmountInput) || 0);
+    if (typed !== current) {
+      applyDpAmountInput(dpAmountInput, false);
+    } else {
+      setDpAmountInput(String(current));
+    }
+    setIsDpInputFocused(false);
+  };
+
   // Add a new termin step
   const handleAddTerminRow = () => {
     const nextIndex = formPaymentSchedules.length + 1;
@@ -814,13 +931,16 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
     
     // Load payment scheme & schedules
     const loadedScheme = inv.paymentScheme || (inv.dpRequiredPercent ? 'DP' : 'FULL');
+    const loadedSchedules = inv.paymentSchedules && inv.paymentSchedules.length > 0
+      ? inv.paymentSchedules.map(s => ({ ...s }))
+      : generateDefaultPaymentSchedules(loadedScheme, inv.grandTotal, inv.issueDate);
     setFormPaymentScheme(loadedScheme);
-    setFormDpPercent(inv.dpRequiredPercent || 50);
-    if (inv.paymentSchedules && inv.paymentSchedules.length > 0) {
-      setFormPaymentSchedules(inv.paymentSchedules.map(s => ({ ...s })));
-    } else {
-      setFormPaymentSchedules(generateDefaultPaymentSchedules(loadedScheme, inv.grandTotal, inv.issueDate));
-    }
+    setFormPaymentSchedules(loadedSchedules);
+    setFormDpPercent(
+      loadedScheme === 'DP' && loadedSchedules[0]
+        ? Number(loadedSchedules[0].percentage) || 50
+        : (inv.dpRequiredPercent || 50)
+    );
 
     setFormPaymentTerms(inv.paymentTerms || '');
     setFormNotes(inv.notes || '');
@@ -851,12 +971,31 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
     const effectiveTaxRate = formApplyTax ? formTaxRate : 0;
     const totals = calculateInvoiceTotals(validItems, effectiveTaxRate, formDpPercent, 0);
 
+    const scheduleTotal = formPaymentSchedules.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
+    if (formPaymentSchedules.length > 0 && Math.abs(scheduleTotal - totals.grandTotal) > 1) {
+      showToast(
+        `Total jadwal pembayaran (Rp ${scheduleTotal.toLocaleString('id-ID')}) tidak sama dengan grand total (Rp ${totals.grandTotal.toLocaleString('id-ID')}). Seimbangkan jadwal pembayaran terlebih dahulu.`,
+        'error'
+      );
+      return;
+    }
+
     const now = Date.now();
     const currentUserName = currentUser?.name || 'Administrator';
     const currentUserRole = currentUser?.role || 'ADMIN';
 
     if (editingInvoiceId) {
       // UPDATE EXISTING INVOICE
+      const existingInvoice = invoices.find(inv => inv.id === editingInvoiceId);
+      const alreadyPaid = existingInvoice?.amountPaid || 0;
+      if (alreadyPaid > totals.grandTotal + 1) {
+        showToast(
+          `Grand total baru (Rp ${totals.grandTotal.toLocaleString('id-ID')}) lebih kecil dari pembayaran yang sudah diterima (Rp ${alreadyPaid.toLocaleString('id-ID')}). Proses pembatalan/refund terlebih dahulu sebelum mengubah nilai invoice.`,
+          'error'
+        );
+        return;
+      }
+
       const updatedList = invoices.map(inv => {
         if (inv.id !== editingInvoiceId) return inv;
 
@@ -872,7 +1011,9 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
           paymentScheme: formPaymentScheme,
           paymentSchedules: formPaymentSchedules,
           dpRequiredPercent: formPaymentScheme === 'DP' ? formDpPercent : undefined,
-          dpRequiredAmount: formPaymentScheme === 'DP' ? totals.dpRequiredAmount : undefined,
+          dpRequiredAmount: formPaymentScheme === 'DP'
+            ? (formPaymentSchedules[0]?.amount ?? totals.dpRequiredAmount)
+            : undefined,
           amountPaid: inv.amountPaid || 0,
           balanceDue: Math.max(0, totals.grandTotal - (inv.amountPaid || 0)),
           paymentTerms: formPaymentTerms,
@@ -907,6 +1048,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
             paymentScheme: formPaymentScheme,
             paymentSchedules: formPaymentSchedules,
             dpRequiredPercent: formPaymentScheme === 'DP' ? formDpPercent : undefined,
+            dpRequiredAmount: formPaymentScheme === 'DP' ? formPaymentSchedules[0]?.amount : undefined,
             paymentTerms: formPaymentTerms,
             notes: formNotes,
             sourceProformaNumber: formSourceProformaNumber.trim() || undefined,
@@ -940,7 +1082,9 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
       paymentScheme: formPaymentScheme,
       paymentSchedules: formPaymentSchedules,
       dpRequiredPercent: formPaymentScheme === 'DP' ? formDpPercent : undefined,
-      dpRequiredAmount: formPaymentScheme === 'DP' ? totals.dpRequiredAmount : undefined,
+      dpRequiredAmount: formPaymentScheme === 'DP'
+        ? (formPaymentSchedules[0]?.amount ?? totals.dpRequiredAmount)
+        : undefined,
       amountPaid: 0,
       balanceDue: totals.grandTotal,
       payments: [],
@@ -1016,9 +1160,22 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
             return sched;
           });
 
+          if (item.status === 'CANCELLED') {
+            return {
+              ...item,
+              childInvoiceIds: newChildIds,
+              childInvoiceNumbers: newChildNums,
+              convertedInvoiceId: item.convertedInvoiceId === inv.id ? (newChildIds[0] || undefined) : item.convertedInvoiceId,
+              convertedInvoiceNumber: item.convertedInvoiceNumber === inv.documentNumber ? (newChildNums[0] || undefined) : item.convertedInvoiceNumber,
+              paymentSchedules: newSchedules,
+              updatedAt: Date.now()
+            };
+          }
+
           const remainingChildInvoices = invoices.filter(ci =>
             ci.id !== inv.id &&
-            ci.documentType === 'COMMERCIAL' && (
+            ci.documentType === 'COMMERCIAL' &&
+            ci.status !== 'CANCELLED' && (
               (ci.sourceProformaId && ci.sourceProformaId === item.id) ||
               (ci.sourceProformaNumber && ci.sourceProformaNumber === item.documentNumber) ||
               (newChildIds.includes(ci.id)) ||
@@ -1026,8 +1183,19 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
             )
           );
           const remChildPaid = remainingChildInvoices.reduce((sum, ci) => sum + (ci.amountPaid || 0), 0);
-          const directPaid = (item.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
-          const updatedPaid = remChildPaid + directPaid;
+
+          // Hindari double counting pembayaran yang tersalin ke child invoice
+          const childPaymentRefIds = new Set<string>();
+          remainingChildInvoices.forEach(ci => {
+            (ci.payments || []).forEach(p => {
+              if (p.id) childPaymentRefIds.add(p.id);
+              if (p.referenceNumber) childPaymentRefIds.add(p.referenceNumber);
+            });
+          });
+          const directPaid = (item.payments || [])
+            .filter(p => !((p.id && childPaymentRefIds.has(p.id)) || (p.referenceNumber && childPaymentRefIds.has(p.referenceNumber))))
+            .reduce((sum, p) => sum + (p.amount || 0), 0);
+          const updatedPaid = Math.min(item.grandTotal, remChildPaid + directPaid);
           const updatedBalance = Math.max(0, item.grandTotal - updatedPaid);
           const updatedStatus: InvoiceStatus = updatedBalance === 0 && item.grandTotal > 0
             ? 'PAID'
@@ -1109,7 +1277,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
       setConversionMode('STAGE');
       setConversionStageId(chosenStage.id);
       setConversionStageSuffix(suffix);
-      setConversionReferenceDesc(`Pembayaran ${chosenStage.name} (${chosenStage.percentage}%) dari Total Kontrak`);
+      setConversionReferenceDesc(`Pembayaran ${chosenStage.name} (${formatPercentInput(chosenStage.percentage)}%) dari Total Kontrak`);
       const nextInvNumber = generateNextDocumentNumber('COMMERCIAL', invoices, storeIdentity, suffix);
       setConversionNumber(nextInvNumber);
     } else if (pi.paymentScheme === 'DP' && schedules.length > 0) {
@@ -1121,7 +1289,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
       setConversionMode('STAGE');
       setConversionStageId(chosenStage.id);
       setConversionStageSuffix(suffix);
-      setConversionReferenceDesc(`Pembayaran ${chosenStage.name} (${chosenStage.percentage}%) dari Total Kontrak`);
+      setConversionReferenceDesc(`Pembayaran ${chosenStage.name} (${formatPercentInput(chosenStage.percentage)}%) dari Total Kontrak`);
       const nextInvNumber = generateNextDocumentNumber('COMMERCIAL', invoices, storeIdentity, suffix);
       setConversionNumber(nextInvNumber);
     } else {
@@ -1158,7 +1326,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
       setConversionMode('STAGE');
       setConversionStageId(sched.id);
       setConversionStageSuffix(suffix);
-      setConversionReferenceDesc(`Pembayaran ${sched.name} (${sched.percentage}%) dari Total Kontrak`);
+      setConversionReferenceDesc(`Pembayaran ${sched.name} (${formatPercentInput(sched.percentage)}%) dari Total Kontrak`);
       const nextInv = generateNextDocumentNumber('COMMERCIAL', invoices, storeIdentity, suffix);
       setConversionNumber(nextInv);
     }
@@ -1233,25 +1401,34 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
       };
     });
 
+    // Nilai tahap mengikuti grand total (termasuk PPN), jadi PPN harus dipisahkan
+    // agar invoice komersial tahap tidak menghilangkan komponen pajak.
+    const stageTaxAmount = isStageBilling && stage
+      ? (proforma.grandTotal > 0
+          ? Math.round(stage.amount * ((proforma.taxAmount || 0) / proforma.grandTotal))
+          : 0)
+      : 0;
+    const stageDpp = isStageBilling && stage ? stage.amount - stageTaxAmount : 0;
+
     // Item rincian pekerjaan untuk faktur
     const billedItems: InvoiceItem[] = isStageBilling && stage
       ? [
           {
             id: `item-stage-${Date.now()}`,
-            itemName: `${proforma.projectTitle} - ${stage.name} (${stage.percentage}%)`,
+            itemName: `${proforma.projectTitle} - ${stage.name} (${formatPercentInput(stage.percentage)}%)`,
             description: `Berdasarkan Proforma Invoice ${proforma.documentNumber}. Nilai Total Kontrak: Rp ${proforma.grandTotal.toLocaleString('id-ID')}`,
             quantity: 1,
             unit: 'tahap',
-            unitPrice: stage.amount,
+            unitPrice: stageDpp,
             discountPercent: 0,
             discountAmount: 0,
-            isTaxable: false,
-            totalPrice: stage.amount
+            isTaxable: stageTaxAmount > 0,
+            totalPrice: stageDpp
           }
         ]
       : proforma.items.map(it => ({ ...it }));
 
-    const stageSubtotal = isStageBilling && stage ? stage.amount : proforma.subtotal;
+    const stageSubtotal = isStageBilling && stage ? stageDpp : proforma.subtotal;
     const stageGrandTotal = isStageBilling && stage ? stage.amount : proforma.grandTotal;
 
     const commercialInvoice: Invoice = {
@@ -1266,7 +1443,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
       terminStageNumber: isStageBilling ? (selectedInvoice.paymentSchedules || []).findIndex(s => s.id === stage?.id) + 1 : undefined,
       terminPercentage: isStageBilling ? stage?.percentage : 100,
       contractTotalAmount: proforma.grandTotal,
-      referenceDescription: conversionReferenceDesc || (isStageBilling && stage ? `Pembayaran ${stage.name} (${stage.percentage}%) dari Total Kontrak` : undefined),
+      referenceDescription: conversionReferenceDesc || (isStageBilling && stage ? `Pembayaran ${stage.name} (${formatPercentInput(stage.percentage)}%) dari Total Kontrak` : undefined),
       projectTitle: proforma.projectTitle,
       issueDate: todayStr,
       dueDate: conversionDueDate,
@@ -1274,9 +1451,9 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
       items: billedItems,
       subtotal: stageSubtotal,
       discountAmount: isStageBilling ? 0 : proforma.discountAmount,
-      taxableBase: stageSubtotal,
-      taxRate: isStageBilling ? 0 : proforma.taxRate,
-      taxAmount: isStageBilling ? 0 : proforma.taxAmount,
+      taxableBase: isStageBilling ? stageDpp : proforma.taxableBase,
+      taxRate: proforma.taxRate,
+      taxAmount: isStageBilling ? stageTaxAmount : proforma.taxAmount,
       grandTotal: stageGrandTotal,
       paymentScheme: proforma.paymentScheme || 'DP',
       paymentSchedules: reconciledSchedules,
@@ -1448,10 +1625,14 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
 
       // Jika item ini adalah parent Proforma Invoice dari invoice yang dibayar
       if (
-        (selectedInvoice.sourceProformaId && item.id === selectedInvoice.sourceProformaId) ||
-        (selectedInvoice.sourceProformaNumber && item.documentNumber === selectedInvoice.sourceProformaNumber)
+        item.status !== 'CANCELLED' && (
+          (selectedInvoice.sourceProformaId && item.id === selectedInvoice.sourceProformaId) ||
+          (selectedInvoice.sourceProformaNumber && item.documentNumber === selectedInvoice.sourceProformaNumber)
+        )
       ) {
-        const parentNewPaid = (item.amountPaid || 0) + payAmount;
+        // Hitung ulang dari pembayaran efektif agar pembayaran yang tersalin tidak dobel
+        const parentEffectivePaid = getProformaEffectivePaymentInfo(item, invoices).amountPaid;
+        const parentNewPaid = Math.min(item.grandTotal, parentEffectivePaid + payAmount);
         const parentNewBalance = Math.max(0, item.grandTotal - parentNewPaid);
         const parentNewStatus: InvoiceStatus = parentNewBalance === 0 ? 'PAID' : 'PARTIAL';
         const parentSchedules = (item.paymentSchedules || []).map((ps, psIdx) => {
@@ -1548,6 +1729,13 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
   // =========================================================================
   // CANCELLATION & CREDIT NOTE (NOTA KREDIT) MANAGEMENT
   // =========================================================================
+  const getInvoicePaidAmount = (inv: Invoice): number =>
+    inv.documentType === 'PROFORMA'
+      ? getProformaEffectivePaymentInfo(inv, invoices).amountPaid
+      : (inv.amountPaid || 0);
+
+  const cancellingPaidAmount = cancellingInvoice ? getInvoicePaidAmount(cancellingInvoice) : 0;
+
   const handleOpenCancelModal = (inv: Invoice) => {
     setCancellingInvoice(inv);
     setCancelReasonCategory('MUTUAL_AGREEMENT');
@@ -1560,9 +1748,12 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
     setCancelCreditNoteDate(inv.cancellation?.creditNoteDate || new Date().toISOString().slice(0, 10));
     setCancelTaxReturnNumber(inv.cancellation?.taxReturnNumber || '');
 
-    const paid = inv.amountPaid || 0;
-    const initialFee = inv.cancellation?.cancellationFee || 0;
-    const initialRefund = inv.cancellation?.refundAmount !== undefined ? inv.cancellation.refundAmount : Math.max(0, paid - initialFee);
+    const paid = getInvoicePaidAmount(inv);
+    const initialFee = Math.min(paid, inv.cancellation?.cancellationFee || 0);
+    const storedRefund = inv.cancellation?.refundAmount;
+    const initialRefund = storedRefund !== undefined
+      ? Math.min(paid - initialFee, storedRefund)
+      : Math.max(0, paid - initialFee);
 
     setCancelCancellationFee(initialFee);
     setCancelRefundAmount(initialRefund);
@@ -1576,7 +1767,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
 
   const handleReasonCategoryChange = (cat: CancellationReasonType) => {
     setCancelReasonCategory(cat);
-    const paid = cancellingInvoice?.amountPaid || 0;
+    const paid = cancellingInvoice ? getInvoicePaidAmount(cancellingInvoice) : 0;
     if (cat === 'FORCE_MAJEURE') {
       // Bencana Alam: Pasal 1244 & 1245 KUHPerdata membebaskan ganti rugi, dana dikembalikan penuh
       setCancelCancellationFee(0);
@@ -1590,10 +1781,15 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
   };
 
   const handleCancellationFeeChange = (fee: number) => {
-    const cleanFee = Math.max(0, fee);
-    const paid = cancellingInvoice?.amountPaid || 0;
+    const paid = cancellingInvoice ? getInvoicePaidAmount(cancellingInvoice) : 0;
+    const cleanFee = Math.max(0, Math.min(paid, fee));
     setCancelCancellationFee(cleanFee);
     setCancelRefundAmount(Math.max(0, paid - cleanFee));
+  };
+
+  const handleCancellationRefundChange = (refund: number) => {
+    const paid = cancellingInvoice ? getInvoicePaidAmount(cancellingInvoice) : 0;
+    setCancelRefundAmount(Math.max(0, Math.min(paid - cancelCancellationFee, refund)));
   };
 
   const handleExecuteCancellation = async () => {
@@ -1604,7 +1800,21 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
     }
 
     const isCommercial = cancellingInvoice.documentType === 'COMMERCIAL';
-    const paid = cancellingInvoice.amountPaid || 0;
+    const paid = getInvoicePaidAmount(cancellingInvoice);
+    const fee = Math.max(0, cancelCancellationFee);
+    const refund = Math.max(0, cancelRefundAmount);
+
+    if (fee > paid) {
+      showToast('Biaya pembatalan tidak boleh melebihi dana yang sudah diterima.', 'error');
+      return;
+    }
+    if (fee + refund > paid + 1) {
+      showToast(
+        `Total biaya pembatalan + refund (Rp ${(fee + refund).toLocaleString('id-ID')}) melebihi dana diterima (Rp ${paid.toLocaleString('id-ID')}).`,
+        'error'
+      );
+      return;
+    }
 
     const cancellationInfo: InvoiceCancellationInfo = {
       cancelledAt: Date.now(),
@@ -1617,10 +1827,10 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
       creditNoteAmount: isCommercial ? cancellingInvoice.grandTotal : undefined,
       taxCancellationRequired: isCommercial && cancellingInvoice.taxAmount > 0,
       taxReturnNumber: cancelTaxReturnNumber.trim() || undefined,
-      refundRequired: paid > 0,
+      refundRequired: refund > 0,
       originalPaidAmount: paid,
-      cancellationFee: cancelCancellationFee,
-      refundAmount: cancelRefundAmount,
+      cancellationFee: fee,
+      refundAmount: refund,
       refundDate: cancelRefundDate,
       refundMethod: cancelRefundMethod,
       refundBankTarget: cancelRefundBankTarget.trim() || undefined,
@@ -1646,7 +1856,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
         (item.childInvoiceIds && item.childInvoiceIds.includes(cancellingInvoice.id)) ||
         (item.childInvoiceNumbers && item.childInvoiceNumbers.includes(cancellingInvoice.documentNumber));
 
-      if (isParent) {
+      if (isParent && item.status !== 'CANCELLED') {
         const newSchedules = (item.paymentSchedules || []).map((sched, idx) => {
           const isMatch = (cancellingInvoice.terminStageId && sched.id === cancellingInvoice.terminStageId) ||
             (cancellingInvoice.terminStageNumber && idx === cancellingInvoice.terminStageNumber - 1) ||
@@ -1670,8 +1880,19 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
         );
 
         const remChildPaid = remainingChildInvoices.reduce((sum, ci) => sum + (ci.amountPaid || 0), 0);
-        const directPaid = (item.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
-        const updatedPaid = remChildPaid + directPaid;
+
+        // Hindari double counting pembayaran yang tersalin ke child invoice
+        const childPaymentRefIds = new Set<string>();
+        remainingChildInvoices.forEach(ci => {
+          (ci.payments || []).forEach(p => {
+            if (p.id) childPaymentRefIds.add(p.id);
+            if (p.referenceNumber) childPaymentRefIds.add(p.referenceNumber);
+          });
+        });
+        const directPaid = (item.payments || [])
+          .filter(p => !((p.id && childPaymentRefIds.has(p.id)) || (p.referenceNumber && childPaymentRefIds.has(p.referenceNumber))))
+          .reduce((sum, p) => sum + (p.amount || 0), 0);
+        const updatedPaid = Math.min(item.grandTotal, remChildPaid + directPaid);
         const updatedBalance = Math.max(0, item.grandTotal - updatedPaid);
         const updatedStatus: InvoiceStatus = updatedBalance === 0 && item.grandTotal > 0
           ? 'PAID'
@@ -2495,10 +2716,10 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => setFormReferenceDescription('Pembayaran Uang Muka / Down Payment (DP 50%)')}
+                                onClick={() => setFormReferenceDescription(`Pembayaran Uang Muka / Down Payment (DP ${formatPercentInput(formDpPercent || 50)}%)`)}
                                 className="px-2 py-0.5 rounded bg-white hover:bg-indigo-100 text-indigo-800 border border-indigo-200 cursor-pointer font-medium"
                               >
-                                DP (50%)
+                                DP ({formatPercentInput(formDpPercent || 50)}%)
                               </button>
                             </>
                           )}
@@ -2937,7 +3158,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                             Skema Down Payment (DP) — Pembayaran Dibagi dalam 2 Tahap
                           </span>
                           <p className="text-[11px] text-amber-800">
-                            Waktu pembayaran dan nominal tiap tahap dapat ditentukan manual.
+                            Masukkan DP dalam persentase (boleh desimal, contoh 12,5%) atau nominal bulat; tahap pelunasan dihitung otomatis.
                           </p>
                         </div>
                         <div className="text-right">
@@ -2959,30 +3180,37 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                                 Uang Muka
                               </span>
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               <div>
-                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Persentase (%)</label>
+                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">DP dalam Persentase (%)</label>
                                 <div className="flex items-center gap-1">
                                   <input
-                                    type="number"
-                                    min="1"
-                                    max="99"
-                                    value={formPaymentSchedules[0].percentage}
-                                    onChange={e => handleUpdateScheduleRow(formPaymentSchedules[0].id, 'percentage', e.target.value)}
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={dpPercentInput}
+                                    onFocus={() => setIsDpInputFocused(true)}
+                                    onBlur={handleDpPercentBlur}
+                                    onChange={e => handleDpPercentChange(e.target.value)}
+                                    placeholder="Contoh: 12,5"
                                     className="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs font-bold text-slate-900"
                                   />
                                   <span className="text-xs font-bold text-slate-500">%</span>
                                 </div>
+                                <p className="text-[10px] text-slate-500 mt-0.5">Boleh desimal (koma atau titik).</p>
                               </div>
                               <div>
-                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Nominal (Rp)</label>
+                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">DP dalam Nominal (Rp)</label>
                                 <input
-                                  type="number"
-                                  min="0"
-                                  value={formPaymentSchedules[0].amount}
-                                  onChange={e => handleUpdateScheduleRow(formPaymentSchedules[0].id, 'amount', e.target.value)}
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={dpAmountInput}
+                                  onFocus={() => setIsDpInputFocused(true)}
+                                  onBlur={handleDpAmountBlur}
+                                  onChange={e => handleDpAmountChange(e.target.value)}
+                                  placeholder="Contoh: 1500000"
                                   className="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs font-bold text-slate-900"
                                 />
+                                <p className="text-[10px] text-slate-500 mt-0.5">Nominal bulat, otomatis dikonversi ke persentase.</p>
                               </div>
                             </div>
                             <div className="grid grid-cols-2 gap-2 pt-1">
@@ -3023,29 +3251,18 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                             <div className="grid grid-cols-2 gap-2">
                               <div>
                                 <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Persentase (%)</label>
-                                <div className="flex items-center gap-1">
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    max="99"
-                                    value={formPaymentSchedules[1].percentage}
-                                    onChange={e => handleUpdateScheduleRow(formPaymentSchedules[1].id, 'percentage', e.target.value)}
-                                    className="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs font-bold text-slate-900"
-                                  />
-                                  <span className="text-xs font-bold text-slate-500">%</span>
+                                <div className="px-2 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700">
+                                  {formatPercentInput(formPaymentSchedules[1].percentage)}%
                                 </div>
                               </div>
                               <div>
                                 <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Nominal (Rp)</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={formPaymentSchedules[1].amount}
-                                  onChange={e => handleUpdateScheduleRow(formPaymentSchedules[1].id, 'amount', e.target.value)}
-                                  className="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs font-bold text-slate-900"
-                                />
+                                <div className="px-2 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700">
+                                  Rp {Math.round(formPaymentSchedules[1].amount || 0).toLocaleString('id-ID')}
+                                </div>
                               </div>
                             </div>
+                            <p className="text-[10px] text-slate-500">Dihitung otomatis dari nilai DP di Tahap 1.</p>
                             <div className="grid grid-cols-2 gap-2 pt-1">
                               <div>
                                 <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Waktu Pembayaran</label>
@@ -3543,7 +3760,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                                       return (
                                         <tr key={s.id || sIdx} className={stageStatus === 'Tagihan Ini' ? 'bg-indigo-50/70 font-bold' : ''}>
                                           <td className="py-1 px-1.5 text-slate-800">
-                                            <div className="font-bold">{s.name} ({s.percentage}%)</div>
+                                            <div className="font-bold">{s.name} ({formatPercentInput(s.percentage)}%)</div>
                                             {s.notes && <div className="text-[8px] text-slate-500 font-normal leading-tight">{s.notes}</div>}
                                           </td>
                                           <td className="py-1 px-1.5 text-right font-bold text-slate-900 whitespace-nowrap">
@@ -3633,12 +3850,12 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                         {formPaymentScheme === 'DP' && formPaymentSchedules[0] && (
                           <div className="mt-2 p-2 bg-amber-50 rounded-lg border border-amber-200 text-[10px] text-amber-900">
                             <div className="flex justify-between font-bold">
-                              <span>Nilai DP ({formPaymentSchedules[0].percentage}%):</span>
-                              <span>Rp {formPaymentSchedules[0].amount.toLocaleString('id-ID')}</span>
+                              <span>Nilai DP ({formatPercentInput(formPaymentSchedules[0].percentage)}%):</span>
+                              <span>Rp {Math.round(formPaymentSchedules[0].amount || 0).toLocaleString('id-ID')}</span>
                             </div>
                             <div className="flex justify-between text-[9px] text-amber-800 mt-0.5">
                               <span>Sisa Pelunasan:</span>
-                              <span>Rp {(formPaymentSchedules[1]?.amount || 0).toLocaleString('id-ID')}</span>
+                              <span>Rp {Math.round(formPaymentSchedules[1]?.amount || 0).toLocaleString('id-ID')}</span>
                             </div>
                           </div>
                         )}
@@ -4112,7 +4329,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                           }`}
                         >
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold">{s.name} ({s.percentage}%)</span>
+                            <span className="text-xs font-bold">{s.name} ({formatPercentInput(s.percentage)}%)</span>
                             <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800">
                               /{suffix}
                             </span>
@@ -4553,14 +4770,14 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
               )}
 
               {/* 3. Khusus Jika Pelanggan Sudah Bayar (Refund Kas / Denda) */}
-              {(cancellingInvoice.amountPaid || 0) > 0 && (
+              {(cancellingPaidAmount || 0) > 0 && (
                 <div className="space-y-4 pt-3 border-t border-slate-200 bg-amber-50/50 p-4 rounded-xl border border-amber-200">
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-extrabold text-amber-950 uppercase tracking-wider">
                       3. Proses Pengembalian Dana (Refund)
                     </label>
                     <span className="text-xs font-bold text-indigo-900 bg-indigo-100 px-2 py-0.5 rounded-md">
-                      Dana Diterima: Rp {(cancellingInvoice.amountPaid || 0).toLocaleString('id-ID')}
+                      Dana Diterima: Rp {(cancellingPaidAmount || 0).toLocaleString('id-ID')}
                     </span>
                   </div>
 
@@ -4572,7 +4789,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                       <input
                         type="number"
                         min="0"
-                        max={cancellingInvoice.amountPaid || 0}
+                        max={cancellingPaidAmount || 0}
                         value={cancelCancellationFee}
                         onChange={e => handleCancellationFeeChange(Number(e.target.value) || 0)}
                         className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-bold text-rose-700"
@@ -4589,8 +4806,9 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                       <input
                         type="number"
                         min="0"
+                        max={cancellingPaidAmount || 0}
                         value={cancelRefundAmount}
-                        onChange={e => setCancelRefundAmount(Number(e.target.value) || 0)}
+                        onChange={e => handleCancellationRefundChange(Number(e.target.value) || 0)}
                         className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-black text-emerald-700 bg-emerald-50/60"
                       />
                       <span className="text-[10px] text-emerald-700 font-bold mt-0.5 block">
@@ -4947,7 +5165,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                               • Keterangan :
                             </span>
                             <span className="font-semibold text-slate-800 text-xs">
-                              {selectedInvoice.referenceDescription || (selectedInvoice.terminStageName ? `Pembayaran ${selectedInvoice.terminStageName} (${selectedInvoice.terminPercentage || 0}%) dari Total Kontrak` : '-')}
+                              {selectedInvoice.referenceDescription || (selectedInvoice.terminStageName ? `Pembayaran ${selectedInvoice.terminStageName} (${formatPercentInput(selectedInvoice.terminPercentage || 0)}%) dari Total Kontrak` : '-')}
                             </span>
                           </div>
                         </div>
@@ -5132,7 +5350,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                                       return (
                                         <tr key={s.id || sIdx} className={stageInfo.isCurrent ? 'bg-indigo-50/80 font-bold' : ''}>
                                           <td className="py-1.5 px-2 text-slate-800">
-                                            <div className="font-bold">{s.name} ({s.percentage}%)</div>
+                                            <div className="font-bold">{s.name} ({formatPercentInput(s.percentage)}%)</div>
                                             {s.notes && <div className="text-[9px] text-slate-500 font-normal leading-tight">{s.notes}</div>}
                                           </td>
                                           <td className="py-1.5 px-2 text-right font-bold text-slate-900 whitespace-nowrap">
@@ -5360,7 +5578,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                         const stageInfo = getTerminStageDisplayInfo(selectedInvoice, s, idx, invoices);
                         return (
                           <div key={idx} className="flex justify-between">
-                            <span>{s.name} ({s.percentage}%){s.dueDate ? ` [${s.dueDate}]` : ''}:</span>
+                            <span>{s.name} ({formatPercentInput(s.percentage)}%){s.dueDate ? ` [${s.dueDate}]` : ''}:</span>
                             <span className="font-bold">Rp {s.amount.toLocaleString('id-ID')} ({stageInfo.status})</span>
                           </div>
                         );

@@ -18,6 +18,7 @@
  */
 import React, { useState, useEffect, useMemo } from 'react';
 import { Transaction, StockTransaction, Shift } from '../../types';
+import { getStoredInvoices, convertInvoicesToTransactions } from '../../utils/invoiceStorage';
 import { FinancialSettings, DEFAULT_FINANCIAL_SETTINGS } from '../../utils/financialStorage';
 import { formatRupiah } from '../../utils/formatters';
 import {
@@ -104,13 +105,22 @@ export const LaporanKeuanganScreen: React.FC<LaporanKeuanganScreenProps> = ({
 
   // ==== Perhitungan otomatis dari data aplikasi (sistem akrual) ====
   const calc = useMemo(() => {
-    const inPeriod = transactions.filter((t) => withinRange(t.date, fromDate, toDate));
+    // Gabungkan penjualan kasir dengan invoice B2B agar pendapatan tidak understated
+    const invoiceTransactions = convertInvoicesToTransactions(getStoredInvoices());
+    const allSalesTransactions = Array.from(
+      new Map([...transactions, ...invoiceTransactions].map(t => [t.id, t])).values()
+    );
+
+    const inPeriod = allSalesTransactions.filter((t) => withinRange(t.date, fromDate, toDate));
     const stockInPeriod = stockTransactions.filter((s) => withinRange(s.date, fromDate, toDate));
     const shiftInPeriod = shifts.filter((s) =>
       withinRange((s.date || s.startTime || '').slice(0, 10), fromDate, toDate)
     );
 
-    const revenue = inPeriod.reduce((sum, t) => sum + num(t.total), 0);
+    const grossRevenue = inPeriod.reduce((sum, t) => sum + num(t.total), 0);
+    // PPN yang dipungut bukan pendapatan usaha, jadi laba rugi memakai nilai neto PPN
+    const taxCollected = inPeriod.reduce((sum, t) => sum + num(t.tax), 0);
+    const revenue = grossRevenue - taxCollected;
     const qtySold = inPeriod.reduce((sum, t) => sum + num(t.totalQty), 0);
     const txCount = inPeriod.length;
     const cashIn = inPeriod.reduce(
@@ -123,7 +133,10 @@ export const LaporanKeuanganScreen: React.FC<LaporanKeuanganScreenProps> = ({
       .filter((s) => s.type === 'PEMBELIAN')
       .reduce((sum, s) => {
         const itemsTotal = (s.items || []).reduce((a, it) => a + num(it.totalPrice), 0);
-        return sum + (itemsTotal || num(s.totalAmount) || num(s.totalPrice));
+        if (itemsTotal > 0) return sum + itemsTotal;
+        // totalAmount lama sudah termasuk ongkir, jadi kurangi agar tidak dihitung dua kali
+        const storedTotal = num(s.totalAmount) || num(s.totalPrice);
+        return sum + Math.max(0, storedTotal - num(s.shippingCost));
       }, 0);
     const shipping = stockInPeriod
       .filter((s) => s.type === 'PEMBELIAN')

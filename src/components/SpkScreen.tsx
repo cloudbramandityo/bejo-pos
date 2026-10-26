@@ -1167,6 +1167,18 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
       return;
     }
 
+    if (newDpPaid < 0) {
+      alert('Nominal DP tidak boleh negatif.');
+      return;
+    }
+
+    if (newDpPaid > calculatedTotalSpk) {
+      alert(
+        `Nominal DP (${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(newDpPaid)}) tidak boleh melebihi total tagihan SPK (${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(calculatedTotalSpk)}).`
+      );
+      return;
+    }
+
     const nonReadySelected = newMachines
       .map((id) => machines.find((m) => m.id === id))
       .filter((m) => m && m.status !== 'READY');

@@ -13,6 +13,7 @@ import {
   MonthlyBillingsByYear
 } from '../types/tax';
 import { getStoredTransactions } from './storage';
+import { getStoredInvoices, convertInvoicesToTransactions } from './invoiceStorage';
 import {
   saveTaxpayerProfileCloud,
   saveAllTaxAnnualReturnsCloud,
@@ -197,9 +198,7 @@ export const recomputeTaxReturn = (spt: TaxAnnualReturn1770): TaxAnnualReturn177
         ? updated.businessActivity.umkmTaxAmount
         : Math.round(taxable * (TAX_CONFIG_2025.umkmPp55Rate));
 
-      updated.businessActivity.umkmTaxableRevenue = updated.businessActivity.umkmTaxableRevenue > 0
-        ? updated.businessActivity.umkmTaxableRevenue
-        : (taxable > 0 ? taxable : gross);
+      updated.businessActivity.umkmTaxableRevenue = taxable;
       updated.businessActivity.umkmTaxAmount = tax;
       // UMKM PP 55 is PPh Final, so it does not add to regular progressive net income
       updated.businessActivity.netIncomeCalculated = 0;
@@ -355,12 +354,21 @@ export const recomputeMonthlyBillingYear = (items: MonthlyTaxBilling[]): Monthly
       if (!gross || gross === 0) {
         gross = dpp;
       }
-    } else if (gross > 0) {
-      dpp = gross;
-      pph = Math.round(dpp * (tariff / 100));
     }
 
+    const cumulativeBefore = runningCumulative;
     runningCumulative += gross;
+
+    if (pph <= 0 && gross > 0) {
+      // PP 55/2022: omzet s.d. Rp 500 juta/tahun tidak dikenai PPh Final.
+      // PPh dihitung dari bagian omzet kumulatif yang melewati ambang tersebut.
+      const exemptThreshold = 500_000_000;
+      const cumulativeTaxable = Math.max(0, runningCumulative - exemptThreshold);
+      const previousTaxable = Math.max(0, cumulativeBefore - exemptThreshold);
+      const monthlyTaxable = Math.max(0, cumulativeTaxable - previousTaxable);
+      dpp = Math.round(monthlyTaxable);
+      pph = Math.round(monthlyTaxable * (tariff / 100));
+    }
 
     return {
       ...item,
@@ -499,7 +507,6 @@ export const syncReturnWithMonthlyBillings = (
 
   const totalGross = yearBillings.reduce((sum, item) => sum + (item.grossRevenue || 0), 0);
   const totalPphPaid = yearBillings.reduce((sum, item) => sum + (item.pphFinalPaid || 0), 0);
-  const totalDpp = yearBillings.reduce((sum, item) => sum + (item.taxableBaseDpp || 0), 0);
 
   const updatedFinalIncomes = [...(ret.finalIncomes || [])];
   const pp55Idx = updatedFinalIncomes.findIndex(f => f.categoryCode === 'UMKM_PP55');
@@ -530,8 +537,11 @@ export const syncReturnWithMonthlyBillings = (
       hasBusinessIncome: true,
       isUmkmPp55: true,
       grossRevenue: totalGross,
-      umkmTaxExemptThreshold: 500000000,
-      umkmTaxableRevenue: totalDpp > 0 ? totalDpp : totalGross,
+      umkmTaxExemptThreshold: ret.businessActivity.umkmTaxExemptThreshold || 500000000,
+      umkmTaxableRevenue: Math.max(
+        0,
+        totalGross - (ret.businessActivity.umkmTaxExemptThreshold || 500000000)
+      ),
       umkmTaxAmount: totalPphPaid,
     },
     finalIncomes: updatedFinalIncomes,
@@ -663,8 +673,13 @@ export const clearAllDummyTaxData = (): { billings: MonthlyBillingsByYear; retur
  */
 export const importBillingsFromPosTransactions = (year: number): MonthlyTaxBilling[] => {
   const transactions = getStoredTransactions();
+  const invoiceTransactions = convertInvoicesToTransactions(getStoredInvoices());
+  const allSales = Array.from(
+    new Map([...transactions, ...invoiceTransactions].map(t => [t.id, t])).values()
+  );
+
   // Filter for transactions belonging to the requested year
-  const yearTx = transactions.filter(t => {
+  const yearTx = allSales.filter(t => {
     if (!t.date) return false;
     const y = parseInt(t.date.slice(0, 4), 10);
     return y === year;
@@ -674,7 +689,11 @@ export const importBillingsFromPosTransactions = (year: number): MonthlyTaxBilli
     const monthNum = idx + 1;
     const monthStr = monthNum < 10 ? `0${monthNum}` : `${monthNum}`;
     const monthTransactions = yearTx.filter(t => t.date && t.date.slice(5, 7) === monthStr);
-    const monthGross = monthTransactions.reduce((sum, t) => sum + (t.total || 0), 0);
+    // Omzet untuk PPh Final tidak termasuk PPN yang dipungut
+    const monthGross = monthTransactions.reduce(
+      (sum, t) => sum + Math.max(0, (Number(t.total) || 0) - (Number(t.tax) || 0)),
+      0
+    );
 
     return {
       id: `billing-${year}-${monthNum}`,
@@ -691,7 +710,7 @@ export const importBillingsFromPosTransactions = (year: number): MonthlyTaxBilli
       paymentDate: '',
       paymentBank: '',
       isPaid: false,
-      notes: monthGross > 0 ? `Sinkronisasi omzet riil dari ${monthTransactions.length} transaksi kasir Toko Bejo` : '',
+      notes: monthGross > 0 ? `Sinkronisasi omzet riil dari ${monthTransactions.length} transaksi penjualan Toko Bejo` : '',
     };
   });
 

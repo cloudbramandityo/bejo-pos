@@ -31,37 +31,61 @@ function pocketBaseUrl(): string {
 let client: PocketBase | null = null;
 let authPromise: Promise<PocketBase> | null = null;
 
-async function authenticate(pb: PocketBase): Promise<PocketBase> {
-  const adminEmail = env('PB_ADMIN_EMAIL');
-  const adminPassword = env('PB_ADMIN_PASSWORD');
+type Credential = { label: string; email: string; password: string; admin: boolean };
 
-  if (adminEmail && adminPassword) {
+/**
+ * Kumpulkan kandidat kredensial tanpa duplikasi. `.env` VPS kadang memuat
+ * PB_SYNC_* lama dan VITE_PB_SYNC_* yang benar (atau sebaliknya), jadi server
+ * mencoba semuanya, bukan hanya salah satu.
+ */
+function credentialCandidates(): Credential[] {
+  const list: Credential[] = [];
+  const seen = new Set<string>();
+  const push = (label: string, email: string, password: string, admin = false) => {
+    if (!email || !password) return;
+    const key = `${email}\u0000${password}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    list.push({ label, email, password, admin });
+  };
+
+  push('PB_ADMIN', env('PB_ADMIN_EMAIL'), env('PB_ADMIN_PASSWORD'), true);
+  push('PB_SYNC', env('PB_SYNC_EMAIL'), env('PB_SYNC_PASSWORD'));
+  push('VITE_PB_SYNC', env('VITE_PB_SYNC_EMAIL'), env('VITE_PB_SYNC_PASSWORD'));
+  return list;
+}
+
+async function authenticate(pb: PocketBase): Promise<PocketBase> {
+  const candidates = credentialCandidates();
+  if (candidates.length === 0) {
+    throw new Error('Kredensial PocketBase server belum disetel.');
+  }
+
+  const failures: string[] = [];
+  for (const candidate of candidates) {
     try {
-      await pb.collection('_superusers').authWithPassword(adminEmail, adminPassword);
-      return pb;
-    } catch {
-      const legacy = (pb as unknown as {
-        admins?: { authWithPassword: (email: string, password: string) => Promise<unknown> };
-      }).admins;
-      if (legacy?.authWithPassword) {
+      if (candidate.admin) {
         try {
-          await legacy.authWithPassword(adminEmail, adminPassword);
-          return pb;
-        } catch {
-          /* lanjut ke akun sinkronisasi */
+          await pb.collection('_superusers').authWithPassword(candidate.email, candidate.password);
+        } catch (primaryError) {
+          const legacy = (pb as unknown as {
+            admins?: { authWithPassword: (email: string, password: string) => Promise<unknown> };
+          }).admins;
+          if (!legacy?.authWithPassword) throw primaryError;
+          await legacy.authWithPassword(candidate.email, candidate.password);
         }
+      } else {
+        await pb.collection('users').authWithPassword(candidate.email, candidate.password);
       }
+      console.log(`[Landing] Autentikasi PocketBase berhasil via ${candidate.label}.`);
+      return pb;
+    } catch (err: any) {
+      failures.push(`${candidate.label} (${err?.status || 'jaringan'})`);
+      pb.authStore.clear();
     }
   }
 
-  const syncEmail = env('PB_SYNC_EMAIL') || env('VITE_PB_SYNC_EMAIL');
-  const syncPassword = env('PB_SYNC_PASSWORD') || env('VITE_PB_SYNC_PASSWORD');
-  if (syncEmail && syncPassword) {
-    await pb.collection('users').authWithPassword(syncEmail, syncPassword);
-    return pb;
-  }
-
-  throw new Error('Kredensial PocketBase server belum disetel.');
+  throw new Error(`Autentikasi PocketBase gagal: ${failures.join(', ')}.`);
 }
 
 async function getClient(): Promise<PocketBase> {

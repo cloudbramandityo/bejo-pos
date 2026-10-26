@@ -778,7 +778,7 @@ export function getTerminStageDisplayInfo(
   // 1. Jika dokumen merupakan INVOICE FINAL KOMERSIAL (INV)
   if (inv.documentType === 'COMMERCIAL') {
     let billedIdx = -1;
-    const scheds = inv.paymentSchedules || [];
+    const scheds = Array.isArray(inv.paymentSchedules) ? inv.paymentSchedules : [];
 
     if (inv.terminStageId) {
       billedIdx = scheds.findIndex(s => s.id === inv.terminStageId);
@@ -813,8 +813,9 @@ export function getTerminStageDisplayInfo(
   }
 
   // 2. Jika dokumen merupakan PROFORMA INVOICE (PI) atau draf umum
-  const childNums = inv.childInvoiceNumbers || [];
-  const scheds = inv.paymentSchedules || [];
+  const childNums = (Array.isArray(inv.childInvoiceNumbers) ? inv.childInvoiceNumbers : [])
+    .map(num => String(num ?? ''));
+  const scheds = Array.isArray(inv.paymentSchedules) ? inv.paymentSchedules : [];
 
   // Periksa apakah termin ini sudah pernah diterbitkan invoice-nya
   const isSchedBilled = childNums.some(num => {
@@ -836,13 +837,16 @@ export function getTerminStageDisplayInfo(
 
   if (isSchedBilled) {
     let isChildPaid = false;
-    if (allInvoices) {
-      const childInv = allInvoices.find(ci => childNums.includes(ci.documentNumber) && (
-        ci.terminStageNumber === schedIdx + 1 ||
-        ci.documentNumber.endsWith(`/T${schedIdx + 1}`) ||
-        (schedIdx === 0 && ci.documentNumber.endsWith('/DP')) ||
-        (schedIdx === 1 && ci.documentNumber.endsWith('/PELUNASAN'))
-      ));
+    if (Array.isArray(allInvoices)) {
+      const childInv = allInvoices.find(ci => {
+        const docNumber = typeof ci?.documentNumber === 'string' ? ci.documentNumber : '';
+        return childNums.includes(docNumber) && (
+          ci.terminStageNumber === schedIdx + 1 ||
+          docNumber.endsWith(`/T${schedIdx + 1}`) ||
+          (schedIdx === 0 && docNumber.endsWith('/DP')) ||
+          (schedIdx === 1 && docNumber.endsWith('/PELUNASAN'))
+        );
+      });
       if (childInv && (childInv.status === 'PAID' || (childInv.balanceDue !== undefined && childInv.balanceDue <= 0))) {
         isChildPaid = true;
       }

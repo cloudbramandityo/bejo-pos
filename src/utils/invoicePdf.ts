@@ -118,7 +118,22 @@ export function buildInvoicePdf(
 
   const baseWidth = paperSize === 'f4' ? 215 : 210;
   const baseHeight = paperSize === 'f4' ? 330 : 297;
-  const JsPdfConstructor = ((jsPDF as unknown as { default?: typeof jsPDF }).default || jsPDF);
+  const jsPdfModule = jsPDF as unknown as {
+    default?: typeof jsPDF;
+    jsPDF?: typeof jsPDF;
+  } & Partial<typeof jsPDF>;
+  const JsPdfConstructor = (
+    typeof jsPdfModule === 'function'
+      ? jsPdfModule
+      : typeof jsPdfModule.jsPDF === 'function'
+      ? jsPdfModule.jsPDF
+      : typeof jsPdfModule.default === 'function'
+      ? jsPdfModule.default
+      : (jsPdfModule.default as unknown as { jsPDF?: typeof jsPDF } | undefined)?.jsPDF
+  ) as typeof jsPDF;
+  if (typeof JsPdfConstructor !== 'function') {
+    throw new Error('Modul jsPDF tidak dapat dimuat.');
+  }
   const doc = new JsPdfConstructor({
     orientation,
     unit: 'mm',
@@ -140,9 +155,12 @@ export function buildInvoicePdf(
   const items = Array.isArray(invoice.items) ? invoice.items : [];
   const schedules = Array.isArray(invoice.paymentSchedules) ? invoice.paymentSchedules : [];
   const payments = Array.isArray(invoice.payments) ? invoice.payments : [];
-  const bankAccounts = (invoice.bankAccounts && invoice.bankAccounts.length > 0
-    ? invoice.bankAccounts
-    : storeIdentity.bankAccounts) || [];
+  // Identitas toko selalu menjadi sumber terbaru; snapshot pada invoice hanya dipakai
+  // bila identitas toko belum memiliki rekening sama sekali.
+  const identityBankAccounts = Array.isArray(storeIdentity.bankAccounts) ? storeIdentity.bankAccounts : [];
+  const bankAccounts = identityBankAccounts.length > 0
+    ? identityBankAccounts
+    : (Array.isArray(invoice.bankAccounts) ? invoice.bankAccounts : []);
 
   const ensureSpace = (needed: number) => {
     if (y + needed <= footerTop) return;
@@ -590,7 +608,9 @@ export function buildInvoicePdf(
     y += 4;
   }
 
-  const terms = asText(invoice.paymentTerms, asText(storeIdentity.defaultTerms));
+  const terms = storeIdentity.defaultTerms === undefined
+    ? asText(invoice.paymentTerms)
+    : asText(storeIdentity.defaultTerms);
   const tailGap = 5;
   const tailLeftWidth = contentWidth * 0.48;
   const tailRightX = margin + tailLeftWidth + tailGap;

@@ -85,13 +85,47 @@ export function normalizeTransactionForPdf(transaction: any): Transaction {
 
 export function downloadPdfFile(doc: jsPDF, filename: string): void {
   const blob = doc.output('blob');
+  const navigatorWithSave = typeof navigator !== 'undefined'
+    ? (navigator as Navigator & { msSaveOrOpenBlob?: (blob: Blob, name: string) => boolean })
+    : undefined;
+
+  if (navigatorWithSave?.msSaveOrOpenBlob) {
+    navigatorWithSave.msSaveOrOpenBlob(blob, filename);
+    return;
+  }
+
   const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.style.display = 'none';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+  try {
+    const link = document.createElement('a');
+    if (typeof link.download === 'undefined') {
+      // Browser tanpa dukungan atribut download: tampilkan PDF di tab baru agar tetap bisa disimpan.
+      const opened = window.open(url, '_blank');
+      if (opened) {
+        try {
+          opened.opener = null;
+        } catch {
+          // Cross-origin window may reject opener reset; download already handled.
+        }
+      } else {
+        doc.save(filename);
+      }
+      return;
+    }
+
+    link.href = url;
+    link.download = filename;
+    link.rel = 'noopener';
+    link.style.display = 'none';
+    (document.body || document.documentElement).appendChild(link);
+    link.click();
+    link.remove();
+  } catch (error) {
+    try {
+      doc.save(filename);
+    } catch {
+      throw error;
+    }
+  } finally {
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
 }

@@ -5443,7 +5443,10 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                               Rekening Pembayaran Resmi:
                             </span>
                             <div className="space-y-1">
-                              {(selectedInvoice.bankAccounts || storeIdentity.bankAccounts).map(b => (
+                              {(storeIdentity.bankAccounts && storeIdentity.bankAccounts.length > 0
+                                ? storeIdentity.bankAccounts
+                                : selectedInvoice.bankAccounts || []
+                              ).map(b => (
                                 <div key={b.id} className="text-[10px] text-slate-700 bg-white p-1.5 rounded-lg border border-slate-200 flex justify-between items-center">
                                   <div>
                                     <strong className="text-slate-900">{b.bankName}</strong>: {b.accountNumber}
@@ -5499,7 +5502,9 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                     {/* Terms & Conditions */}
                     <div className="my-5 p-3 rounded-xl bg-slate-50/60 border border-slate-200 text-[9.5px] text-slate-500 leading-snug">
                       <span className="font-bold text-slate-700 block mb-0.5">Syarat & Ketentuan:</span>
-                      <p className="whitespace-pre-line">{selectedInvoice.paymentTerms || storeIdentity.defaultTerms}</p>
+                      <p className="whitespace-pre-line">
+                        {storeIdentity.defaultTerms === undefined ? selectedInvoice.paymentTerms : storeIdentity.defaultTerms}
+                      </p>
                     </div>
 
                     {/* Signatures & Stamp Area */}
@@ -5625,7 +5630,10 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                   {/* Rekening Bank di Struk */}
                   <div className="py-1.5 border-b border-dashed border-slate-400 text-[9px] text-slate-700 space-y-0.5">
                     <div className="font-bold text-slate-800">Rekening Pembayaran:</div>
-                    {(selectedInvoice.bankAccounts || storeIdentity.bankAccounts).map(b => (
+                    {(storeIdentity.bankAccounts && storeIdentity.bankAccounts.length > 0
+                      ? storeIdentity.bankAccounts
+                      : selectedInvoice.bankAccounts || []
+                    ).map(b => (
                       <div key={b.id}>
                         {b.bankName}: {b.accountNumber} (a/n {b.accountHolder})
                       </div>

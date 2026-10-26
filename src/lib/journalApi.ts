@@ -1,3 +1,5 @@
+import { getDeveloperAccess } from '../utils/authSecurity';
+
 export type JurnalHalaman = 'kas_utama' | 'debit' | 'kredit';
 
 export interface JurnalRecord {
@@ -65,11 +67,59 @@ export async function getJournalSession(): Promise<JournalSessionInfo> {
 export async function openJournalSession(
   username: string,
   password: string
-): Promise<void> {
-  await request('/api/journal/session', {
-    method: 'POST',
-    body: JSON.stringify({ username, password }),
-  });
+): Promise<{ username: string; expiresAt: string }> {
+  const data = await request<{ success: true; username: string; expiresAt: string }>(
+    '/api/journal/session',
+    {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }
+  );
+  return { username: data.username, expiresAt: data.expiresAt };
+}
+
+export async function ensureJournalSession(): Promise<JournalSessionInfo> {
+  const info = await getJournalSession();
+  if (info.authenticated) return info;
+
+  if (!info.configured.developerLogin) {
+    throw new JournalApiError(
+      'JOURNAL_DEV_PASSWORD belum disetel di server. Lengkapi .env VPS lalu restart layanan.',
+      503
+    );
+  }
+  if (!info.configured.sessionSecret) {
+    throw new JournalApiError(
+      'JOURNAL_SESSION_SECRET (atau PB_ADMIN_PASSWORD) belum disetel di server.',
+      503
+    );
+  }
+
+  const access = getDeveloperAccess();
+  try {
+    const session = await openJournalSession(access.username, access.password);
+    return { ...info, authenticated: true, username: session.username };
+  } catch (error) {
+    if (error instanceof JournalApiError && error.status === 401) {
+      throw new JournalApiError(
+        'Kredensial DEVELOPER di server belum cocok dengan akun aplikasi. Periksa JOURNAL_DEV_USER / JOURNAL_DEV_PASSWORD di .env VPS.',
+        401
+      );
+    }
+    throw error;
+  }
+}
+
+export async function withJournalSession<T>(action: () => Promise<T>): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof JournalApiError && error.status === 401) {
+      await ensureJournalSession();
+      return action();
+    }
+    throw error;
+  }
 }
 
 export async function closeJournalSession(): Promise<void> {

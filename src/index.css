@@ -660,3 +660,240 @@
   }
 }
 
+/* =========================================================================
+   JURNAL — tampilan bergaya Google Sheets
+   Scoped ke .jurnal-sheets agar tidak memengaruhi modul lain.
+   ========================================================================= */
+.jurnal-sheets {
+  --jurnal-blue: #0b57d0;
+  --jurnal-text: #1f1f1f;
+  --jurnal-muted: #444746;
+  --jurnal-line: #e1e3e1;
+  --jurnal-soft: #f8fafd;
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+}
+
+.jurnal-sheets .fortune-container {
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  color: var(--jurnal-text);
+  background: #ffffff;
+}
+
+.jurnal-sheets .fortune-workarea {
+  flex-shrink: 0;
+}
+
+.jurnal-sheets .fortune-sheet-container {
+  min-height: 0;
+}
+
+/* Toolbar */
+.jurnal-sheets .fortune-toolbar {
+  min-height: 38px;
+  padding: 4px 8px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--jurnal-line);
+  gap: 1px;
+}
+
+.jurnal-sheets .fortune-toolbar-divider {
+  height: 18px;
+  margin: 0 4px;
+  background: var(--jurnal-line);
+}
+
+.jurnal-sheets .fortune-toolbar-button,
+.jurnal-sheets .fortune-toolbar-combo {
+  margin: 1px 2px;
+  padding: 3px;
+  border-radius: 4px;
+}
+
+.jurnal-sheets .fortune-toolbar-button:hover,
+.jurnal-sheets .fortune-toolbar-combo:hover,
+.jurnal-sheets .fortune-toolbar-combo-arrow:hover {
+  background: #f1f3f4;
+}
+
+.jurnal-sheets .fortune-toolbar-button:active,
+.jurnal-sheets .fortune-toolbar-combo:active {
+  background: #e8eaed;
+}
+
+.jurnal-sheets .fortune-toolbar-combo-popup {
+  top: 30px;
+}
+
+.jurnal-sheets .fortune-toolbar-select,
+.jurnal-sheets .fortune-toolbar-color-picker {
+  border: 1px solid var(--jurnal-line);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(60, 64, 67, 0.25);
+}
+
+.jurnal-sheets .fortune-toolbar-select-option:hover {
+  background: #f1f3f4;
+}
+
+/* Formula bar */
+.jurnal-sheets .fortune-fx-editor {
+  height: 32px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--jurnal-line);
+}
+
+.jurnal-sheets .fortune-name-box-container {
+  width: 92px;
+  border-right: 1px solid var(--jurnal-line);
+  font-size: 12px;
+}
+
+.jurnal-sheets .fortune-name-box {
+  color: var(--jurnal-text);
+}
+
+.jurnal-sheets .fortune-fx-icon {
+  margin: 0 8px;
+  color: var(--jurnal-muted);
+}
+
+.jurnal-sheets .fortune-fx-input-container {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.jurnal-sheets .fortune-fx-input {
+  padding-top: 8px;
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  font-size: 13px;
+  color: var(--jurnal-text);
+}
+
+/* Header baris & kolom */
+.jurnal-sheets .fortune-left-top {
+  background: #f8f9fa;
+  border-color: var(--jurnal-line);
+}
+
+.jurnal-sheets .fortune-row-header,
+.jurnal-sheets .fortune-col-header {
+  color: var(--jurnal-muted);
+}
+
+.jurnal-sheets .fortune-col-header-hover,
+.jurnal-sheets .fortune-row-header-hover {
+  background-color: #e8eaed !important;
+}
+
+.jurnal-sheets .fortune-col-header-selected,
+.jurnal-sheets .fortune-row-header-selected {
+  background-color: rgba(11, 87, 208, 0.1) !important;
+  border-color: var(--jurnal-blue) !important;
+}
+
+/* Seleksi & gagang isi */
+.jurnal-sheets .fortune-cell-selected-move,
+.jurnal-sheets .fortune-cell-selected-extend {
+  border-color: var(--jurnal-blue) !important;
+}
+
+.jurnal-sheets .luckysheet-cell-selected {
+  border-color: var(--jurnal-blue) !important;
+  background: rgba(11, 87, 208, 0.12) !important;
+}
+
+.jurnal-sheets .luckysheet-cs-fillhandle {
+  background-color: var(--jurnal-blue);
+}
+
+.jurnal-sheets .fortune-selection-copy-hc {
+  border-color: var(--jurnal-blue) !important;
+}
+
+/* Tab sheet */
+.jurnal-sheets .luckysheet-sheet-area {
+  height: 38px;
+  padding: 0 10px;
+  background: var(--jurnal-soft);
+  border-top: 1px solid var(--jurnal-line);
+  color: var(--jurnal-muted);
+}
+
+.jurnal-sheets #luckysheet-sheet-content {
+  align-items: flex-end;
+}
+
+.jurnal-sheets .luckysheet-sheet-area div.luckysheet-sheets-item {
+  height: 32px;
+  line-height: 30px;
+  margin-right: 2px;
+  padding: 0 18px 0 10px;
+  border: 0;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--jurnal-muted);
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.jurnal-sheets .luckysheet-sheet-area div.luckysheet-sheets-item:hover {
+  background: #e8eaed;
+  color: var(--jurnal-text);
+}
+
+.jurnal-sheets .luckysheet-sheet-area div.luckysheet-sheets-item-active,
+.jurnal-sheets .luckysheet-sheet-area div.luckysheet-sheets-item-active:hover {
+  background: #ffffff;
+  color: var(--jurnal-blue);
+  font-weight: 600;
+}
+
+.jurnal-sheets .luckysheet-sheets-item-color {
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+}
+
+.jurnal-sheets #luckysheet-sheet-content > .fortune-sheettab-button:first-child {
+  display: none;
+}
+
+.jurnal-sheets .fortune-sheettab-button {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 1px;
+  border-radius: 50%;
+  color: var(--jurnal-muted);
+}
+
+.jurnal-sheets .fortune-sheettab-button:hover {
+  background: #e8eaed;
+}
+
+/* Bar statistik bawah */
+.jurnal-sheets .fortune-stat-area {
+  min-height: 22px;
+  padding: 1px 10px;
+  border-top: 1px solid var(--jurnal-line);
+  background: #ffffff;
+  font-size: 11px;
+  color: var(--jurnal-muted);
+}
+
+.jurnal-sheets .luckysheet-sheet-selection-calInfo {
+  gap: 12px;
+  font-size: 11px;
+  color: var(--jurnal-muted);
+}
+
+/* Google Sheets tidak menampilkan tombol tambah baris melayang di atas grid */
+.jurnal-sheets .fortune-add-row-button {
+  display: none !important;
+}
+
+/* Bilah putih di tepi sel seleksi bukan gaya Google Sheets */
+.jurnal-sheets .luckysheet-cs-draghandle {
+  display: none !important;
+}
+
+

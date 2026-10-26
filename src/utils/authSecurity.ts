@@ -22,6 +22,17 @@ export function verifyDeveloperCredentials(inputUser: string, inputPass: string)
 }
 
 /**
+ * Perangkat akses developer untuk pembuatan sesi Jurnal otomatis.
+ * Hanya dipakai modul DEVELOPER; tidak untuk ditampilkan di UI.
+ */
+export function getDeveloperAccess(): { username: string; password: string } {
+  return {
+    username: _decodeBytes(_D_U),
+    password: _decodeBytes(_D_P),
+  };
+}
+
+/**
  * Checks if a username is reserved by the core developer system
  */
 export function isReservedDeveloperUsername(inputUser: string): boolean {

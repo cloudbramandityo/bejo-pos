@@ -4,26 +4,25 @@ import type { Cell, CellWithRowAndCol, Sheet } from '@fortune-sheet/core';
 import '@fortune-sheet/react/dist/index.css';
 import {
   AlertCircle,
-  BookOpen,
+  Calculator,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   ClipboardPaste,
   Cloud,
+  FileSpreadsheet,
   Info,
   Loader2,
-  LockKeyhole,
   RefreshCw,
-  ShieldCheck,
   Table2,
   X,
 } from 'lucide-react';
 import {
   JournalApiError,
-  getJournalSession,
+  ensureJournalSession,
   loadJurnalSheets,
-  openJournalSession,
   saveJurnalSheet,
-  type JournalSessionInfo,
+  withJournalSession,
   type JurnalHalaman,
   type JurnalSheetsResponse,
 } from '../../lib/journalApi';
@@ -46,8 +45,26 @@ import {
 
 const AUTO_SAVE_DELAY = 1200;
 
-type SessionState = 'checking' | 'login' | 'expired' | 'authenticated';
+type SessionState = 'checking' | 'ready' | 'error';
 type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
+type MenuKey = 'file' | 'data' | 'help' | null;
+
+// FortuneSheet memutasi objek range lalu menyimpannya ke state; Immer hanya
+// membekukan plain object. Instance class tetap bisa dimutasi sehingga aman
+// saat React StrictMode menjalankan updater dua kali di mode pengembangan.
+class JurnalRange {
+  row: [number, number];
+  column: [number, number];
+  row_focus: number;
+  column_focus: number;
+
+  constructor(row: number, column: number) {
+    this.row = [row, row];
+    this.column = [column, column];
+    this.row_focus = row;
+    this.column_focus = column;
+  }
+}
 
 const EMPTY_SIGNATURES: Record<JurnalHalaman, string> = {
   kas_utama: '',
@@ -172,6 +189,39 @@ function errorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+// Header bawaan FortuneSheet berupa kanvas putih dengan teks hitam. Hook
+// afterRender menggambarnya ulang mengikuti header Google Sheets: latar abu
+// muda, teks abu gelap, dan garis tipis yang menyatu dengan grid.
+const HEADER_FONT = '500 11px "Google Sans", Roboto, Arial, sans-serif';
+
+function paintHeaderCell(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  label: string
+): void {
+  if (width <= 0 || height <= 0) return;
+  ctx.save();
+  ctx.fillStyle = '#f8f9fa';
+  ctx.fillRect(x, y, width, height);
+  ctx.strokeStyle = '#e1e3e1';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + width - 0.5, y);
+  ctx.lineTo(x + width - 0.5, y + height);
+  ctx.moveTo(x, y + height - 0.5);
+  ctx.lineTo(x + width, y + height - 0.5);
+  ctx.stroke();
+  ctx.fillStyle = '#444746';
+  ctx.font = HEADER_FONT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, x + width / 2, y + height / 2 + 0.5);
+  ctx.restore();
+}
+
 interface JurnalScreenProps {
   currentUsername?: string;
 }
@@ -184,18 +234,14 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
 
   const [tahun, setTahun] = useState(initialYear);
   const [sessionState, setSessionState] = useState<SessionState>('checking');
-  const [sessionInfo, setSessionInfo] = useState<JournalSessionInfo | null>(null);
   const [sessionUser, setSessionUser] = useState<string>('');
-  const [username, setUsername] = useState('langgo');
-  const [password, setPassword] = useState('');
-  const [loggingIn, setLoggingIn] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
 
   const [workbookData, setWorkbookData] = useState<Sheet[] | null>(null);
   const [loadKey, setLoadKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [openMenu, setOpenMenu] = useState<MenuKey>(null);
 
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
@@ -224,6 +270,7 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
   const generationRef = useRef(0);
   const hasUserOpRef = useRef(false);
   const workbookRef = useRef<WorkbookInstance | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     return () => {
@@ -277,7 +324,9 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
         const sheet = latestRef.current[key];
         if (!sheet) continue;
         const signature = signatureOf(sheet);
-        await saveJurnalSheet({ tahun: year, halaman: key, dataGrid: toGrid(sheet, key) });
+        await withJournalSession(() =>
+          saveJurnalSheet({ tahun: year, halaman: key, dataGrid: toGrid(sheet, key) })
+        );
         if (generation !== generationRef.current) return;
         savedSignatureRef.current[key] = signature;
         setLastSavedAt(new Date());
@@ -286,15 +335,8 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
       setSaveState(changedKeys().length > 0 ? 'pending' : 'saved');
     } catch (error) {
       if (generation !== generationRef.current) return;
-      if (error instanceof JournalApiError && error.status === 401) {
-        setSessionState('expired');
-        setSaveState('idle');
-        setPreparing(false);
-        setWorkbookData(null);
-      } else {
-        setSaveState('error');
-        setSaveError(errorMessage(error, 'Gagal menyimpan data Jurnal.'));
-      }
+      setSaveState('error');
+      setSaveError(errorMessage(error, 'Gagal menyimpan data Jurnal.'));
     }
   }, [changedKeys]);
 
@@ -309,7 +351,7 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
 
   const handleWorkbookChange = useCallback(
     (sheets: Sheet[]): void => {
-      if (sessionState !== 'authenticated') return;
+      if (sessionState !== 'ready') return;
       for (const meta of JURNAL_SHEET_META) {
         const found = sheets.find((sheet) => sheet.id === meta.key || sheet.name === meta.name);
         if (found) {
@@ -349,7 +391,14 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
     try {
       await ensureJurnalFontLoaded();
       if (generation !== generationRef.current) return;
-      const response = await loadJurnalSheets(year);
+
+      // DEVELOPER sudah lolos gerbang RBAC aplikasi; sesi API dibuat otomatis
+      // dari akun developer yang sedang dipakai agar tidak ada login kedua.
+      const session = await ensureJournalSession();
+      if (generation !== generationRef.current) return;
+      setSessionUser(session.username || '');
+
+      const response = await withJournalSession(() => loadJurnalSheets(year));
       if (generation !== generationRef.current) return;
 
       const sheets = buildSheets(response.sheets, year);
@@ -366,42 +415,27 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
       setTahun(year);
       setWorkbookData(sheets);
       setLoadKey((key) => key + 1);
-      setSessionState('authenticated');
+      setSessionState('ready');
     } catch (error) {
       if (generation !== generationRef.current) return;
       setPreparing(false);
-      if (error instanceof JournalApiError && error.status === 401) {
-        setSessionState('expired');
-        setWorkbookData(null);
-      } else {
-        setLoadError(errorMessage(error, 'Gagal memuat Jurnal dari server.'));
-      }
+      setWorkbookData(null);
+      setSessionState('error');
+      setLoadError(errorMessage(error, 'Gagal memuat Jurnal dari server.'));
     } finally {
       if (generation === generationRef.current) setLoading(false);
     }
   }, []);
 
-  const checkSession = useCallback(async (): Promise<void> => {
+  const bootstrap = useCallback(async (): Promise<void> => {
     setSessionState('checking');
-    setLoginError(null);
-    try {
-      const info = await getJournalSession();
-      setSessionInfo(info);
-      if (info.authenticated) {
-        setSessionUser(info.username || '');
-        await loadYear(yearRef.current);
-      } else {
-        setSessionState('login');
-      }
-    } catch (error) {
-      setSessionState('login');
-      setLoginError(errorMessage(error, 'Server Jurnal tidak dapat dihubungi.'));
-    }
+    setLoadError(null);
+    await loadYear(yearRef.current);
   }, [loadYear]);
 
   useEffect(() => {
-    void checkSession();
-  }, [checkSession]);
+    void bootstrap();
+  }, [bootstrap]);
 
   useEffect(() => {
     if (!importNotice) return;
@@ -436,6 +470,16 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
       }
       finishTimer = window.setTimeout(() => {
         if (cancelled) return;
+        // FortuneSheet memilih sel editable pertama (C4) dan menggulir ke sana
+        // saat dimuat; pilih A1 dan kembalikan posisi ke baris judul seperti
+        // Google Sheets.
+        const workbook = workbookRef.current;
+        if (workbook) {
+          workbook.setSelection([new JurnalRange(0, 0)], {
+            id: JURNAL_SHEET_META[0].key,
+          });
+          workbook.scroll({ scrollTop: 0, scrollLeft: 0 });
+        }
         // Nilai hasil hitung awal bukan editan pengguna; samakan baseline agar
         // membuka Jurnal (atau berpindah tahun) tidak memicu auto-save.
         for (const { key } of JURNAL_SHEET_META) {
@@ -451,28 +495,6 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
       if (finishTimer) window.clearTimeout(finishTimer);
     };
   }, [workbookData, loadKey]);
-
-  const handleLogin = async (event: React.FormEvent): Promise<void> => {
-    event.preventDefault();
-    if (!username.trim() || !password) {
-      setLoginError('Masukkan username dan password developer.');
-      return;
-    }
-    setLoggingIn(true);
-    setLoginError(null);
-    try {
-      await openJournalSession(username.trim(), password);
-      setPassword('');
-      const info = await getJournalSession().catch(() => null);
-      if (info) setSessionInfo(info);
-      setSessionUser(info?.username || username.trim().toLowerCase());
-      await loadYear(yearRef.current);
-    } catch (error) {
-      setLoginError(errorMessage(error, 'Login developer gagal.'));
-    } finally {
-      setLoggingIn(false);
-    }
-  };
 
   const flushPending = useCallback(async (): Promise<boolean> => {
     if (saveTimerRef.current) {
@@ -516,7 +538,7 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
   };
 
   const openImportModal = useCallback((): void => {
-    if (sessionState !== 'authenticated') return;
+    if (sessionState !== 'ready') return;
     const workbook = workbookRef.current;
     let target: JurnalHalaman = 'kas_utama';
     let active = { row: 0, column: 0 };
@@ -555,7 +577,7 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
   };
 
   const applyImport = useCallback((): void => {
-    if (sessionState !== 'authenticated' || importing) return;
+    if (sessionState !== 'ready' || importing) return;
     const workbook = workbookRef.current;
     if (!workbook) {
       setImportError('Spreadsheet belum siap. Tunggu hingga proses memuat selesai.');
@@ -686,291 +708,383 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
       beforeAddSheet: () => false,
       beforeDeleteSheet: () => false,
       beforeUpdateSheetName: () => false,
+      afterRenderRowHeaderCell: (
+        rowNumber: string,
+        _rowIndex: number,
+        top: number,
+        width: number,
+        height: number,
+        ctx: CanvasRenderingContext2D
+      ) => {
+        paintHeaderCell(ctx, 0, top, width, height, rowNumber);
+      },
+      afterRenderColumnHeaderCell: (
+        columnChar: string,
+        _columnIndex: number,
+        left: number,
+        width: number,
+        height: number,
+        ctx: CanvasRenderingContext2D
+      ) => {
+        paintHeaderCell(ctx, left, 0, width, height, columnChar);
+      },
     }),
     []
   );
 
+  useEffect(() => {
+    if (!openMenu) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpenMenu(null);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenMenu(null);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [openMenu]);
+
+  const handleRecalculate = useCallback((): void => {
+    setOpenMenu(null);
+    const workbook = workbookRef.current;
+    if (!workbook) {
+      setImportNotice('Spreadsheet belum siap. Tunggu hingga data selesai dimuat.');
+      return;
+    }
+    try {
+      const activeId = workbook.getSheet?.()?.id || JURNAL_SHEET_META[0].key;
+      workbook.batchCallApis([{ name: 'calculateFormula', args: [activeId] }]);
+      hasUserOpRef.current = true;
+      queueSave();
+      setImportNotice('Formula dihitung ulang. Perubahan disimpan otomatis.');
+    } catch {
+      setImportNotice('Formula belum bisa dihitung ulang. Coba lagi setelah sheet selesai dimuat.');
+    }
+  }, [queueSave]);
+
   const statusView = useMemo(() => {
-    if (sessionState !== 'authenticated') {
+    if (sessionState === 'error') {
       return {
-        icon: <LockKeyhole className="w-4 h-4 text-slate-400" />,
-        text: sessionState === 'checking' ? 'Memeriksa sesi...' : 'Menunggu login',
-        chipClass: 'bg-slate-50 text-slate-600 border-slate-200',
+        icon: <AlertCircle className="h-3.5 w-3.5 text-[#c5221f]" />,
+        text: 'Koneksi server gagal',
+        tone: 'text-[#c5221f]',
+      };
+    }
+    if (sessionState === 'checking') {
+      return {
+        icon: <Loader2 className="h-3.5 w-3.5 animate-spin text-[#0b57d0]" />,
+        text: 'Menghubungkan sesi...',
+        tone: 'text-[#5f6368]',
+      };
+    }
+    if (loading) {
+      return {
+        icon: <Loader2 className="h-3.5 w-3.5 animate-spin text-[#0b57d0]" />,
+        text: `Memuat Jurnal ${tahun}...`,
+        tone: 'text-[#5f6368]',
+      };
+    }
+    if (preparing) {
+      return {
+        icon: <Loader2 className="h-3.5 w-3.5 animate-spin text-[#0b57d0]" />,
+        text: 'Menghitung formula...',
+        tone: 'text-[#5f6368]',
       };
     }
     switch (saveState) {
       case 'saving':
         return {
-          icon: <Loader2 className="w-4 h-4 animate-spin text-blue-600" />,
+          icon: <Loader2 className="h-3.5 w-3.5 animate-spin text-[#0b57d0]" />,
           text: 'Menyimpan ke PocketBase...',
-          chipClass: 'bg-blue-50 text-blue-700 border-blue-200',
+          tone: 'text-[#5f6368]',
         };
       case 'saved':
         return {
-          icon: <CheckCircle2 className="w-4 h-4 text-emerald-600" />,
-          text: lastSavedAt ? `Tersimpan ${formatClock(lastSavedAt)}` : 'Tersimpan',
-          chipClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+          icon: <CheckCircle2 className="h-3.5 w-3.5 text-[#188038]" />,
+          text: lastSavedAt ? `Tersimpan ${formatClock(lastSavedAt)}` : 'Tersimpan di PocketBase',
+          tone: 'text-[#5f6368]',
         };
       case 'pending':
         return {
-          icon: <Cloud className="w-4 h-4 text-amber-600" />,
+          icon: <Cloud className="h-3.5 w-3.5 text-[#b06000]" />,
           text: 'Perubahan menunggu disimpan...',
-          chipClass: 'bg-amber-50 text-amber-800 border-amber-200',
+          tone: 'text-[#b06000]',
         };
       case 'error':
         return {
-          icon: <AlertCircle className="w-4 h-4 text-red-600" />,
-          text: saveError || 'Gagal menyimpan',
-          chipClass: 'bg-red-50 text-red-700 border-red-200',
+          icon: <AlertCircle className="h-3.5 w-3.5 text-[#c5221f]" />,
+          text: saveError || 'Gagal menyimpan perubahan',
+          tone: 'text-[#c5221f]',
         };
       default:
         return {
-          icon: <Cloud className="w-4 h-4 text-slate-400" />,
-          text: 'Auto-save aktif',
-          chipClass: 'bg-slate-50 text-slate-600 border-slate-200',
+          icon: <Cloud className="h-3.5 w-3.5 text-[#5f6368]" />,
+          text: 'Tersimpan di PocketBase',
+          tone: 'text-[#5f6368]',
         };
     }
-  }, [saveState, lastSavedAt, saveError, sessionState]);
+  }, [saveState, lastSavedAt, saveError, sessionState, loading, preparing, tahun]);
 
-  const loginPanel = (
-    <div className="flex items-center justify-center py-6 sm:py-10">
-      <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-xs p-6 sm:p-8">
-        <div className="w-12 h-12 rounded-xl bg-slate-900 text-emerald-300 flex items-center justify-center mb-4">
-          <LockKeyhole className="w-6 h-6" />
-        </div>
-        <h2 className="text-lg font-extrabold text-slate-900">
-          {sessionState === 'expired' ? 'Sesi Jurnal berakhir' : 'Akses Jurnal'}
-        </h2>
-        <p className="text-xs text-slate-500 mt-1 mb-5 leading-relaxed">
-          {sessionState === 'expired'
-            ? 'Sesi keamanan server sudah berakhir. Masuk kembali untuk melanjutkan pengeditan.'
-            : 'Modul Jurnal hanya untuk DEVELOPER. Sesi diverifikasi oleh server, bukan hanya oleh tampilan aplikasi.'}
-        </p>
-
-        <form onSubmit={handleLogin} className="space-y-3">
-          <div>
-            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1">
-              Username Developer
-            </label>
-            <input
-              type="text"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/20"
-              autoComplete="username"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1">
-              Password Developer
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/20"
-              autoComplete="current-password"
-              autoFocus
-            />
-          </div>
-
-          {loginError && (
-            <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{loginError}</span>
-            </div>
-          )}
-
-          {sessionInfo && !sessionInfo.configured.developerLogin && (
-            <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
-              <strong>JOURNAL_DEV_PASSWORD</strong> belum diisi di .env server. Atur nilainya lalu
-              restart layanan sebelum login.
-            </div>
-          )}
-          {sessionInfo && !sessionInfo.configured.pocketbaseAdmin && (
-            <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
-              <strong>PB_ADMIN_EMAIL / PB_ADMIN_PASSWORD</strong> belum diisi di .env server. Modul
-              Jurnal memerlukan akun admin PocketBase.
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loggingIn}
-            className="w-full mt-1 px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer transition-colors"
-          >
-            {loggingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-            {loggingIn ? 'Memverifikasi...' : 'Masuk ke Jurnal'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void checkSession()}
-            className="w-full px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
-          >
-            Cek ulang koneksi server
-          </button>
-        </form>
-      </div>
-    </div>
-  );
+  const displayUser = sessionUser || currentUsername || 'DEVELOPER';
+  const avatarInitial = displayUser.trim().charAt(0).toUpperCase() || 'D';
 
   const importColumnCount = importGrid
     ? Math.max(...importGrid.map((row) => row.length))
     : 0;
 
+  const menuButton = (key: Exclude<MenuKey, null>, label: string, items: React.ReactNode) => (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpenMenu((previous) => (previous === key ? null : key))}
+        className={`rounded px-2 py-1 text-[12px] font-medium transition-colors cursor-pointer ${
+          openMenu === key ? 'bg-[#f1f3f4] text-[#1f1f1f]' : 'text-[#444746] hover:bg-[#f1f3f4]'
+        }`}
+        aria-haspopup="menu"
+        aria-expanded={openMenu === key}
+      >
+        {label}
+      </button>
+      {openMenu === key && (
+        <div
+          role="menu"
+          className="absolute left-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-md border border-[#dadce0] bg-white py-1.5 text-[#1f1f1f] shadow-[0_4px_12px_rgba(60,64,67,0.25)]"
+        >
+          {items}
+        </div>
+      )}
+    </div>
+  );
+
+  const menuItemClass =
+    'flex w-full items-center gap-3 px-4 py-2 text-left text-[12px] text-[#1f1f1f] hover:bg-[#f1f3f4]';
+  const menuNoteClass = 'flex items-start gap-3 px-4 py-2 text-[11px] leading-relaxed text-[#444746]';
+
   return (
-    <div className="w-full max-w-[1440px] mx-auto p-3 sm:p-5 space-y-4">
-      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5 min-w-0">
-          <div className="w-12 h-12 rounded-xl bg-slate-900 text-emerald-300 flex items-center justify-center shadow-md shrink-0">
-            <BookOpen className="w-6 h-6" />
+    <div className="jurnal-sheets mx-auto w-full max-w-[1600px] px-3 pb-4 pt-3 sm:px-4">
+      <div
+        className="jurnal-shell relative flex w-full flex-col overflow-hidden rounded-lg border border-[#dadce0] bg-white shadow-[0_1px_3px_rgba(60,64,67,0.3)]"
+        style={{ height: 'calc(100dvh - 13rem)', minHeight: '540px' }}
+      >
+        <div className="flex flex-wrap items-start gap-x-3 gap-y-2 border-b border-[#e1e3e1] px-3 py-2 sm:px-4">
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#188038]">
+            <FileSpreadsheet className="h-5 w-5 text-white" />
           </div>
-          <div className="min-w-0">
-            <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2 flex-wrap">
-              JURNAL
-              <span className="text-[9px] font-black uppercase tracking-wider bg-slate-900 text-emerald-300 px-1.5 py-0.5 rounded-md">
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <h1 className="truncate text-[15px] font-medium leading-5 text-[#1f1f1f]">
+                Jurnal {tahun}
+              </h1>
+              <span className="rounded border border-[#c4c7c5] px-1.5 py-px text-[9px] font-semibold uppercase tracking-[0.08em] text-[#5f6368]">
                 Developer
               </span>
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Spreadsheet Kas Utama, Debit, dan Kredit — seluruh perubahan tersimpan otomatis di
-              PocketBase.
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              {JURNAL_SHEET_META.map((meta) => (
+            </div>
+
+            <div className="mt-0.5 flex items-center gap-2">
+              <div ref={menuRef} className="flex items-center gap-0.5">
+                {menuButton(
+                  'file',
+                  'File',
+                  <>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setOpenMenu(null);
+                        void handleReload();
+                      }}
+                      className={menuItemClass}
+                    >
+                      <RefreshCw className="h-4 w-4 text-[#444746]" />
+                      Muat ulang dari PocketBase
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setOpenMenu(null);
+                        openImportModal();
+                      }}
+                      className={menuItemClass}
+                    >
+                      <ClipboardPaste className="h-4 w-4 text-[#444746]" />
+                      Tempel data dari Google Sheets
+                    </button>
+                    <div className="my-1 h-px bg-[#e1e3e1]" />
+                    <div className="px-4 py-1.5 text-[11px] leading-relaxed text-[#5f6368]">
+                      Setiap perubahan disimpan otomatis ke PocketBase.
+                    </div>
+                  </>
+                )}
+                {menuButton(
+                  'data',
+                  'Data',
+                  <>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setOpenMenu(null);
+                        openImportModal();
+                      }}
+                      className={menuItemClass}
+                    >
+                      <ClipboardPaste className="h-4 w-4 text-[#444746]" />
+                      Tempel data...
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={handleRecalculate}
+                      className={menuItemClass}
+                    >
+                      <Calculator className="h-4 w-4 text-[#444746]" />
+                      Hitung ulang formula sheet ini
+                    </button>
+                  </>
+                )}
+                {menuButton(
+                  'help',
+                  'Bantuan',
+                  <>
+                    <div className={menuNoteClass}>
+                      <Info className="mt-0.5 h-4 w-4 shrink-0 text-[#444746]" />
+                      <span>
+                        <strong className="font-medium">Tempel dari Google Sheets:</strong> salin
+                        area, lalu Ctrl+V langsung di sel spreadsheet.
+                      </span>
+                    </div>
+                    <div className={menuNoteClass}>
+                      <Cloud className="mt-0.5 h-4 w-4 shrink-0 text-[#444746]" />
+                      <span>Auto-save berjalan 1,2 detik setelah Anda berhenti mengetik.</span>
+                    </div>
+                    <div className={menuNoteClass}>
+                      <FileSpreadsheet className="mt-0.5 h-4 w-4 shrink-0 text-[#444746]" />
+                      <span>Sheet: Kas Utama, Debit, dan Kredit. Tahun aktif: {tahun}.</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="ml-auto hidden items-center gap-2 sm:flex">
                 <span
-                  key={meta.key}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-semibold"
+                  className={`flex items-center gap-1.5 text-[11px] ${statusView.tone}`}
+                  title={statusView.text}
                 >
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: meta.color }}
-                  />
-                  {meta.name}
+                  {statusView.icon}
+                  <span className="max-w-[240px] truncate">{statusView.text}</span>
                 </span>
-              ))}
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-[11px] font-semibold">
-                <ClipboardPaste className="w-3.5 h-3.5" />
-                Copy-paste Google Sheets didukung
-              </span>
+                {saveState === 'error' && sessionState === 'ready' && (
+                  <button
+                    type="button"
+                    onClick={handleRetrySave}
+                    className="text-[11px] font-medium text-[#0b57d0] hover:underline cursor-pointer"
+                  >
+                    Coba lagi
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            <div className="relative flex items-center">
+              <CalendarDays className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-[#5f6368]" />
+              <select
+                aria-label="Tahun Jurnal"
+                value={tahun}
+                onChange={(event) => {
+                  setOpenMenu(null);
+                  void handleYearChange(Number(event.target.value));
+                }}
+                disabled={loading || sessionState !== 'ready'}
+                className="h-8 appearance-none rounded-full border border-[#dadce0] bg-white pl-8 pr-7 text-[11px] font-medium text-[#1f1f1f] outline-none transition-colors hover:bg-[#f8fafd] focus:border-[#0b57d0] disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+              >
+                {JURNAL_YEARS.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-[#5f6368]" />
+            </div>
+
+            <button
+              type="button"
+              onClick={openImportModal}
+              disabled={sessionState !== 'ready' || importing}
+              className="flex h-8 items-center gap-1.5 rounded-full bg-[#0b57d0] px-3 text-[11px] font-medium text-white transition-colors hover:bg-[#0842a0] disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+              title="Tempel data yang disalin dari Google Sheets"
+            >
+              <ClipboardPaste className="h-4 w-4" />
+              <span className="hidden sm:inline">Tempel data</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleReload()}
+              disabled={loading || sessionState !== 'ready'}
+              title="Muat ulang data dari PocketBase"
+              aria-label="Muat ulang data Jurnal"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-[#444746] transition-colors hover:bg-[#f1f3f4] disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+
+            <div
+              title={`Masuk sebagai ${displayUser}`}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0b57d0] text-[11px] font-medium text-white select-none"
+            >
+              {avatarInitial}
             </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
-            <CalendarDays className="w-4 h-4 text-slate-400 shrink-0" />
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Tahun</span>
-            <select
-              value={tahun}
-              onChange={(event) => void handleYearChange(Number(event.target.value))}
-              disabled={loading || sessionState !== 'authenticated'}
-              className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none disabled:opacity-60 cursor-pointer"
-            >
-              {JURNAL_YEARS.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div
-            className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[11px] font-semibold ${statusView.chipClass}`}
-          >
-            {statusView.icon}
-            <span className="max-w-[210px] truncate" title={statusView.text}>
-              {statusView.text}
-            </span>
-            {saveState === 'error' && sessionState === 'authenticated' && (
-              <button
-                type="button"
-                onClick={handleRetrySave}
-                className="ml-1 text-[10px] font-bold underline underline-offset-2 cursor-pointer"
-              >
-                Coba lagi
-              </button>
-            )}
-          </div>
-
-          {sessionState === 'authenticated' && (
-            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-semibold text-slate-600">
-              <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
-              {sessionUser || currentUsername || 'langgo'}
-            </span>
-          )}
-
-          <button
-            type="button"
-            onClick={openImportModal}
-            disabled={sessionState !== 'authenticated' || importing}
-            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Tempel data yang disalin dari Google Sheets"
-          >
-            <ClipboardPaste className="w-4 h-4" />
-            <span>Tempel Data</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => void handleReload()}
-            disabled={loading || sessionState !== 'authenticated'}
-            title="Muat ulang data dari PocketBase"
-            className="p-2.5 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-      </div>
-
-      {importNotice && (
-        <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 text-xs text-emerald-800">
-          <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-          <span className="flex-1">{importNotice}</span>
-          <button
-            type="button"
-            onClick={() => setImportNotice(null)}
-            aria-label="Tutup notifikasi"
-            className="text-emerald-700/70 hover:text-emerald-900 cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {sessionState === 'checking' ? (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs flex items-center justify-center py-24 text-slate-500 text-sm gap-2">
-          <Loader2 className="w-5 h-5 animate-spin" />
-          Memeriksa sesi developer...
-        </div>
-      ) : sessionState === 'login' || sessionState === 'expired' ? (
-        loginPanel
-      ) : loadError ? (
-        <div className="bg-white rounded-2xl border border-red-200 shadow-xs p-8 text-center">
-          <AlertCircle className="w-10 h-10 text-red-500 mx-auto mb-3" />
-          <h3 className="text-sm font-bold text-slate-900 mb-1">Jurnal gagal dimuat</h3>
-          <p className="text-xs text-slate-500 mb-4">{loadError}</p>
-          <button
-            type="button"
-            onClick={() => void handleReload()}
-            className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
-          >
-            Coba lagi
-          </button>
-        </div>
-      ) : (
-        <>
-          <div className="relative h-[calc(100dvh-17rem)] min-h-[520px] bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-            {workbookData && (
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {sessionState === 'checking' ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-xs text-[#5f6368]">
+              <Loader2 className="h-6 w-6 animate-spin text-[#0b57d0]" />
+              Menghubungkan sesi DEVELOPER...
+            </div>
+          ) : sessionState === 'error' ? (
+            <div className="flex flex-1 items-center justify-center overflow-y-auto p-6">
+              <div className="w-full max-w-md text-center">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#fce8e6] text-[#c5221f]">
+                  <AlertCircle className="h-6 w-6" />
+                </div>
+                <h2 className="text-base font-medium text-[#1f1f1f]">Jurnal tidak dapat dimuat</h2>
+                <p className="mt-1.5 text-xs leading-relaxed text-[#5f6368]">{loadError}</p>
+                <p className="mt-2 text-[11px] leading-relaxed text-[#5f6368]">
+                  Sesi dibuat otomatis dari akun DEVELOPER. Pastikan JOURNAL_DEV_USER dan
+                  JOURNAL_DEV_PASSWORD di .env VPS cocok dengan akun ini.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void bootstrap()}
+                  className="mt-5 rounded-full bg-[#0b57d0] px-5 py-2 text-xs font-medium text-white transition-colors hover:bg-[#0842a0] cursor-pointer"
+                >
+                  Coba lagi
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="jurnal-grid relative min-h-0 flex-1">
               <div
-                className="h-full w-full jurnal-workbook"
+                className="jurnal-workbook h-full w-full"
                 onPointerDownCapture={markUserInteraction}
                 onKeyDownCapture={markUserInteraction}
               >
                 <Workbook
                   key={`${tahun}-${loadKey}`}
                   ref={workbookRef}
-                  data={workbookData}
+                  data={workbookData || []}
                   onChange={handleWorkbookChange}
                   hooks={hooks}
                   allowEdit
@@ -985,41 +1099,78 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
                   currency="Rp"
                 />
               </div>
-            )}
-            {(loading || preparing || importing) && (
-              <div className="absolute inset-0 z-20 bg-white/80 backdrop-blur-[1px] flex items-center justify-center">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  {importing
-                    ? 'Menempel data dari Google Sheets...'
-                    : loading
-                      ? `Memuat Jurnal ${tahun}...`
-                      : 'Menghitung formula Jurnal...'}
+              {(loading || preparing || importing) && (
+                <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
+                  <div className="flex items-center gap-2 rounded-full border border-[#dadce0] bg-white px-3.5 py-2 text-xs font-medium text-[#444746] shadow-sm">
+                    <Loader2 className="h-4 w-4 animate-spin text-[#0b57d0]" />
+                    {importing
+                      ? 'Menempel data dari Google Sheets...'
+                      : loading
+                        ? `Memuat Jurnal ${tahun}...`
+                        : 'Menghitung formula Jurnal...'}
+                  </div>
                 </div>
+              )}
+            </div>
+          )}
+
+          <div className="pointer-events-none absolute bottom-12 left-3 z-30 flex w-[min(560px,calc(100%-1.5rem))] flex-col gap-2 sm:left-4">
+            {saveState === 'error' && sessionState === 'ready' && (
+              <div className="pointer-events-auto flex items-start gap-2.5 rounded-md bg-[#3c4043] px-4 py-2.5 text-xs leading-relaxed text-white shadow-lg">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#f6aea9]" />
+                <span className="flex-1">{saveError || 'Gagal menyimpan perubahan.'}</span>
+                <button
+                  type="button"
+                  onClick={handleRetrySave}
+                  className="shrink-0 font-medium text-[#a8c7fa] hover:underline cursor-pointer"
+                >
+                  Coba lagi
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSaveError(null);
+                    setSaveState('idle');
+                  }}
+                  aria-label="Tutup peringatan simpan"
+                  className="shrink-0 text-white/70 hover:text-white cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            {importNotice && (
+              <div className="pointer-events-auto flex items-start gap-2.5 rounded-md bg-[#1f1f1f] px-4 py-2.5 text-xs leading-relaxed text-white shadow-lg">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#81c995]" />
+                <span className="flex-1">{importNotice}</span>
+                <button
+                  type="button"
+                  onClick={() => setImportNotice(null)}
+                  aria-label="Tutup notifikasi"
+                  className="shrink-0 text-white/70 hover:text-white cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
             )}
           </div>
-          <p className="text-[10px] text-slate-500 leading-relaxed px-1">
-            Setiap perubahan dikirim otomatis ke server setelah berhenti mengetik. Untuk memindahkan
-            data dari Google Sheets, klik <strong>Tempel Data</strong> atau tekan <strong>Ctrl+V</strong>{' '}
-            langsung di sel spreadsheet.
-          </p>
-        </>
-      )}
+        </div>
+      </div>
 
       {importOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[92vh] overflow-y-auto">
-            <div className="flex items-start justify-between gap-3 px-5 sm:px-6 pt-5 pb-4 border-b border-slate-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#202124]/40 p-4 backdrop-blur-[2px]">
+          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-lg border border-[#dadce0] bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-[#e1e3e1] px-5 pb-4 pt-5 sm:px-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
-                  <ClipboardPaste className="w-5 h-5" />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#0b57d0] text-white">
+                  <ClipboardPaste className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-base font-extrabold text-slate-900">
-                    Tempel Data dari Google Sheets
+                  <h2 className="text-base font-medium text-[#1f1f1f]">
+                    Tempel data dari Google Sheets
                   </h2>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-[#5f6368]">
                     Salin area spreadsheet, lalu tempel di kotak di bawah ini.
                   </p>
                 </div>
@@ -1027,10 +1178,10 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
               <button
                 type="button"
                 onClick={() => setImportOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+                className="rounded-full p-1.5 text-[#444746] hover:bg-[#f1f3f4] cursor-pointer"
                 aria-label="Tutup"
               >
-                <X className="w-4 h-4" />
+                <X className="h-4 w-4" />
               </button>
             </div>
 
@@ -1043,7 +1194,7 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
                   <select
                     value={importTarget}
                     onChange={(event) => setImportTarget(event.target.value as JurnalHalaman)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    className="w-full rounded-md border border-[#dadce0] bg-white px-3 py-2.5 text-xs font-medium text-[#1f1f1f] focus:border-[#0b57d0] focus:outline-none focus:ring-2 focus:ring-[#0b57d0]/15"
                   >
                     {JURNAL_SHEET_META.map((meta) => (
                       <option key={meta.key} value={meta.key}>
@@ -1059,7 +1210,7 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
                   <select
                     value={importStart}
                     onChange={(event) => setImportStart(event.target.value as 'a1' | 'active')}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    className="w-full rounded-md border border-[#dadce0] bg-white px-3 py-2.5 text-xs font-medium text-[#1f1f1f] focus:border-[#0b57d0] focus:outline-none focus:ring-2 focus:ring-[#0b57d0]/15"
                   >
                     <option value="a1">A1 (awal sheet)</option>
                     <option value="active">
@@ -1090,7 +1241,7 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
                   placeholder={
                     'Tempel di sini...\nContoh: Ctrl+C dari Google Sheets, lalu Ctrl+V di kotak ini.'
                   }
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-y"
+                  className="w-full resize-y rounded-md border border-[#dadce0] bg-[#f8fafd] px-3 py-2.5 font-mono text-xs text-[#1f1f1f] focus:border-[#0b57d0] focus:outline-none focus:ring-2 focus:ring-[#0b57d0]/15"
                 />
                 <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
                   <Table2 className="w-3.5 h-3.5" />
@@ -1136,12 +1287,12 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
                 </div>
               )}
 
-              <label className="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 cursor-pointer">
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-[#dadce0] bg-[#f8fafd] px-3 py-2.5">
                 <input
                   type="checkbox"
                   checked={importPreserve}
                   onChange={(event) => setImportPreserve(event.target.checked)}
-                  className="mt-0.5 h-4 w-4 accent-emerald-600"
+                  className="mt-0.5 h-4 w-4 accent-[#0b57d0]"
                 />
                 <span className="text-[11px] leading-relaxed text-slate-600">
                   <strong className="text-slate-800">
@@ -1168,11 +1319,11 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
               )}
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-2 px-5 sm:px-6 py-4 border-t border-slate-200 bg-slate-50/60 rounded-b-2xl">
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#e1e3e1] bg-[#f8fafd] px-5 py-4 sm:px-6">
               <button
                 type="button"
                 onClick={() => setImportOpen(false)}
-                className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs font-bold hover:bg-slate-50 cursor-pointer"
+                className="rounded-full border border-[#dadce0] bg-white px-4 py-2 text-xs font-medium text-[#0b57d0] hover:bg-[#f1f3f4] cursor-pointer"
               >
                 Batal
               </button>
@@ -1180,10 +1331,10 @@ export const JurnalScreen: React.FC<JurnalScreenProps> = ({ currentUsername }) =
                 type="button"
                 onClick={applyImport}
                 disabled={!importText.trim() || importing}
-                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
+                className="flex items-center gap-2 rounded-full bg-[#0b57d0] px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-[#0842a0] disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
               >
-                <ClipboardPaste className="w-4 h-4" />
-                Tempel ke Spreadsheet
+                <ClipboardPaste className="h-4 w-4" />
+                Tempel ke spreadsheet
               </button>
             </div>
           </div>

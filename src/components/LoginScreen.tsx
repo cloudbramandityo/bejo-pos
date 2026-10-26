@@ -13,7 +13,7 @@ import {
 import { AppUser } from '../types';
 import { StoreLogo } from './StoreLogo';
 import { verifyDeveloperCredentials, getPermanentDeveloperUser } from '../utils/authSecurity';
-import { closeJournalSession, openJournalSession } from '../lib/journalApi';
+import { closeJournalSession } from '../lib/journalApi';
 
 interface LoginScreenProps {
   users: AppUser[];
@@ -51,8 +51,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     setTimeout(() => {
       // 1. Check permanent master developer credentials
       if (verifyDeveloperCredentials(cleanUsername, cleanPassword)) {
-        // Buka sesi server untuk modul Jurnal (HttpOnly, terpisah dari sesi UI).
-        openJournalSession(cleanUsername, cleanPassword).catch(() => {});
         setIsLoading(false);
         onLoginSuccess(getPermanentDeveloperUser());
         return;

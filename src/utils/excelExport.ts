@@ -29,8 +29,12 @@ export function exportTransactionsToExcel(
 
   let totalHpp = 0;
 
+  const isCancelledInvoice = (tx: Transaction) =>
+    !!tx.isInvoice && (tx.invoiceStatus === 'CANCELLED' || tx.total === 0);
+
   // Flatten transaction rows for Excel
   const rows = transactions.flatMap((tx) => {
+    const isVoid = isCancelledInvoice(tx);
     return tx.items.map((item, idx) => {
       const prod =
         (item.productId ? productMap.get(item.productId) : null) ||
@@ -38,7 +42,8 @@ export function exportTransactionsToExcel(
         (item.name ? productByNameMap.get(item.name.trim().toLowerCase()) : null);
 
       const profitRes = calculateSalesItemCost(item, prod);
-      totalHpp += profitRes.totalCost;
+      const itemHpp = isVoid ? 0 : profitRes.totalCost;
+      totalHpp += itemHpp;
 
       return {
         'No. Invoice': tx.id,
@@ -59,8 +64,8 @@ export function exportTransactionsToExcel(
         'Satuan': item.unit,
         'Harga Satuan': item.unitPrice,
         'Total Item': item.totalPrice,
-        'Estimasi HPP Item': profitRes.totalCost,
-        'Estimasi Laba Item': profitRes.itemProfit,
+        'Estimasi HPP Item': itemHpp,
+        'Estimasi Laba Item': isVoid ? 0 : profitRes.itemProfit,
         'Subtotal Transaksi': idx === 0 ? tx.subtotal : '',
         'Diskon Transaksi': idx === 0 ? tx.discount : '',
         'Total Bayar': idx === 0 ? tx.total : '',
@@ -75,8 +80,11 @@ export function exportTransactionsToExcel(
 
   // Summary sheet data
   const totalOmzet = transactions.reduce((sum, t) => sum + t.total, 0);
-  const totalLabaBersih = totalOmzet - totalHpp;
-  const marginPercent = totalOmzet > 0 ? (totalLabaBersih / totalOmzet) * 100 : 0;
+  const totalPajak = transactions.reduce((sum, t) => sum + (t.tax || 0), 0);
+  // PPN yang dipungut bukan pendapatan usaha
+  const netRevenue = totalOmzet - totalPajak;
+  const totalLabaBersih = netRevenue - totalHpp;
+  const marginPercent = netRevenue > 0 ? (totalLabaBersih / netRevenue) * 100 : 0;
   const totalCash = transactions.reduce((sum, t) => sum + t.paymentMethods.cash, 0);
   const totalTransfer = transactions.reduce((sum, t) => sum + t.paymentMethods.transfer, 0);
   const totalQris = transactions.reduce((sum, t) => sum + t.paymentMethods.qris, 0);
@@ -86,6 +94,8 @@ export function exportTransactionsToExcel(
     { 'Metrik': 'Toko', 'Nilai': 'Bejo Stiker' },
     { 'Metrik': 'Jumlah Transaksi', 'Nilai': transactions.length },
     { 'Metrik': 'Total Omzet Penjualan', 'Nilai': totalOmzet },
+    { 'Metrik': 'Total PPN Dipungut', 'Nilai': totalPajak },
+    { 'Metrik': 'Omzet Neto (tanpa PPN)', 'Nilai': netRevenue },
     { 'Metrik': 'Total Estimasi Modal (HPP)', 'Nilai': totalHpp },
     { 'Metrik': 'Total Laba Bersih Penjualan', 'Nilai': totalLabaBersih },
     { 'Metrik': 'Margin Laba Bersih (%)', 'Nilai': `${marginPercent.toFixed(2)}%` },

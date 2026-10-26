@@ -106,7 +106,8 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
   const [periodType, setPeriodType] = useState<PeriodType>('HARIAN');
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const today = new Date();
-    return today.toISOString().slice(0, 10);
+    const pad = (x: number) => String(x).padStart(2, '0');
+    return `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
   });
   const [selectedShiftFilter, setSelectedShiftFilter] = useState<string>('ALL'); // 'ALL', 'Shift 1', 'Shift 2', etc.
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
@@ -341,8 +342,8 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
 
       if (periodType === 'BULANAN') {
         const txEpoch = getTransactionDateTimeEpoch(tx);
+        if (!txEpoch) return false;
         const txDateObj = new Date(txEpoch);
-        if (isNaN(txDateObj.getTime())) return true;
         return (
           txDateObj.getMonth() === selectedMonth &&
           txDateObj.getFullYear() === selectedYear
@@ -532,8 +533,8 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
 
       if (periodType === 'BULANAN') {
         const txEpoch = getTransactionDateTimeEpoch(tx);
+        if (!txEpoch) return false;
         const txDateObj = new Date(txEpoch);
-        if (isNaN(txDateObj.getTime())) return true;
         return (
           txDateObj.getMonth() === selectedMonth &&
           txDateObj.getFullYear() === selectedYear
@@ -695,8 +696,8 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
       }
       if (periodType === 'BULANAN') {
         const txEpoch = getTransactionDateTimeEpoch(tx);
+        if (!txEpoch) return false;
         const txDateObj = new Date(txEpoch);
-        if (isNaN(txDateObj.getTime())) return true;
         return (
           txDateObj.getMonth() === selectedMonth &&
           txDateObj.getFullYear() === selectedYear
@@ -765,7 +766,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
     activeCetakAgenList.forEach((tx) => {
       const agentName = tx.customer?.name || 'Agen';
       const entry = getOrInit(agentName);
-      entry.amountCetak += tx.total;
+      entry.amountCetak += Math.max(0, tx.total - (tx.tax || 0));
       let sumCost = 0;
       let sumQty = 0;
       tx.items?.forEach((it) => {
@@ -779,7 +780,8 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
         sumQty += (it.qty || 1);
       });
       entry.kulakCetak += sumCost;
-      entry.labaCetak += (tx.total - sumCost);
+      // PPN yang dipungut bukan pendapatan, jadi laba agen dihitung dari omzet neto PPN
+      entry.labaCetak += (Math.max(0, tx.total - (tx.tax || 0)) - sumCost);
       entry.qtyCetak += sumQty;
       entry.countCetak += 1;
     });

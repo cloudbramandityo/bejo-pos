@@ -14,6 +14,7 @@ import {
 } from '../types/tax';
 import { getStoredTransactions } from './storage';
 import { getStoredInvoices, convertInvoicesToTransactions } from './invoiceStorage';
+import { convertDdMmYyToYyyyMmDd } from './formatters';
 import {
   saveTaxpayerProfileCloud,
   saveAllTaxAnnualReturnsCloud,
@@ -221,7 +222,9 @@ export const recomputeTaxReturn = (spt: TaxAnnualReturn1770): TaxAnnualReturn177
       const opex = Math.max(0, updated.businessActivity.operatingExpenses || 0);
       const posCorr = Math.max(0, updated.businessActivity.positiveFiscalAdjustment || 0);
       const negCorr = Math.max(0, updated.businessActivity.negativeFiscalAdjustment || 0);
-      updated.businessActivity.netIncomeCalculated = Math.max(0, (gross - cogs - opex) + posCorr - negCorr);
+      // Rugi usaha tidak boleh di-floor ke 0: rugi tetap mengurangi total penghasilan neto
+      // (kompensasi ke tahun berikutnya diisi manual pada kolom "Kompensasi Kerugian").
+      updated.businessActivity.netIncomeCalculated = (gross - cogs - opex) + posCorr - negCorr;
     }
   } else {
     updated.businessActivity.netIncomeCalculated = 0;
@@ -678,17 +681,26 @@ export const importBillingsFromPosTransactions = (year: number): MonthlyTaxBilli
     new Map([...transactions, ...invoiceTransactions].map(t => [t.id, t])).values()
   );
 
+  // Tanggal transaksi POS tersimpan sebagai DD/MM/YY, sedangkan invoice YYYY-MM-DD.
+  // Normalisasi ke YYYY-MM-DD agar filter tahun/bulan tidak melewatkan transaksi POS.
+  const toDateKey = (value?: string): string => {
+    const raw = (value || '').trim();
+    if (!raw) return '';
+    if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+    return convertDdMmYyToYyyyMmDd(raw.split(/[T ]/)[0]);
+  };
+
   // Filter for transactions belonging to the requested year
   const yearTx = allSales.filter(t => {
-    if (!t.date) return false;
-    const y = parseInt(t.date.slice(0, 4), 10);
-    return y === year;
+    const dateKey = toDateKey(t.date);
+    if (!dateKey) return false;
+    return parseInt(dateKey.slice(0, 4), 10) === year;
   });
 
   const rawList: MonthlyTaxBilling[] = MONTH_NAMES.map((monthName, idx) => {
     const monthNum = idx + 1;
     const monthStr = monthNum < 10 ? `0${monthNum}` : `${monthNum}`;
-    const monthTransactions = yearTx.filter(t => t.date && t.date.slice(5, 7) === monthStr);
+    const monthTransactions = yearTx.filter(t => toDateKey(t.date).slice(5, 7) === monthStr);
     // Omzet untuk PPh Final tidak termasuk PPN yang dipungut
     const monthGross = monthTransactions.reduce(
       (sum, t) => sum + Math.max(0, (Number(t.total) || 0) - (Number(t.tax) || 0)),

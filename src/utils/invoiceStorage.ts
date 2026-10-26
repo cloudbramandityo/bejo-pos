@@ -1111,9 +1111,10 @@ export function convertInvoicesToTransactions(invoices: Invoice[]): Transaction[
       customerCategory: 'INVOICE',
       items: mappedItems,
       totalQty: mappedItems.reduce((s, it) => s + (it.qty || 1), 0),
-      subtotal: inv.subtotal || 0,
-      tax: inv.taxAmount || 0,
-      discount: inv.discountAmount || 0,
+      // Invoice batal tidak boleh menyumbang omzet, DPP, PPN, maupun diskon ke laporan
+      subtotal: isCancelled ? 0 : (inv.subtotal || 0),
+      tax: isCancelled ? 0 : (inv.taxAmount || 0),
+      discount: isCancelled ? 0 : (inv.discountAmount || 0),
       total: finalTotal,
       paymentMethods: {
         cash,

@@ -20,7 +20,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Transaction, StockTransaction, Shift } from '../../types';
 import { getStoredInvoices, convertInvoicesToTransactions } from '../../utils/invoiceStorage';
 import { FinancialSettings, DEFAULT_FINANCIAL_SETTINGS } from '../../utils/financialStorage';
-import { formatRupiah } from '../../utils/formatters';
+import { formatRupiah, convertDdMmYyToYyyyMmDd } from '../../utils/formatters';
 import {
   Landmark,
   TrendingUp,
@@ -64,22 +64,57 @@ const num = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+/** Normalisasi tanggal transaksi: POS memakai DD/MM/YY, invoice/stok memakai YYYY-MM-DD */
+const toIsoDateKey = (dateStr: string): string => {
+  const raw = (dateStr || '').trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const ddMmYy = raw.split(/[T ]/)[0];
+  return convertDdMmYyToYyyyMmDd(ddMmYy);
+};
+
 /** Filter pada rentang tanggal (inclusive), string YYYY-MM-DD */
 const withinRange = (dateStr: string, from: string, to: string): boolean => {
-  if (!dateStr) return false;
-  const d = dateStr.slice(0, 10);
+  const d = toIsoDateKey(dateStr);
+  if (!d) return false;
   return d >= from && d <= to;
 };
 
 const prevMonthRange = (): { from: string; to: string } => {
   const now = new Date();
   const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const last = new Date(now.getFullYear(), now.getMonth(), 0);
   const pad = (x: number) => String(x).padStart(2, '0');
   return {
     from: `${first.getFullYear()}-${pad(first.getMonth() + 1)}-${pad(first.getDate())}`,
     to: `${last.getFullYear()}-${pad(last.getMonth() + 1)}-${pad(last.getDate())}`,
   };
+};
+
+const MONTH_NAMES_ID = [
+  'januari', 'februari', 'maret', 'april', 'mei', 'juni',
+  'juli', 'agustus', 'september', 'oktober', 'november', 'desember',
+];
+
+/** Tanggal shift dalam format YYYY-MM-DD (startTime ISO diprioritaskan karena shift.date memakai nama bulan Indonesia) */
+const getShiftDateKey = (shift: Shift): string => {
+  if (shift.startTime) {
+    const d = new Date(shift.startTime);
+    if (!isNaN(d.getTime())) {
+      const pad = (x: number) => String(x).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+  }
+  const raw = (shift.date || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const m = raw.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
+  if (m) {
+    const monthIdx = MONTH_NAMES_ID.indexOf(m[2].toLowerCase());
+    if (monthIdx >= 0) {
+      return `${m[3]}-${String(monthIdx + 1).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    }
+  }
+  return '';
 };
 
 export const LaporanKeuanganScreen: React.FC<LaporanKeuanganScreenProps> = ({
@@ -113,15 +148,20 @@ export const LaporanKeuanganScreen: React.FC<LaporanKeuanganScreenProps> = ({
 
     const inPeriod = allSalesTransactions.filter((t) => withinRange(t.date, fromDate, toDate));
     const stockInPeriod = stockTransactions.filter((s) => withinRange(s.date, fromDate, toDate));
-    const shiftInPeriod = shifts.filter((s) =>
-      withinRange((s.date || s.startTime || '').slice(0, 10), fromDate, toDate)
-    );
+    const shiftInPeriod = shifts.filter((s) => withinRange(getShiftDateKey(s), fromDate, toDate));
+
+    const isCancelledInvoiceTx = (t: Transaction) =>
+      !!t.isInvoice && (t.invoiceStatus === 'CANCELLED' || num(t.total) === 0);
 
     const grossRevenue = inPeriod.reduce((sum, t) => sum + num(t.total), 0);
     // PPN yang dipungut bukan pendapatan usaha, jadi laba rugi memakai nilai neto PPN
     const taxCollected = inPeriod.reduce((sum, t) => sum + num(t.tax), 0);
     const revenue = grossRevenue - taxCollected;
-    const qtySold = inPeriod.reduce((sum, t) => sum + num(t.totalQty), 0);
+    // Qty invoice batal tidak dihitung sebagai barang terjual
+    const qtySold = inPeriod.reduce(
+      (sum, t) => sum + (isCancelledInvoiceTx(t) ? 0 : num(t.totalQty)),
+      0
+    );
     const txCount = inPeriod.length;
     const cashIn = inPeriod.reduce(
       (sum, t) =>

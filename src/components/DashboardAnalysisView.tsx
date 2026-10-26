@@ -52,7 +52,7 @@ import {
   Area
 } from 'recharts';
 import { Transaction, StockTransaction, Product, Supplier, Agent, ProductCategoryItem } from '../types';
-import { formatRupiah, formatVolume, isTransactionOnDate } from '../utils/formatters';
+import { formatRupiah, formatVolume, isTransactionOnDate, getTransactionDateTimeEpoch } from '../utils/formatters';
 import { normalizeStockTransaction, calculateStockItemProfit, calculateSalesItemCost } from '../utils/stockUtils';
 
 interface DashboardAnalysisViewProps {
@@ -123,6 +123,20 @@ const AGENT_COLORS = [
   '#0284c7', // Sky 600
 ];
 
+/** Kunci tanggal lokal YYYY-MM-DD (hindari pergeseran hari akibat konversi UTC) */
+const toLocalDateKey = (date: Date): string => {
+  const pad = (x: number) => String(x).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+/** Kunci tanggal transaksi/stock: pakai field date bila sudah ISO, selain itu konversi timestamp ke tanggal lokal */
+const getTransactionDateKey = (tx: { date?: string; time?: string; timestamp?: number }): string => {
+  if (tx.date && /^\d{4}-\d{2}-\d{2}/.test(tx.date.trim())) return tx.date.trim().slice(0, 10);
+  const epoch = getTransactionDateTimeEpoch(tx);
+  if (!epoch) return '';
+  return toLocalDateKey(new Date(epoch));
+};
+
 export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
   transactions,
   stockTransactions,
@@ -173,10 +187,13 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
 
   // Filter Transactions and Stock Transactions by current period
   const { filteredSales, filteredPurchases, filteredAgentTakes } = useMemo(() => {
-    const isMatch = (timestamp: number, dateStr?: string) => {
+    const isMatch = (tx: { date?: string; time?: string; timestamp?: number }) => {
       if (periodType === 'HARIAN') {
-        return isTransactionOnDate({ date: dateStr, timestamp }, selectedDate);
+        return isTransactionOnDate(tx, selectedDate);
       }
+      // Gunakan fallback date + time agar transaksi tanpa timestamp tetap masuk periode
+      const txEpoch = getTransactionDateTimeEpoch(tx);
+      if (!txEpoch) return false;
       if (periodType === 'MINGGUAN') {
         const targetDate = new Date(selectedDate);
         const day = targetDate.getDay();
@@ -186,11 +203,10 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
         const sunday = new Date(monday);
         sunday.setDate(monday.getDate() + 6);
         sunday.setHours(23, 59, 59, 999);
-        return timestamp >= monday.getTime() && timestamp <= sunday.getTime();
+        return txEpoch >= monday.getTime() && txEpoch <= sunday.getTime();
       }
       if (periodType === 'BULANAN') {
-        const d = new Date(timestamp);
-        if (isNaN(d.getTime())) return true;
+        const d = new Date(txEpoch);
         return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
       }
       return true; // SEMUA
@@ -199,11 +215,11 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
     // Invoice batal / bernilai nol tidak boleh menambah omzet maupun HPP
     const sales = transactions.filter(
       (t) =>
-        isMatch(t.timestamp, t.date) &&
+        isMatch(t) &&
         !(t.isInvoice && (t.invoiceStatus === 'CANCELLED' || t.total === 0))
     );
-    const purchases = normalizedStockTxs.filter((st) => st.type === 'PEMBELIAN' && isMatch(st.timestamp, st.date));
-    const agentTakes = normalizedStockTxs.filter((st) => st.type === 'PENGAMBILAN' && isMatch(st.timestamp, st.date));
+    const purchases = normalizedStockTxs.filter((st) => st.type === 'PEMBELIAN' && isMatch(st));
+    const agentTakes = normalizedStockTxs.filter((st) => st.type === 'PENGAMBILAN' && isMatch(st));
 
     return {
       filteredSales: sales,
@@ -409,7 +425,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
 
       // Also include current hour if date is today
       const now = new Date();
-      const isToday = selectedDate === now.toISOString().slice(0, 10);
+      const isToday = selectedDate === toLocalDateKey(now);
       if (isToday) {
         const currentH = now.getHours();
         if (currentH > maxHour) maxHour = Math.min(23, currentH);
@@ -494,7 +510,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
       for (let i = 0; i < 7; i++) {
         const d = new Date(monday);
         d.setDate(monday.getDate() + i);
-        const dateKey = d.toISOString().slice(0, 10);
+        const dateKey = toLocalDateKey(d);
         const dayLabel = `${DAY_NAMES_ID[i]} (${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')})`;
 
         dayMap.set(dateKey, {
@@ -509,7 +525,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
 
       // Populate Sales
       filteredSales.forEach((s) => {
-        const dateKey = s.date && s.date.length === 10 ? s.date : new Date(s.timestamp).toISOString().slice(0, 10);
+        const dateKey = getTransactionDateKey(s);
         const slot = dayMap.get(dateKey);
         if (slot) {
           slot.sales += s.total;
@@ -519,7 +535,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
 
       // Populate Agent Takes
       filteredAgentTakes.forEach((at) => {
-        const dateKey = at.date && at.date.length === 10 ? at.date : new Date(at.timestamp).toISOString().slice(0, 10);
+        const dateKey = getTransactionDateKey(at);
         const slot = dayMap.get(dateKey);
         if (slot) {
           const amt = at.totalAmount || 0;
@@ -542,7 +558,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
 
       // Populate Purchases
       filteredPurchases.forEach((p) => {
-        const dateKey = p.date && p.date.length === 10 ? p.date : new Date(p.timestamp).toISOString().slice(0, 10);
+        const dateKey = getTransactionDateKey(p);
         const slot = dayMap.get(dateKey);
         if (slot) {
           slot.purchase += p.totalAmount || 0;
@@ -575,7 +591,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
 
       // Populate Sales
       filteredSales.forEach((s) => {
-        const dateKey = s.date && s.date.length === 10 ? s.date : new Date(s.timestamp).toISOString().slice(0, 10);
+        const dateKey = getTransactionDateKey(s);
         const slot = dayMap.get(dateKey);
         if (slot) {
           slot.sales += s.total;
@@ -585,7 +601,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
 
       // Populate Agent Takes
       filteredAgentTakes.forEach((at) => {
-        const dateKey = at.date && at.date.length === 10 ? at.date : new Date(at.timestamp).toISOString().slice(0, 10);
+        const dateKey = getTransactionDateKey(at);
         const slot = dayMap.get(dateKey);
         if (slot) {
           const amt = at.totalAmount || 0;
@@ -608,7 +624,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
 
       // Populate Purchases
       filteredPurchases.forEach((p) => {
-        const dateKey = p.date && p.date.length === 10 ? p.date : new Date(p.timestamp).toISOString().slice(0, 10);
+        const dateKey = getTransactionDateKey(p);
         const slot = dayMap.get(dateKey);
         if (slot) {
           slot.purchase += p.totalAmount || 0;
@@ -623,10 +639,8 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
     // ----------------------------------------------------
     const dayMap = new Map<string, { date: string; displayDate: string; sales: number; agent: number; purchase: number; profit: number }>();
 
-    const getDayKey = (timestamp: number, dateStr?: string) => {
-      if (dateStr && dateStr.length === 10) return dateStr;
-      const d = new Date(timestamp);
-      return d.toISOString().slice(0, 10);
+    const getDayKey = (tx: { date?: string; time?: string; timestamp?: number }) => {
+      return getTransactionDateKey(tx);
     };
 
     const formatDisplay = (dateKey: string) => {
@@ -638,7 +652,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
     };
 
     filteredSales.forEach((s) => {
-      const key = getDayKey(s.timestamp, s.date);
+      const key = getDayKey(s);
       const cur = dayMap.get(key) || { date: key, displayDate: formatDisplay(key), sales: 0, agent: 0, purchase: 0, profit: 0 };
       cur.sales += s.total;
       cur.profit += calculateNetSalesProfit(s, productMap, productByCodeMap, productByNameMap);
@@ -646,7 +660,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
     });
 
     filteredAgentTakes.forEach((at) => {
-      const key = getDayKey(at.timestamp, at.date);
+      const key = getDayKey(at);
       const cur = dayMap.get(key) || { date: key, displayDate: formatDisplay(key), sales: 0, agent: 0, purchase: 0, profit: 0 };
       const amt = at.totalAmount || 0;
       cur.agent += amt;
@@ -668,7 +682,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
     });
 
     filteredPurchases.forEach((p) => {
-      const key = getDayKey(p.timestamp, p.date);
+      const key = getDayKey(p);
       const cur = dayMap.get(key) || { date: key, displayDate: formatDisplay(key), sales: 0, agent: 0, purchase: 0, profit: 0 };
       cur.purchase += p.totalAmount || 0;
       dayMap.set(key, cur);

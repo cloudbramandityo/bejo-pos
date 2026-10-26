@@ -76,7 +76,9 @@ import {
   formatRupiah,
   formatNumber,
   formatNumberInput,
-  parseNumber
+  parseNumber,
+  convertDdMmYyToYyyyMmDd,
+  getTransactionDateTimeEpoch
 } from '../utils/formatters';
 import {
   getProductStockPrice,
@@ -116,6 +118,32 @@ export interface AgentOrderItem {
   availableStock: number;
   stockFormulaText?: string;
 }
+
+// Tanggal transaksi POS tersimpan DD/MM/YY, sedangkan stok/invoice YYYY-MM-DD.
+// Normalisasi agar filter & rekap bulanan agen tidak melewatkan transaksi POS.
+const toAgentDateKey = (value?: string): string => {
+  const raw = (value || '').trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  return convertDdMmYyToYyyyMmDd(raw.split(/[T ]/)[0]);
+};
+
+const getAgentMonthKey = (tx: { date?: string; timestamp?: number }): string => {
+  const dateKey = toAgentDateKey(tx.date);
+  if (dateKey) return dateKey.slice(0, 7);
+  if (tx.timestamp && tx.timestamp > 0) {
+    const d = new Date(tx.timestamp);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  }
+  return '';
+};
+
+const getCurrentLocalMonthKey = (): string => {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+};
 
 interface AgentScreenProps {
   products: Product[];
@@ -914,10 +942,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     );
 
     groupedPengambilan.forEach((st) => {
-      let timestamp = st.timestamp || 0;
-      if (!timestamp && st.date) {
-        timestamp = new Date(`${st.date}T${st.time || '00:00:00'}`).getTime() || 0;
-      }
+      const timestamp = st.timestamp || getTransactionDateTimeEpoch(st);
 
       const itemsList = (st.items || []).map((it) => ({
         productId: it.productId,
@@ -953,10 +978,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     const agenPosTxList = (transactions || []).filter((pt) => isPosAgenTransaction(pt));
 
     agenPosTxList.forEach((pt) => {
-      let timestamp = pt.timestamp || 0;
-      if (!timestamp && pt.date) {
-        timestamp = new Date(`${pt.date}T${pt.time || '00:00:00'}`).getTime() || 0;
-      }
+      const timestamp = pt.timestamp || getTransactionDateTimeEpoch(pt);
 
       const itemsList = (pt.items || []).map((it) => ({
         productId: it.productId,
@@ -998,12 +1020,12 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   const availableMonths = useMemo(() => {
     const monthsSet = new Set<string>();
     allUnifiedTransactions.forEach((tx) => {
-      const monthKey = tx.date ? tx.date.slice(0, 7) : (tx.timestamp ? new Date(tx.timestamp).toISOString().slice(0, 7) : '');
-      if (monthKey && monthKey.length === 7) {
+      const monthKey = getAgentMonthKey(tx);
+      if (monthKey) {
         monthsSet.add(monthKey);
       }
     });
-    const currentMonthKey = new Date().toISOString().slice(0, 7);
+    const currentMonthKey = getCurrentLocalMonthKey();
     monthsSet.add(currentMonthKey);
     return Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
   }, [allUnifiedTransactions]);
@@ -1032,7 +1054,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
 
       // 2. Month Filter (YYYY-MM)
       if (historyMonthFilter !== 'ALL') {
-        const txMonth = tx.date ? tx.date.slice(0, 7) : (tx.timestamp ? new Date(tx.timestamp).toISOString().slice(0, 7) : '');
+        const txMonth = getAgentMonthKey(tx);
         if (txMonth !== historyMonthFilter) {
           return false;
         }
@@ -1076,7 +1098,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
 
     // Group transactions by month
     scopedAgentTransactions.forEach((tx) => {
-      const monthKey = tx.date ? tx.date.slice(0, 7) : (tx.timestamp ? new Date(tx.timestamp).toISOString().slice(0, 7) : '');
+      const monthKey = getAgentMonthKey(tx);
       if (!monthKey) return;
 
       if (!map.has(monthKey)) {
@@ -1946,7 +1968,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                   <option value="ALL">📅 Semua Bulan ({availableMonths.length} Periode)</option>
                   {availableMonths.map((mKey) => (
                     <option key={mKey} value={mKey}>
-                      📅 {formatMonthYearLabel(mKey)} {mKey === new Date().toISOString().slice(0, 7) ? '• Bulan Ini' : ''}
+                      📅 {formatMonthYearLabel(mKey)} {mKey === getCurrentLocalMonthKey() ? '• Bulan Ini' : ''}
                     </option>
                   ))}
                 </select>
@@ -2132,7 +2154,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                   .filter((m) => historyMonthFilter === 'ALL' || m.monthKey === historyMonthFilter)
                   .map((monthData) => {
                     const isExpanded = expandedMonthlyCards[monthData.monthKey] !== false; // default expanded
-                    const isCurrentMonth = monthData.monthKey === new Date().toISOString().slice(0, 7);
+                    const isCurrentMonth = monthData.monthKey === getCurrentLocalMonthKey();
 
                     return (
                       <div

@@ -1927,11 +1927,54 @@ export default function App() {
   };
 
   const handleUpdateTransaction = async (updatedTx: Transaction) => {
+    const previous = transactions.find((t) => t.id === updatedTx.id);
+
     setTransactions((prev) => {
       const updated = prev.map((t) => (t.id === updatedTx.id ? updatedTx : t));
       saveStoredTransactions(updated);
       return updated;
     });
+
+    // Sesuaikan akumulasi belanja pelanggan saat nominal / pelanggan transaksi diedit
+    const prevCustId = previous?.customer?.id;
+    const nextCustId = updatedTx.customer?.id;
+    if (previous && (prevCustId || nextCustId)) {
+      const prevTotal = previous.total || 0;
+      const nextTotal = updatedTx.total || 0;
+      setCustomers((prev) => {
+        const updated = prev.map((cust) => {
+          let next = cust;
+          if (prevCustId === nextCustId && cust.id === nextCustId) {
+            next = {
+              ...cust,
+              totalSpent: Math.max(0, (cust.totalSpent || 0) + (nextTotal - prevTotal)),
+            };
+          } else {
+            if (prevCustId && cust.id === prevCustId) {
+              next = {
+                ...next,
+                totalSpent: Math.max(0, (next.totalSpent || 0) - prevTotal),
+                transactionCount: Math.max(0, (next.transactionCount || 0) - 1),
+              };
+            }
+            if (nextCustId && cust.id === nextCustId) {
+              next = {
+                ...next,
+                totalSpent: (next.totalSpent || 0) + nextTotal,
+                transactionCount: (next.transactionCount || 0) + 1,
+              };
+            }
+          }
+          if (next !== cust) {
+            saveCustomerCloud(next).catch(console.error);
+          }
+          return next;
+        });
+        saveStoredCustomers(updated);
+        return updated;
+      });
+    }
+
     await saveTransactionCloud(updatedTx);
     recordActivityLog(
       'TRANSACTION',
@@ -1947,6 +1990,26 @@ export default function App() {
       saveStoredTransactions(updated);
       return updated;
     });
+
+    // Kembalikan akumulasi belanja pelanggan agar tidak meninggalkan saldo transaksi terhapus
+    if (target?.customer?.id) {
+      const custId = target.customer.id;
+      setCustomers((prev) => {
+        const updated = prev.map((cust) => {
+          if (cust.id !== custId) return cust;
+          const next = {
+            ...cust,
+            totalSpent: Math.max(0, (cust.totalSpent || 0) - (target.total || 0)),
+            transactionCount: Math.max(0, (cust.transactionCount || 0) - 1),
+          };
+          saveCustomerCloud(next).catch(console.error);
+          return next;
+        });
+        saveStoredCustomers(updated);
+        return updated;
+      });
+    }
+
     await deleteTransactionCloud(txId);
     recordActivityLog(
       'TRANSACTION',

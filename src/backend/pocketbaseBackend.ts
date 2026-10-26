@@ -1599,6 +1599,52 @@ export function subscribeLandingConfig(
   );
 }
 
+export function subscribeLandingDraft(
+  onData: (config: LandingPageConfig) => void
+): () => void {
+  return createSafeSubscription('settings/landing_config_draft', OperationType.GET, (onError) =>
+    subscribeRecord('settings', 'landing_config_draft', (item) => {
+      if (item && Object.keys(item).length > 0) {
+        onData(item as LandingPageConfig);
+      }
+    }, onError)
+  );
+}
+
+/**
+ * Tulis yang WAJIB berhasil (draft & publish). Berbeda dari safeCloudWrite yang
+ * menelan kegagalan jaringan, fungsi ini melempar error agar UI tidak pernah
+ * mengklaim "sudah live" padahal penulisan database gagal.
+ */
+async function writeLandingRecordStrict(
+  id: string,
+  config: LandingPageConfig,
+  path: string
+): Promise<void> {
+  try {
+    await authReady;
+    // Buang metadata PocketBase agar tidak ikut tersimpan ke mirror `data`.
+    const payload: Record<string, any> = { ...(config as any) };
+    for (const key of ['id', 'legacyId', 'created', 'updated', 'collectionId', 'collectionName', 'expand']) {
+      delete payload[key];
+    }
+    await upsertRecord('settings', id, payload);
+    isCloudUnavailable = false;
+  } catch (err: any) {
+    if (isNetworkError(err)) isCloudUnavailable = true;
+    handleBackendError(err, OperationType.WRITE, path);
+    throw err;
+  }
+}
+
+export function saveLandingDraftCloud(config: LandingPageConfig): Promise<void> {
+  return writeLandingRecordStrict('landing_config_draft', config, 'settings/landing_config_draft');
+}
+
+export function saveLandingPublishedCloud(config: LandingPageConfig): Promise<void> {
+  return writeLandingRecordStrict('landing_config', config, 'settings/landing_config');
+}
+
 export async function saveLandingConfigCloud(config: LandingPageConfig): Promise<void> {
   return safeCloudWrite(async () => {
     await upsertRecord('settings', 'landing_config', config as any);

@@ -7,6 +7,7 @@
 import { LandingPageConfig } from '../types';
 
 export const LANDING_PAGE_STORAGE_KEY = 'bejo_pos_landing_page_config_v1';
+export const LANDING_PAGE_DRAFT_STORAGE_KEY = 'bejo_pos_landing_page_draft_v1';
 
 /* -------------------------------------------------------------------------- */
 /*  Helper pembuat id sederhana untuk konten default                          */
@@ -785,19 +786,109 @@ export function getStoredLandingConfig(): LandingPageConfig {
 /**
  * Saves updated Landing Page configuration to LocalStorage and dispatches an event
  */
-export function saveStoredLandingConfig(config: LandingPageConfig): void {
+export function saveStoredLandingConfig(config: LandingPageConfig): LandingPageConfig {
+  const toSave: LandingPageConfig = {
+    ...config,
+    lastModifiedAt: Date.now()
+  };
   try {
-    const toSave: LandingPageConfig = {
-      ...config,
-      lastModifiedAt: Date.now()
-    };
     localStorage.setItem(LANDING_PAGE_STORAGE_KEY, JSON.stringify(toSave));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('bejo_landing_config_updated', { detail: toSave }));
-    }
   } catch (err) {
     console.error('Failed to save landing page config:', err);
   }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('bejo_landing_config_updated', { detail: toSave }));
+  }
+  return toSave;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Draft vs Published                                                        */
+/* -------------------------------------------------------------------------- */
+/**
+ * Draft = konten yang sedang diedit di dashboard. Tidak pernah tampil ke publik
+ * sampai tombol "Simpan & Publish" ditekan.
+ */
+export function getStoredLandingDraft(): LandingPageConfig {
+  try {
+    const raw = localStorage.getItem(LANDING_PAGE_DRAFT_STORAGE_KEY);
+    if (!raw) return getStoredLandingConfig();
+    return migrateConfig(JSON.parse(raw));
+  } catch (err) {
+    console.error('Failed to parse landing draft, falling back to published:', err);
+    return getStoredLandingConfig();
+  }
+}
+
+export function saveStoredLandingDraft(config: LandingPageConfig): LandingPageConfig {
+  const toSave: LandingPageConfig = {
+    ...config,
+    lastModifiedAt: Date.now()
+  };
+  try {
+    localStorage.setItem(LANDING_PAGE_DRAFT_STORAGE_KEY, JSON.stringify(toSave));
+  } catch (err) {
+    console.error('Failed to save landing draft:', err);
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('bejo_landing_draft_updated', { detail: toSave }));
+  }
+  return toSave;
+}
+
+export function resetLandingDraftToDefault(): LandingPageConfig {
+  const def: LandingPageConfig = {
+    ...JSON.parse(JSON.stringify(DEFAULT_LANDING_CONFIG)),
+    lastModifiedAt: Date.now()
+  };
+  try {
+    localStorage.setItem(LANDING_PAGE_DRAFT_STORAGE_KEY, JSON.stringify(def));
+  } catch (err) {
+    console.error('Failed to reset landing draft:', err);
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('bejo_landing_draft_updated', { detail: def }));
+  }
+  return def;
+}
+
+/** Snapshot yang siap ditayangkan ke publik (wajib isPublished = true). */
+export function buildPublishedLandingConfig(config: LandingPageConfig): LandingPageConfig {
+  const now = Date.now();
+  return {
+    ...config,
+    isPublished: true,
+    lastModifiedAt: now,
+    lastPublishedAt: now
+  };
+}
+
+/** Field internal PocketBase yang tidak boleh memengaruhi perbandingan konten. */
+const PB_META_KEYS = ['id', 'legacyId', 'created', 'updated', 'collectionId', 'collectionName', 'expand'];
+
+function stripPbMeta(value: LandingPageConfig): Record<string, any> {
+  const copy = JSON.parse(JSON.stringify(value));
+  for (const key of PB_META_KEYS) delete copy[key];
+  delete copy.lastModifiedAt;
+  delete copy.lastPublishedAt;
+  return copy;
+}
+
+/** Bandingkan draft vs published tanpa terpengaruh timestamp. */
+export function isLandingConfigEqual(a: LandingPageConfig, b: LandingPageConfig): boolean {
+  return JSON.stringify(stripPbMeta(a)) === JSON.stringify(stripPbMeta(b));
+}
+
+/**
+ * Bandingkan ISI konten saja. Status publish (isPublished) tidak dihitung
+ * karena tombol On Hold / Publish mengubah status, bukan isi halaman.
+ */
+export function isLandingContentEqual(a: LandingPageConfig, b: LandingPageConfig): boolean {
+  const left = stripPbMeta(a);
+  const right = stripPbMeta(b);
+  delete left.isPublished;
+  delete right.isPublished;
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 /**

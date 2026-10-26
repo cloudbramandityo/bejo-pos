@@ -927,6 +927,7 @@ export interface LandingBrandingConfig {
 export interface LandingPageConfig {
   isPublished: boolean; // Slide button: true = PUBLISH (Tampilan Awal Aktif), false = ON HOLD
   lastModifiedAt: number;
+  lastPublishedAt?: number;
   lastModifiedBy?: string;
   /** Judul H1 + paragraf pembuka di bawah slider banner */
   hero: LandingHeroConfig;

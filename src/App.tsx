@@ -34,7 +34,12 @@ import { InvoiceScreen } from './components/InvoiceScreen';
 import { TaxScreen } from './components/tax/TaxScreen';
 import { fetchBackendDiagnostics } from './utils/backendDiagnostics';
 import { persistSnapshotToIndexedDb, initAutoDatabaseSync } from './utils/localDatabase';
-import { getStoredLandingConfig, saveStoredLandingConfig } from './utils/landingPageStorage';
+import {
+  getStoredLandingConfig,
+  getStoredLandingDraft,
+  saveStoredLandingConfig,
+  saveStoredLandingDraft
+} from './utils/landingPageStorage';
 import { closeJournalSession } from './lib/journalApi';
 
 import {
@@ -57,7 +62,8 @@ import {
   CustomRole,
   AgentNotification,
   SpkOrder,
-  Invoice
+  Invoice,
+  LandingPageConfig
 } from './types';
 import {
   getStoredInvoices,
@@ -192,7 +198,9 @@ import {
   subscribeInvoices,
   saveInvoiceStoreIdentityCloud,
   subscribeLandingConfig,
-  saveLandingConfigCloud
+  subscribeLandingDraft,
+  saveLandingDraftCloud,
+  saveLandingPublishedCloud
 } from './backend/pocketbaseBackend';
 import { DEFAULT_AGENTS_LIST } from './utils/agentMapping';
 
@@ -298,6 +306,7 @@ export default function App() {
   }, []);
 
   const [landingConfig, setLandingConfig] = useState(() => getStoredLandingConfig());
+  const [landingDraft, setLandingDraft] = useState(() => getStoredLandingDraft());
   const [isViewingPublicLanding, setIsViewingPublicLanding] = useState<boolean>(false);
   const [isShowingLoginModal, setIsShowingLoginModal] = useState<boolean>(false);
 
@@ -307,8 +316,42 @@ export default function App() {
         setLandingConfig(e.detail);
       }
     };
+    const handleLandingDraftUpdate = (e: any) => {
+      if (e.detail) {
+        setLandingDraft(e.detail);
+      }
+    };
     window.addEventListener('bejo_landing_config_updated', handleLandingConfigUpdate);
-    return () => window.removeEventListener('bejo_landing_config_updated', handleLandingConfigUpdate);
+    window.addEventListener('bejo_landing_draft_updated', handleLandingDraftUpdate);
+    return () => {
+      window.removeEventListener('bejo_landing_config_updated', handleLandingConfigUpdate);
+      window.removeEventListener('bejo_landing_draft_updated', handleLandingDraftUpdate);
+    };
+  }, []);
+
+  /* Konten live diambil dari server tanpa perlu login (pengunjung anonim). */
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/landing/published', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { published?: boolean; config?: LandingPageConfig } | null) => {
+        if (cancelled || !data) return;
+        if (data.published === false) {
+          const stored = getStoredLandingConfig();
+          if (stored.isPublished) {
+            saveStoredLandingConfig({ ...stored, isPublished: false });
+          }
+          return;
+        }
+        if (data.config) {
+          setLandingConfig(data.config);
+          saveStoredLandingConfig(data.config);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -997,6 +1040,13 @@ export default function App() {
       }
     });
 
+    const unsubLandingDraft = subscribeLandingDraft((cloudDraft) => {
+      if (cloudDraft) {
+        setLandingDraft(cloudDraft);
+        saveStoredLandingDraft(cloudDraft);
+      }
+    });
+
     // 22. Periodic Auto-Cleanup for SPK Archives (Runs daily at 19:00 WIB)
     checkAndRunSpkAutoCleanup();
     const cleanupInterval = setInterval(() => {
@@ -1028,6 +1078,7 @@ export default function App() {
       unsubMachines();
       unsubInvoices();
       unsubLanding();
+      unsubLandingDraft();
     };
   }, []);
 
@@ -2286,11 +2337,23 @@ export default function App() {
 
         {currentTab === 'landing_editor' && userRole === 'DEVELOPER' && (
           <LandingPageEditorScreen
-            initialConfig={landingConfig}
-            onConfigUpdated={(updated) => {
-              setLandingConfig(updated);
-              saveStoredLandingConfig(updated);
-              saveLandingConfigCloud(updated).catch(console.error);
+            initialConfig={landingDraft}
+            publishedConfig={landingConfig}
+            onDraftUpdated={async (updated) => {
+              setLandingDraft(updated);
+              saveStoredLandingDraft(updated);
+              await saveLandingDraftCloud(updated);
+            }}
+            onPublish={async (published) => {
+              await saveLandingPublishedCloud(published);
+              setLandingConfig(published);
+              saveStoredLandingConfig(published);
+            }}
+            onUnpublish={async () => {
+              const next = { ...landingConfig, isPublished: false, lastModifiedAt: Date.now() };
+              await saveLandingPublishedCloud(next);
+              setLandingConfig(next);
+              saveStoredLandingConfig(next);
             }}
             onPreviewLandingPage={() => setIsViewingPublicLanding(true)}
           />

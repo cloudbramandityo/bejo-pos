@@ -58,7 +58,14 @@ import type {
   LandingTemplatePromo,
   LandingTestimonial,
 } from '../types';
-import { resetLandingConfigToDefault, saveStoredLandingConfig } from '../utils/landingPageStorage';
+import {
+  buildPublishedLandingConfig,
+  isLandingConfigEqual,
+  isLandingContentEqual,
+  resetLandingDraftToDefault,
+  saveStoredLandingDraft,
+} from '../utils/landingPageStorage';
+import { ensureLandingMediaInDatabase, saveLandingMedia } from '../utils/landingMediaStorage';
 import { LandingPage } from './landing/LandingPage';
 
 /* -------------------------------------------------------------------------- */
@@ -184,7 +191,9 @@ const ImageField: React.FC<{
     setErr(null);
     setBusy(true);
     try {
-      onChange(await compressImage(file, maxW, maxH, 0.82, output));
+      const dataUrl = await compressImage(file, maxW, maxH, 0.82, output);
+      const mediaUrl = await saveLandingMedia(dataUrl);
+      onChange(mediaUrl);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Gagal memproses gambar');
     } finally {
@@ -232,7 +241,7 @@ const ImageField: React.FC<{
       </div>
       {value && (
         <p className="mt-1 text-[10px] font-medium text-slate-400">
-          Rekomendasi {recommended} · gambar dikompres otomatis
+          Rekomendasi {recommended} · dikompres otomatis &amp; disimpan ke database
           {output === 'png' ? ' (PNG, transparansi dipertahankan)' : ''}
         </p>
       )}
@@ -340,7 +349,10 @@ const applyTarget = (value: string) => {
 /* -------------------------------------------------------------------------- */
 interface LandingPageEditorScreenProps {
   initialConfig: LandingPageConfig;
-  onConfigUpdated: (newConfig: LandingPageConfig) => void;
+  publishedConfig: LandingPageConfig;
+  onDraftUpdated: (newConfig: LandingPageConfig) => Promise<void>;
+  onPublish: (publishedConfig: LandingPageConfig) => Promise<void>;
+  onUnpublish: () => Promise<void>;
   onPreviewLandingPage: () => void;
 }
 
@@ -416,8 +428,8 @@ const LivePreview: React.FC<{ config: LandingPageConfig; device: 'desktop' | 'mo
             {device === 'mobile' ? 'Tampilan ponsel · 390 px' : 'Tampilan desktop · 1280 px'}
           </p>
         </div>
-        <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-bold uppercase text-emerald-600">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Live
+        <span className="flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-1 text-[9px] font-bold uppercase text-indigo-600">
+          <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" /> Pratinjau Draft
         </span>
       </div>
 
@@ -451,19 +463,29 @@ const LivePreview: React.FC<{ config: LandingPageConfig; device: 'desktop' | 'mo
 /* -------------------------------------------------------------------------- */
 export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = ({
   initialConfig,
-  onConfigUpdated,
+  publishedConfig,
+  onDraftUpdated,
+  onPublish,
+  onUnpublish,
   onPreviewLandingPage,
 }) => {
   const [config, setConfig] = useState<LandingPageConfig>(initialConfig);
   const [savedJson, setSavedJson] = useState<string>(() => JSON.stringify(initialConfig));
   const [active, setActive] = useState<SectionKey>('brand');
   const [notice, setNotice] = useState<string | null>(null);
+  const [errorNotice, setErrorNotice] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<'save' | 'publish' | 'hold' | null>(null);
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [openItem, setOpenItem] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(true);
   const [q, setQ] = useState('');
 
-  const isDirty = useMemo(() => JSON.stringify(config) !== savedJson, [config, savedJson]);
+  const isDirty = useMemo(() => !isLandingConfigEqual(config, JSON.parse(savedJson)), [config, savedJson]);
+  const hasUnpublishedChanges = useMemo(
+    () => !isLandingContentEqual(config, publishedConfig),
+    [config, publishedConfig]
+  );
+  const isLive = Boolean(publishedConfig.isPublished);
 
   /* panjang deskripsi website (meta description) */
   const descLength = (config.brand?.metaDescription || '').trim().length;
@@ -474,18 +496,83 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
     configRef.current = config;
   }, [config]);
 
+  /* Ikuti draft cloud terbaru selama belum ada perubahan yang belum disimpan. */
+  useEffect(() => {
+    if (!isDirty) {
+      setConfig(initialConfig);
+      setSavedJson(JSON.stringify(initialConfig));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialConfig]);
+
   const notify = (msg: string) => {
     setNotice(msg);
-    window.setTimeout(() => setNotice(null), 4000);
+    setErrorNotice(null);
+    window.setTimeout(() => setNotice(null), 5000);
   };
 
-  const commit = (next: LandingPageConfig, msg: string) => {
-    setConfig(next);
-    saveStoredLandingConfig(next);
-    onConfigUpdated(next);
-    setSavedJson(JSON.stringify(next));
-    const mb = JSON.stringify(next).length / (1024 * 1024);
-    notify(mb > 4 ? `Tersimpan (${mb.toFixed(1)} MB). Pertimbangkan mengganti gambar besar agar lebih ringan.` : msg);
+  const notifyError = (err: unknown) => {
+    setNotice(null);
+    setErrorNotice(err instanceof Error && err.message ? err.message : 'Terjadi kesalahan. Coba lagi.');
+  };
+
+  /**
+   * Simpan draft: gambar inline dipindahkan ke database, config disimpan ke
+   * localStorage + record `landing_config_draft`. Konten live TIDAK berubah.
+   */
+  const persistDraft = async (): Promise<LandingPageConfig | null> => {
+    setBusyAction('save');
+    setErrorNotice(null);
+    try {
+      const prepared = await ensureLandingMediaInDatabase(configRef.current);
+      const saved = saveStoredLandingDraft(prepared);
+      setConfig(saved);
+      setSavedJson(JSON.stringify(saved));
+      await onDraftUpdated(saved);
+      const mb = JSON.stringify(saved).length / (1024 * 1024);
+      notify(
+        mb > 4
+          ? `Draft tersimpan (${mb.toFixed(1)} MB). Pertimbangkan mengganti gambar besar agar lebih ringan.`
+          : 'Draft tersimpan. Klik "Simpan & Publish" agar tampil live di internet.'
+      );
+      return saved;
+    } catch (err) {
+      notifyError(err);
+      return null;
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handlePublish = async () => {
+    setBusyAction('publish');
+    setErrorNotice(null);
+    try {
+      const prepared = await ensureLandingMediaInDatabase(configRef.current);
+      const draft = saveStoredLandingDraft(prepared);
+      setConfig(draft);
+      setSavedJson(JSON.stringify(draft));
+      await onDraftUpdated(draft);
+      await onPublish(buildPublishedLandingConfig(draft));
+      notify('Landing page berhasil dipublikasikan dan sudah live di internet.');
+    } catch (err) {
+      notifyError(err);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleUnpublish = async () => {
+    setBusyAction('hold');
+    setErrorNotice(null);
+    try {
+      await onUnpublish();
+      notify('Landing page dinonaktifkan (On Hold). Konten draft tetap tersimpan.');
+    } catch (err) {
+      notifyError(err);
+    } finally {
+      setBusyAction(null);
+    }
   };
 
   const patch = (partial: Partial<LandingPageConfig>) => setConfig((prev) => ({ ...prev, ...partial }));
@@ -528,15 +615,20 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
             <Globe size={18} />
           </span>
           <div>
-            <h1 className="flex items-center gap-2 text-[15px] font-bold text-slate-900">
+            <h1 className="flex flex-wrap items-center gap-2 text-[15px] font-bold text-slate-900">
               Landing Page CMS
-              <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${config.isPublished ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
-                {config.isPublished ? 'Published' : 'On Hold'}
+              <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${isLive ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                {isLive ? 'Published' : 'On Hold'}
               </span>
+              {hasUnpublishedChanges && (
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-600">
+                  Draft belum dipublish
+                </span>
+              )}
               {isDirty && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[9px] font-bold uppercase text-indigo-600">Belum disimpan</span>}
             </h1>
             <p className="mt-0.5 text-[11px] font-medium text-slate-500">
-              Kelola seluruh konten halaman publik. Perubahan berlaku setelah disimpan.
+              Simpan hanya menyimpan draft. Klik "Simpan &amp; Publish" agar perubahan tampil live di internet.
             </p>
           </div>
         </div>
@@ -545,11 +637,9 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
           <button
             type="button"
             onClick={() => {
-              const def = resetLandingConfigToDefault();
+              const def = resetLandingDraftToDefault();
               setConfig(def);
-              setSavedJson(JSON.stringify(def));
-              onConfigUpdated(def);
-              notify('Konten dikembalikan ke default.');
+              notify('Draft dikembalikan ke default. Konten live belum berubah sampai Anda klik "Simpan & Publish".');
             }}
             className={btnGhost}
           >
@@ -573,7 +663,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
           </button>
           <button
             type="button"
-            disabled={!isDirty}
+            disabled={!isDirty || busyAction !== null}
             onClick={() => setConfig(JSON.parse(savedJson))}
             className={btnGhost}
           >
@@ -581,33 +671,42 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
           </button>
           <button
             type="button"
-            disabled={!isDirty}
-            onClick={() => commit(configRef.current, 'Perubahan berhasil disimpan.')}
+            disabled={!isDirty || busyAction !== null}
+            onClick={() => void persistDraft()}
             className={btnPrimary}
           >
-            <Save size={12} /> Simpan
+            <Save size={12} /> {busyAction === 'save' ? 'Menyimpan…' : 'Simpan'}
           </button>
           <button
             type="button"
-            onClick={() =>
-              commit(
-                { ...configRef.current, isPublished: !configRef.current.isPublished },
-                configRef.current.isPublished
-                  ? 'Landing page dinonaktifkan (On Hold).'
-                  : 'Landing page dipublikasikan.'
-              )
-            }
-            className={`${btnPrimary} ${config.isPublished ? '!bg-emerald-600 hover:!bg-emerald-500' : '!bg-amber-500 hover:!bg-amber-400'}`}
+            disabled={busyAction !== null || (!isDirty && !hasUnpublishedChanges && isLive)}
+            onClick={() => void handlePublish()}
+            className={`${btnPrimary} !bg-emerald-600 hover:!bg-emerald-500`}
           >
-            {config.isPublished ? <Check size={12} /> : <CircleAlert size={12} />}
-            {config.isPublished ? 'Publish' : 'On Hold'}
+            <Globe size={12} /> {busyAction === 'publish' ? 'Mempublikasikan…' : 'Simpan & Publish'}
           </button>
+          {isLive && (
+            <button
+              type="button"
+              disabled={busyAction !== null}
+              onClick={() => void handleUnpublish()}
+              className={`${btnGhost} !border-amber-200 !text-amber-600 hover:!bg-amber-50`}
+            >
+              <CircleAlert size={12} /> {busyAction === 'hold' ? 'Menonaktifkan…' : 'On Hold'}
+            </button>
+          )}
         </div>
       </div>
 
       {notice && (
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[11px] font-semibold text-emerald-700">
           <Check size={14} /> {notice}
+        </div>
+      )}
+
+      {errorNotice && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[11px] font-semibold text-rose-700">
+          <CircleAlert size={14} /> {errorNotice}
         </div>
       )}
 

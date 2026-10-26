@@ -84,6 +84,7 @@ async function findRecordByLegacyId(id: string): Promise<any | null> {
   const pb = await getClient();
   const list = await pb.collection(COLLECTION).getList(1, 1, {
     filter: `legacyId = "${id}"`,
+    sort: '-updated',
   });
   return list.items[0] || null;
 }

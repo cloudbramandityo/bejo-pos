@@ -30,6 +30,7 @@ function pocketBaseUrl(): string {
 
 let client: PocketBase | null = null;
 let authPromise: Promise<PocketBase> | null = null;
+let activeAuthLabel = '';
 
 type Credential = { label: string; email: string; password: string; admin: boolean };
 
@@ -77,12 +78,25 @@ async function authenticate(pb: PocketBase): Promise<PocketBase> {
       } else {
         await pb.collection('users').authWithPassword(candidate.email, candidate.password);
       }
-      console.log(`[Landing] Autentikasi PocketBase berhasil via ${candidate.label}.`);
-      return pb;
     } catch (err: any) {
-      failures.push(`${candidate.label} (${err?.status || 'jaringan'})`);
+      failures.push(`${candidate.label} (auth ${err?.status || 'jaringan'})`);
       pb.authStore.clear();
+      continue;
     }
+
+    // Kredensial bisa valid tetapi tetap tidak boleh membaca `settings`
+    // (mis. akun sinkronisasi lama). Pastikan akses baca sebelum dipakai.
+    try {
+      await pb.collection(COLLECTION).getList(1, 1);
+    } catch (readError: any) {
+      failures.push(`${candidate.label} (auth OK, baca ${readError?.status || 'jaringan'})`);
+      pb.authStore.clear();
+      continue;
+    }
+
+    activeAuthLabel = candidate.label;
+    console.log(`[Landing] PocketBase siap via ${candidate.label}.`);
+    return pb;
   }
 
   throw new Error(`Autentikasi PocketBase gagal: ${failures.join(', ')}.`);
@@ -106,11 +120,50 @@ async function getClient(): Promise<PocketBase> {
 
 async function findRecordByLegacyId(id: string): Promise<any | null> {
   const pb = await getClient();
-  const list = await pb.collection(COLLECTION).getList(1, 1, {
-    filter: `legacyId = "${id}"`,
-    sort: '-updated',
-  });
-  return list.items[0] || null;
+  const service = pb.collection(COLLECTION);
+  let filterError: any = null;
+
+  try {
+    const list = await service.getList(1, 1, {
+      filter: `legacyId = "${id}"`,
+      sort: '-updated',
+    });
+    if (list.items[0]) return list.items[0];
+  } catch (err: any) {
+    filterError = err;
+    if (err?.status !== 400 && err?.status !== 404) throw err;
+  }
+
+  // Fallback untuk koleksi lama: baca batch tanpa filter/sort, lalu cocokkan
+  // `legacyId` di memori (mis. bila field belum bisa difilter).
+  let items: any[];
+  try {
+    const list = await service.getList(1, 500);
+    items = list.items;
+  } catch (err) {
+    throw filterError || err;
+  }
+
+  const matches = items
+    .filter((item) => item?.legacyId === id)
+    .sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
+
+  if (matches[0]) return matches[0];
+  console.warn(`[Landing] Record ${id} tidak ditemukan di ${items.length} record settings.`);
+  return null;
+}
+
+/** Log penyebab kegagalan tanpa membocorkan isi record. */
+async function logLandingFailure(context: string, err: unknown): Promise<void> {
+  console.error(`[Landing] ${context} (auth: ${activeAuthLabel || 'belum'})`, err);
+  if (!client?.authStore.isValid) return;
+  try {
+    const collection = await client.collections.getOne(COLLECTION);
+    const fields = (collection.fields || []).map((field: any) => `${field.name}:${field.type}`).join(', ');
+    console.error(`[Landing] Skema ${COLLECTION}: ${fields || '(kosong)'}`);
+  } catch {
+    /* diagnosa tambahan tidak wajib */
+  }
 }
 
 function recordPayload(record: any): Record<string, any> | null {
@@ -135,7 +188,7 @@ export function registerLandingRoutes(app: Express): void {
       }
       res.json({ published: true, config });
     } catch (err) {
-      console.error('[Landing] Gagal membaca konten published:', err);
+      await logLandingFailure('Gagal membaca konten published', err);
       res.status(503).json({ error: 'Konten landing page belum dapat dimuat.' });
     }
   });
@@ -184,7 +237,7 @@ export function registerLandingRoutes(app: Express): void {
       res.setHeader('X-Content-Type-Options', 'nosniff');
       res.end(buffer);
     } catch (err) {
-      console.error('[Landing] Gagal memuat media:', err);
+      await logLandingFailure('Gagal memuat media', err);
       res.status(503).send('Media belum dapat dimuat.');
     }
   });

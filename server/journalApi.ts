@@ -10,7 +10,9 @@
  *   ditulis otomatis oleh frontend setiap ada perubahan.
  */
 import type { Express, Request, Response } from 'express';
-import PocketBase from 'pocketbase';
+// Build CJS eksplisit: impor root adalah ESM sehingga esbuild CJS salah
+// melakukan interop dan `new PocketBase()` gagal di runtime.
+import PocketBase from 'pocketbase/cjs';
 import crypto from 'crypto';
 
 const COOKIE_NAME = 'bejo_jurnal_session';

@@ -20,6 +20,7 @@ import {
   Download,
   ExternalLink,
   Facebook,
+  Globe,
   Warehouse,
   Image as ImageIcon,
   Instagram,
@@ -40,6 +41,7 @@ import {
   Store,
   User,
   X,
+  Youtube,
 } from 'lucide-react';
 import type {
   AppUser,
@@ -1005,7 +1007,12 @@ const Footer: React.FC<{
   onNavigate: (page: LandingPageKey, categoryKey?: string) => void;
   onOpenSocial: (url: string) => void;
 }> = ({ config, logo, onNavigate, onOpenSocial }) => {
-  const socials = config.socials.filter((s) => s.isActive);
+  const socials = (config.socials || [])
+    .filter((s) => s.isActive && typeof s.url === 'string' && s.url.trim())
+    .map((s) => {
+      const url = s.url.trim();
+      return { ...s, url: /^https?:\/\//i.test(url) ? url : `https://${url}` };
+    });
   const wa = config.contact.whatsappNumber.replace(/[^0-9]/g, '');
 
   const socialIcon = (label: string) => {
@@ -1013,8 +1020,11 @@ const Footer: React.FC<{
     if (l.includes('instagram')) return <Instagram size={16} />;
     if (l.includes('tiktok')) return <Music2 size={16} />;
     if (l.includes('facebook')) return <Facebook size={16} />;
+    if (l.includes('youtube')) return <Youtube size={16} />;
+    if (l.includes('whatsapp')) return <MessageCircle size={16} />;
     if (l.includes('tokopedia')) return <Store size={16} />;
-    return <ShoppingBag size={16} />;
+    if (l.includes('shopee')) return <ShoppingBag size={16} />;
+    return <Globe size={16} />;
   };
 
   const blockLink = (link: { id: string; label: string; page?: LandingPageKey; categoryKey?: string }) => {
@@ -1867,7 +1877,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         config={config}
         logo={logo}
         onNavigate={navigate}
-        onOpenSocial={(url) => window.open(url, '_blank')}
+        onOpenSocial={(url) => window.open(url, '_blank', 'noopener,noreferrer')}
       />
 
       {/* Aksi mengambang */}

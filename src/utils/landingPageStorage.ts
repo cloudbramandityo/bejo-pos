@@ -761,7 +761,17 @@ function migrateConfig(parsed: unknown): LandingPageConfig {
       : defaults.testimonials,
     clients: Array.isArray(clean.clients) && clean.clients.length > 0 ? clean.clients : defaults.clients,
     offices: Array.isArray(clean.offices) && clean.offices.length > 0 ? clean.offices : defaults.offices,
-    socials: Array.isArray(clean.socials) && clean.socials.length > 0 ? clean.socials : defaults.socials,
+    /* Daftar kosong harus tetap kosong agar pengguna bisa menghapus semua ikon. */
+    socials: Array.isArray(clean.socials)
+      ? (clean.socials as any[])
+          .filter((s) => s && typeof s === 'object')
+          .map((s, i) => ({
+            id: typeof s.id === 'string' && s.id ? s.id : `soc_${i + 1}`,
+            label: typeof s.label === 'string' && s.label.trim() ? s.label.trim() : 'Lainnya',
+            url: typeof s.url === 'string' ? s.url.trim() : '',
+            isActive: s.isActive !== false
+          }))
+      : defaults.socials,
     footerColumns: Array.isArray(clean.footerColumns) && clean.footerColumns.length > 0
       ? clean.footerColumns
       : defaults.footerColumns,

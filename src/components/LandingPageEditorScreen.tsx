@@ -32,7 +32,6 @@ import {
   Quote,
   RotateCcw,
   Save,
-  Share2,
   Smartphone,
   Sparkles,
   Store,
@@ -376,11 +375,27 @@ const SECTIONS = [
   { key: 'gallery', label: 'Galeri Workshop', icon: Images },
   { key: 'contact', label: 'Kontak', icon: Phone },
   { key: 'offices', label: 'Kantor Cabang', icon: MapPin },
-  { key: 'socials', label: 'Media Sosial', icon: Share2 },
   { key: 'footer', label: 'Footer', icon: List },
 ] as const;
 
 type SectionKey = (typeof SECTIONS)[number]['key'];
+
+/* Platform media sosial populer — label menentukan ikon yang tampil di footer. */
+const SOCIAL_PLATFORM_PRESETS = [
+  { label: 'Instagram', placeholder: 'https://instagram.com/namatoko' },
+  { label: 'TikTok', placeholder: 'https://tiktok.com/@namatoko' },
+  { label: 'Facebook', placeholder: 'https://facebook.com/namatoko' },
+  { label: 'YouTube', placeholder: 'https://youtube.com/@namatoko' },
+  { label: 'WhatsApp', placeholder: 'https://wa.me/62812xxxxxxx' },
+  { label: 'Tokopedia', placeholder: 'https://tokopedia.com/namatoko' },
+  { label: 'Shopee', placeholder: 'https://shopee.co.id/namatoko' },
+] as const;
+
+const isPresetSocial = (label: string) =>
+  SOCIAL_PLATFORM_PRESETS.some((preset) => preset.label === label);
+
+const socialPlaceholder = (label: string) =>
+  SOCIAL_PLATFORM_PRESETS.find((preset) => preset.label === label)?.placeholder || 'https://…';
 
 /* -------------------------------------------------------------------------- */
 /*  Pratinjau langsung (iframe agar media query mengikuti lebar perangkat)     */
@@ -600,7 +615,6 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
       case 'faq': return config.faqs.length;
       case 'gallery': return config.gallery.length;
       case 'offices': return config.offices.length;
-      case 'socials': return config.socials.length;
       case 'footer': return config.footerColumns.length;
       default: return 0;
     }
@@ -856,6 +870,91 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                     </span>
                   </div>
                 </div>
+              </div>
+
+              <div className="mt-5 border-t border-slate-100 pt-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Media Sosial</p>
+                    <p className="mt-0.5 text-[10px] font-medium text-slate-500">
+                      Tautan akun tampil sebagai ikon di footer website. Perubahan tayang live setelah Simpan &amp; Publish.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateList('socials', [
+                        ...config.socials,
+                        { id: newId('soc'), label: 'Instagram', url: '', isActive: true },
+                      ])
+                    }
+                    className={btnPrimary}
+                  >
+                    <Plus size={12} /> Tambah Media Sosial
+                  </button>
+                </div>
+
+                {config.socials.length === 0 ? (
+                  <p className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-medium text-slate-500">
+                    Belum ada media sosial. Klik “Tambah Media Sosial” untuk menampilkan ikon di footer.
+                  </p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {config.socials.map((social) => {
+                      const preset = isPresetSocial(social.label);
+                      const update = (patch: Partial<typeof social>) =>
+                        updateList('socials', config.socials.map((x) => (x.id === social.id ? { ...x, ...patch } : x)));
+                      return (
+                        <div key={social.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              value={preset ? social.label : 'Lainnya'}
+                              onChange={(e) => update({ label: e.target.value })}
+                              className={`${inputCls} !w-36`}
+                              aria-label="Platform media sosial"
+                            >
+                              {SOCIAL_PLATFORM_PRESETS.map((item) => (
+                                <option key={item.label} value={item.label}>
+                                  {item.label}
+                                </option>
+                              ))}
+                              <option value="Lainnya">Lainnya</option>
+                            </select>
+                            {!preset && (
+                              <input
+                                value={social.label}
+                                onChange={(e) => update({ label: e.target.value })}
+                                className={`${inputCls} !w-36`}
+                                placeholder="Nama platform"
+                                aria-label="Nama platform"
+                              />
+                            )}
+                            <input
+                              value={social.url}
+                              onChange={(e) => update({ url: e.target.value })}
+                              className={`${inputCls} min-w-[200px] flex-1`}
+                              placeholder={socialPlaceholder(social.label)}
+                              inputMode="url"
+                              aria-label={`URL ${social.label}`}
+                            />
+                            <div className="flex items-center gap-1.5">
+                              <Toggle active={social.isActive} onChange={(v) => update({ isActive: v })} />
+                              <span className="text-[10px] font-semibold text-slate-500">Tampil</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => updateList('socials', config.socials.filter((x) => x.id !== social.id))}
+                              className={btnDanger}
+                              aria-label={`Hapus ${social.label}`}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </SectionCard>
           )}
@@ -2085,36 +2184,6 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                         <Trash2 size={12} />
                       </button>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
-          )}
-
-          {/* ============================== SOCIALS =========================== */}
-          {active === 'socials' && (
-            <SectionCard
-              title={`Media Sosial (${config.socials.length})`}
-              description="Ikon tautan pada footer."
-              aside={
-                <button
-                  type="button"
-                  onClick={() => updateList('socials', [...config.socials, { id: newId('soc'), label: 'Instagram', url: '', isActive: true }])}
-                  className={btnPrimary}
-                >
-                  <Plus size={12} /> Tambah
-                </button>
-              }
-            >
-              <div className="space-y-2">
-                {config.socials.map((s) => (
-                  <div key={s.id} className="flex items-center gap-2">
-                    <input value={s.label} onChange={(e) => updateList('socials', config.socials.map((x) => (x.id === s.id ? { ...x, label: e.target.value } : x)))} className={`${inputCls} !w-36`} />
-                    <input value={s.url} onChange={(e) => updateList('socials', config.socials.map((x) => (x.id === s.id ? { ...x, url: e.target.value } : x)))} className={inputCls} placeholder="https://…" />
-                    <Toggle active={s.isActive} onChange={(v) => updateList('socials', config.socials.map((x) => (x.id === s.id ? { ...x, isActive: v } : x)))} />
-                    <button type="button" onClick={() => updateList('socials', config.socials.filter((x) => x.id !== s.id))} className={btnDanger}>
-                      <Trash2 size={12} />
-                    </button>
                   </div>
                 ))}
               </div>

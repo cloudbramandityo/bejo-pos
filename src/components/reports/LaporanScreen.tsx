@@ -42,7 +42,6 @@ interface LaporanScreenProps {
   customers: any[];
   productCategories: ProductCategoryItem[];
   userRole?: UserRole;
-  currentUsername?: string;
   shifts: Shift[];
   onUpdateStockTransaction?: (updatedTx: StockTransaction) => Promise<void> | void;
   onDeleteStockTransaction?: (transactionId: string) => Promise<void> | void;
@@ -62,7 +61,7 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
     { key: 'penjualan', label: 'Laporan Penjualan', icon: Receipt, desc: 'Riwayat & analisis transaksi penjualan' },
     { key: 'keuangan', label: 'Laporan Keuangan', icon: Landmark, desc: 'Laba Rugi, Modal, Neraca & Arus Kas' },
     ...(isDeveloper
-      ? [{ key: 'jurnal' as const, label: 'Jurnal', icon: BookOpen, desc: 'Spreadsheet Kas Utama, Debit & Kredit (khusus DEVELOPER)' }]
+      ? [{ key: 'jurnal' as const, label: 'Jurnal', icon: BookOpen, desc: 'Google Sheet Mirror per tahun (khusus DEVELOPER)' }]
       : []),
   ];
 
@@ -108,11 +107,11 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
           <React.Suspense
             fallback={
               <div className="flex items-center justify-center py-24 text-sm text-slate-500">
-                Memuat spreadsheet Jurnal...
+                Memuat Google Sheet Mirror...
               </div>
             }
           >
-            <JurnalScreen currentUsername={props.currentUsername} />
+            <JurnalScreen />
           </React.Suspense>
         ) : (
           <div className="flex items-center justify-center py-24 text-sm text-slate-500">

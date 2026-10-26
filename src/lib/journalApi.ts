@@ -1,4 +1,5 @@
 import { getDeveloperAccess } from '../utils/authSecurity';
+import type { JournalSettings } from '../utils/journalStorage';
 
 export type JurnalHalaman = 'kas_utama' | 'debit' | 'kredit';
 
@@ -25,6 +26,11 @@ export interface JournalSessionInfo {
 export interface JurnalSheetsResponse {
   tahun: number;
   sheets: Record<JurnalHalaman, JurnalRecord | null>;
+}
+
+export interface JournalConfigResponse {
+  settings: JournalSettings | null;
+  updated?: string | null;
 }
 
 export class JournalApiError extends Error {
@@ -124,6 +130,25 @@ export async function withJournalSession<T>(action: () => Promise<T>): Promise<T
 
 export async function closeJournalSession(): Promise<void> {
   await request('/api/journal/session', { method: 'DELETE' });
+}
+
+export async function loadJournalConfig(): Promise<JournalConfigResponse> {
+  const data = await request<{ success: true } & JournalConfigResponse>('/api/journal/config');
+  return {
+    settings: data.settings ?? null,
+    updated: data.updated ?? null,
+  };
+}
+
+export async function saveJournalConfig(settings: JournalSettings): Promise<JournalConfigResponse> {
+  const data = await request<{ success: true } & JournalConfigResponse>('/api/journal/config', {
+    method: 'PUT',
+    body: JSON.stringify({ settings }),
+  });
+  return {
+    settings: data.settings ?? null,
+    updated: data.updated ?? null,
+  };
 }
 
 export async function loadJurnalSheets(tahun: number): Promise<JurnalSheetsResponse> {

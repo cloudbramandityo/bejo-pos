@@ -15,7 +15,7 @@
     4. Menjalankan deploy-full-vps.ps1: source, npm ci, build, Caddy,
        restart service BejoStikerPOS, health check, rollback
     5. Health check lokal
-    6. Verifikasi end-to-end API Jurnal + koleksi jurnal_sheets
+    6. Verifikasi end-to-end API Jurnal + koleksi jurnal_config
     7. Verifikasi akses internet lewat APP_URL (termasuk Basic Auth
        bila REMOTE_ACCESS_PASS diisi)
 
@@ -360,9 +360,9 @@ function Test-AppHealth([string]$BaseUrl, [hashtable]$Headers = @{}) {
   }
 }
 
-function Invoke-JurnalVerification([string]$BaseUrl, [int]$Year, [string]$Username, [string]$Password, [hashtable]$Headers = @{}) {
+function Invoke-JurnalVerification([string]$BaseUrl, [string]$Username, [string]$Password, [hashtable]$Headers = @{}) {
   $base = $BaseUrl.TrimEnd('/')
-  $pages = @()
+  $years = @()
 
   try {
     $sessionInfo = Invoke-RestMethod -Uri "$base/api/journal/session" -Method Get -Headers $Headers -TimeoutSec 20
@@ -417,15 +417,16 @@ function Invoke-JurnalVerification([string]$BaseUrl, [int]$Year, [string]$Userna
 
   $failure = $null
   try {
-    $sheets = Invoke-RestMethod -Uri "$base/api/journal/sheets?tahun=$Year" -Method Get -WebSession $web -Headers $Headers -TimeoutSec 60
-    if (-not $sheets.success) { throw 'Server tidak mengembalikan success=true.' }
-    foreach ($name in @('kas_utama', 'debit', 'kredit')) {
-      $property = $sheets.sheets.PSObject.Properties[$name]
-      if ($property -and $null -ne $property.Value) { $pages += $name }
+    $config = Invoke-RestMethod -Uri "$base/api/journal/config" -Method Get -WebSession $web -Headers $Headers -TimeoutSec 60
+    if (-not $config.success) { throw 'Server tidak mengembalikan success=true.' }
+    if ($config.settings -and $config.settings.years) {
+      foreach ($item in @($config.settings.years)) {
+        if ($null -ne $item.year) { $years += [int]$item.year }
+      }
     }
   } catch {
     $info = Get-ApiError $_
-    $failure = "GET /api/journal/sheets gagal (HTTP $($info.Status)): $($info.Message)"
+    $failure = "GET /api/journal/config gagal (HTTP $($info.Status)): $($info.Message)"
   } finally {
     try { Invoke-RestMethod -Uri "$base/api/journal/session" -Method Delete -WebSession $web -Headers $Headers -TimeoutSec 10 | Out-Null } catch { }
   }
@@ -433,9 +434,9 @@ function Invoke-JurnalVerification([string]$BaseUrl, [int]$Year, [string]$Userna
   if ($failure) {
     return [pscustomobject]@{
       Ok = $false
-      Stage = 'sheets'
+      Stage = 'settings'
       Message = $failure
-      Pages = @()
+      Years = @()
     }
   }
 
@@ -443,7 +444,7 @@ function Invoke-JurnalVerification([string]$BaseUrl, [int]$Year, [string]$Userna
     Ok = $true
     Stage = 'done'
     Message = ''
-    Pages = @($pages)
+    Years = @($years)
   }
 }
 
@@ -675,11 +676,8 @@ try {
 
 # ----------------------------------------------------------- 6. jurnal
 Write-Step '6/7 Verifikasi Jurnal end-to-end (lokal)'
-$currentYear = (Get-Date).Year
-$verifyYear = [Math]::Min(2028, [Math]::Max(2022, $currentYear))
-Write-Host "   Tahun uji: $verifyYear" -ForegroundColor DarkGray
 
-$verify = Invoke-JurnalVerification $localBase $verifyYear $devUser $devPassword
+$verify = Invoke-JurnalVerification $localBase $devUser $devPassword
 if (-not $verify.Ok) {
   Write-Warn2 $verify.Message
   switch ($verify.Stage) {
@@ -693,8 +691,8 @@ if (-not $verify.Ok) {
       Write-Host '   Samakan JOURNAL_DEV_USER / JOURNAL_DEV_PASSWORD di .env dengan kredensial login DEVELOPER aplikasi.' -ForegroundColor Yellow
       Write-Host '   Nilai lama mungkin berbeda dari yang baru diisi.' -ForegroundColor Yellow
     }
-    'sheets' {
-      Write-Host '   Periksa service PocketBase, POCKETBASE_UPSTREAM, dan kredensial superuser.' -ForegroundColor Yellow
+    'settings' {
+      Write-Host '   Periksa service PocketBase, POCKETBASE_UPSTREAM, kredensial superuser, dan koleksi jurnal_config.' -ForegroundColor Yellow
       Write-Host "   Log server: $AppDir\logs\stderr.log" -ForegroundColor Yellow
     }
   }
@@ -702,11 +700,11 @@ if (-not $verify.Ok) {
 }
 
 Write-Ok "Sesi Jurnal otomatis berhasil diuji (akun $devUser)."
-Write-Ok 'Koleksi jurnal_sheets siap.'
-if ($verify.Pages.Count -gt 0) {
-  Write-Ok "Data tahun $verifyYear ditemukan di halaman: $($verify.Pages -join ', ')."
+Write-Ok 'Koleksi jurnal_config siap.'
+if ($verify.Years.Count -gt 0) {
+  Write-Ok "Konfigurasi tahun tersimpan: $($verify.Years -join ', ')."
 } else {
-  Write-Host "   Belum ada data tahun $verifyYear (normal pada deploy pertama)." -ForegroundColor DarkGray
+  Write-Host '   Belum ada konfigurasi tahun tersimpan (normal pada deploy pertama).' -ForegroundColor DarkGray
 }
 
 # ----------------------------------------------------------- 7. public
@@ -743,7 +741,7 @@ if ($SkipPublicCheck) {
   }
   Write-Ok "Health publik OK: $($appUrl.TrimEnd('/'))/api/health."
 
-  $publicVerify = Invoke-JurnalVerification $appUrl $verifyYear $devUser $devPassword $publicHeaders
+  $publicVerify = Invoke-JurnalVerification $appUrl $devUser $devPassword $publicHeaders
   if (-not $publicVerify.Ok) {
     Write-Warn2 $publicVerify.Message
     if ($publicVerify.Stage -eq 'login') {
@@ -753,8 +751,8 @@ if ($SkipPublicCheck) {
   }
   $publicStatus = 'terverifikasi'
   Write-Ok 'Jurnal dapat diakses lewat internet (sesi otomatis dan koleksi siap).'
-  if ($publicVerify.Pages.Count -gt 0) {
-    Write-Ok "Data tahun $verifyYear ditemukan lewat internet: $($publicVerify.Pages -join ', ')."
+  if ($publicVerify.Years.Count -gt 0) {
+    Write-Ok "Konfigurasi tahun terbaca lewat internet: $($publicVerify.Years -join ', ')."
   }
 }
 
@@ -782,7 +780,7 @@ Write-Host ''
 Write-Host ' Langkah berikutnya:' -ForegroundColor Cyan
 Write-Host '   1. Buka aplikasi lewat APP_URL dan login sebagai DEVELOPER.'
 Write-Host '   2. Masuk ke Laporan > Jurnal; tidak ada login kedua (sesi API otomatis).'
-Write-Host '   3. Data Jurnal disimpan di PocketBase (koleksi jurnal_sheets).'
+Write-Host '   3. Data konfigurasi Jurnal disimpan di PocketBase (koleksi jurnal_config).'
 Write-Host ''
 
 if ($fullScript -ne (Join-Path $PSScriptRoot 'deploy-full-vps.ps1') -and (Test-Path -LiteralPath $fullScript)) {

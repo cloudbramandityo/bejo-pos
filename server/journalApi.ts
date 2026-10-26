@@ -3,11 +3,12 @@
  *
  * - Sesi developer dibuat lewat POST /api/journal/session dan disimpan sebagai
  *   cookie HttpOnly bertanda tangan HMAC (bukan localStorage).
- * - Seluruh akses data lewat Express; koleksi PocketBase `jurnal_sheets`
- *   dikunci admin-only sehingga token sinkronisasi milik browser tidak bisa
- *   membacanya langsung.
- * - Penyimpanan berupa JSON state sheet (celldata, formula, style) dan
- *   ditulis otomatis oleh frontend setiap ada perubahan.
+ * - Seluruh akses data lewat Express; koleksi PocketBase dikunci admin-only
+ *   sehingga token sinkronisasi milik browser tidak bisa membacanya langsung.
+ * - `jurnal_config` menyimpan konfigurasi mirroring Google Sheet per tahun
+ *   (URL, mode tampilan, tahun aktif) agar bisa dipulihkan di perangkat lain.
+ * - `jurnal_sheets` menyimpan state spreadsheet lama dan tetap dipertahankan
+ *   agar data Jurnal versi sebelumnya tidak hilang.
  */
 import type { Express, Request, Response } from 'express';
 // Build CJS eksplisit: impor root adalah ESM sehingga esbuild CJS salah
@@ -23,6 +24,14 @@ const MAX_GRID_BYTES = 5_000_000;
 const COLLECTION = 'jurnal_sheets';
 const HALAMAN = ['kas_utama', 'debit', 'kredit'] as const;
 type Halaman = (typeof HALAMAN)[number];
+
+const CONFIG_COLLECTION = 'jurnal_config';
+const CONFIG_SCOPE = 'default';
+const CONFIG_YEAR_MIN = 2000;
+const CONFIG_YEAR_MAX = 2100;
+const MAX_CONFIG_BYTES = 1_000_000;
+const EMBED_MODES = ['preview', 'edit', 'html'] as const;
+type EmbedMode = (typeof EMBED_MODES)[number];
 
 class JournalError extends Error {
   status: number;
@@ -179,6 +188,7 @@ function assertSameOrigin(req: Request): void {
 let adminClient: PocketBase | null = null;
 let adminAuth: Promise<PocketBase> | null = null;
 let collectionReady: Promise<void> | null = null;
+let configCollectionReady: Promise<void> | null = null;
 const userIdCache = new Map<string, string | null>();
 
 async function getAdminClient(): Promise<PocketBase> {
@@ -305,6 +315,90 @@ async function ensureCollection(): Promise<void> {
   return collectionReady;
 }
 
+async function ensureConfigCollection(): Promise<void> {
+  if (!configCollectionReady) {
+    configCollectionReady = (async () => {
+      const pb = await getAdminClient();
+
+      let existing: any = null;
+      try {
+        existing = await pb.collections.getOne(CONFIG_COLLECTION);
+      } catch (error: any) {
+        if (error?.status !== 404) throw error;
+      }
+
+      const lockedRules = {
+        listRule: null,
+        viewRule: null,
+        createRule: null,
+        updateRule: null,
+        deleteRule: null,
+      };
+
+      if (existing) {
+        const needsLock =
+          existing.listRule !== null ||
+          existing.viewRule !== null ||
+          existing.createRule !== null ||
+          existing.updateRule !== null ||
+          existing.deleteRule !== null;
+        if (needsLock) {
+          await pb.collections.update(existing.id, lockedRules);
+          console.log('[Jurnal] Aturan koleksi jurnal_config dikunci ke admin-only.');
+        }
+        return;
+      }
+
+      let usersCollectionId = '';
+      try {
+        usersCollectionId = (await pb.collections.getOne('users')).id;
+      } catch {
+        /* relation updated_by dilewati bila koleksi users tidak ada */
+      }
+
+      const fields: any[] = [
+        { name: 'scope', type: 'text', required: true, min: 1, max: 100 },
+        { name: 'settings', type: 'json', required: true, maxSize: MAX_CONFIG_BYTES },
+        { name: 'updated_by_name', type: 'text', required: false, min: 0, max: 200 },
+      ];
+      if (usersCollectionId) {
+        fields.push({
+          name: 'updated_by',
+          type: 'relation',
+          required: false,
+          maxSelect: 1,
+          collectionId: usersCollectionId,
+          cascadeDelete: false,
+        });
+      }
+
+      try {
+        await pb.collections.create({
+          name: CONFIG_COLLECTION,
+          type: 'base',
+          fields,
+          indexes: [
+            'CREATE UNIQUE INDEX `idx_jurnal_config_scope` ON `jurnal_config` (`scope`)',
+          ],
+          ...lockedRules,
+          options: {},
+        });
+        console.log('[Jurnal] Koleksi jurnal_config dibuat (admin-only).');
+      } catch (error) {
+        try {
+          await pb.collections.getOne(CONFIG_COLLECTION);
+        } catch {
+          throw error;
+        }
+      }
+    })().catch((error) => {
+      configCollectionReady = null;
+      throw error;
+    });
+  }
+  return configCollectionReady;
+}
+
 async function resolveUserId(pb: PocketBase, username: string): Promise<string | null> {
   if (!username) return null;
   if (userIdCache.has(username)) return userIdCache.get(username) ?? null;
@@ -352,6 +446,121 @@ function validateGrid(value: unknown): Record<string, unknown> {
     throw new JournalError('data_grid melebihi batas 5 MB.', 413);
   }
   return value as Record<string, unknown>;
+}
+
+function optionalIsoDate(value: unknown, field: string): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string') {
+    throw new JournalError(`${field} harus berupa teks tanggal ISO.`, 400);
+  }
+  const text = value.trim();
+  if (!text) return undefined;
+  if (text.length > 40 || !Number.isFinite(Date.parse(text))) {
+    throw new JournalError(`${field} bukan tanggal ISO yang valid.`, 400);
+  }
+  return new Date(text).toISOString();
+}
+
+function validateJournalSettings(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new JournalError('settings harus berupa objek konfigurasi Jurnal.', 400);
+  }
+  const input = value as Record<string, unknown>;
+  if (!Array.isArray(input.years) || input.years.length === 0) {
+    throw new JournalError('settings.years harus berisi minimal satu tahun.', 400);
+  }
+  if (input.years.length > 100) {
+    throw new JournalError('settings.years maksimal 100 tahun.', 400);
+  }
+
+  const seen = new Set<number>();
+  const years = input.years
+    .map((raw) => {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        throw new JournalError('Setiap tahun Jurnal harus berupa objek.', 400);
+      }
+      const item = raw as Record<string, unknown>;
+      const year = Number(item.year);
+      if (!Number.isInteger(year) || year < CONFIG_YEAR_MIN || year > CONFIG_YEAR_MAX) {
+        throw new JournalError(
+          `Tahun Jurnal harus antara ${CONFIG_YEAR_MIN} dan ${CONFIG_YEAR_MAX}.`,
+          400
+        );
+      }
+      if (seen.has(year)) {
+        throw new JournalError(`Tahun ${year} muncul lebih dari sekali.`, 400);
+      }
+      seen.add(year);
+
+      const sheetUrl = typeof item.sheetUrl === 'string' ? item.sheetUrl.trim() : '';
+      if (sheetUrl.length > 2048) {
+        throw new JournalError(`URL Google Sheet tahun ${year} terlalu panjang.`, 400);
+      }
+      if (sheetUrl && !/^https?:\/\//i.test(sheetUrl)) {
+        throw new JournalError(
+          `URL Google Sheet tahun ${year} harus diawali http:// atau https://.`,
+          400
+        );
+      }
+
+      const title = typeof item.title === 'string' ? item.title.trim().slice(0, 200) : '';
+      const notes = typeof item.notes === 'string' ? item.notes.trim().slice(0, 1000) : '';
+      const updatedAt = optionalIsoDate(item.updatedAt, `updatedAt tahun ${year}`);
+      const entry: Record<string, unknown> = {
+        year,
+        sheetUrl,
+        title: title || `Jurnal Pembukuan ${year}`,
+        notes,
+      };
+      if (updatedAt) entry.updatedAt = updatedAt;
+      return entry;
+    })
+    .sort((a, b) => Number(a.year) - Number(b.year));
+
+  const selectedYear = Number(input.selectedYear);
+  if (!Number.isInteger(selectedYear) || !seen.has(selectedYear)) {
+    throw new JournalError('settings.selectedYear harus salah satu tahun yang terdaftar.', 400);
+  }
+
+  const rawMode = String(input.embedMode || 'preview');
+  if (!EMBED_MODES.includes(rawMode as EmbedMode)) {
+    throw new JournalError('Mode tampilan Jurnal harus preview, edit, atau html.', 400);
+  }
+
+  const result: Record<string, unknown> = {
+    years,
+    selectedYear,
+    embedMode: rawMode,
+  };
+
+  if (
+    input.autoRefreshMinutes !== undefined &&
+    input.autoRefreshMinutes !== null &&
+    input.autoRefreshMinutes !== ''
+  ) {
+    const minutes = Number(input.autoRefreshMinutes);
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) {
+      throw new JournalError('autoRefreshMinutes harus bilangan bulat 0-1440.', 400);
+    }
+    result.autoRefreshMinutes = minutes;
+  }
+
+  const savedAt = optionalIsoDate(input.savedAt, 'savedAt');
+  if (savedAt) result.savedAt = savedAt;
+
+  if (JSON.stringify(result).length > MAX_CONFIG_BYTES) {
+    throw new JournalError('Konfigurasi Jurnal melebihi batas 1 MB.', 413);
+  }
+
+  return result;
+}
+
+function sanitizeConfigRecord(record: any) {
+  return {
+    settings: record.settings ?? null,
+    updated: record.updated || '',
+    updated_by_name: record.updated_by_name || '',
+  };
 }
 
 function sanitizeRecord(record: any) {
@@ -454,6 +663,77 @@ export function registerJournalRoutes(app: Express): void {
       assertSameOrigin(req);
       clearSessionCookie(req, res);
       res.json({ success: true });
+    })
+  );
+
+  app.get(
+    '/api/journal/config',
+    handle(async (req, res) => {
+      requireDeveloper(req);
+      await ensureConfigCollection();
+
+      const pb = await getAdminClient();
+      let record: any = null;
+      try {
+        record = await pb
+          .collection(CONFIG_COLLECTION)
+          .getFirstListItem(`scope = "${CONFIG_SCOPE}"`);
+      } catch (error: any) {
+        if (error?.status !== 404) throw error;
+      }
+
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({
+        success: true,
+        settings: record?.settings ?? null,
+        updated: record?.updated || null,
+      });
+    })
+  );
+
+  app.put(
+    '/api/journal/config',
+    handle(async (req, res) => {
+      const session = requireDeveloper(req);
+      assertSameOrigin(req);
+      const settings = validateJournalSettings(req.body?.settings);
+      await ensureConfigCollection();
+
+      const pb = await getAdminClient();
+      const userId = await resolveUserId(pb, session.sub);
+      const payload: Record<string, unknown> = {
+        scope: CONFIG_SCOPE,
+        settings,
+        updated_by_name: session.sub,
+      };
+      if (userId) payload.updated_by = userId;
+
+      const filter = `scope = "${CONFIG_SCOPE}"`;
+      let record: any = null;
+      try {
+        record = await pb.collection(CONFIG_COLLECTION).getFirstListItem(filter);
+      } catch (error: any) {
+        if (error?.status !== 404) throw error;
+      }
+
+      if (record) {
+        record = await pb.collection(CONFIG_COLLECTION).update(record.id, payload);
+      } else {
+        try {
+          record = await pb.collection(CONFIG_COLLECTION).create(payload);
+        } catch (error: any) {
+          const existing = await pb
+            .collection(CONFIG_COLLECTION)
+            .getFirstListItem(filter)
+            .catch(() => null);
+          if (!existing) throw error;
+          record = await pb.collection(CONFIG_COLLECTION).update(existing.id, payload);
+        }
+      }
+
+      const sanitized = sanitizeConfigRecord(record);
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ success: true, ...sanitized });
     })
   );
 

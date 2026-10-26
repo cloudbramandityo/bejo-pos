@@ -2146,7 +2146,6 @@ export default function App() {
             customers={customers}
             productCategories={productCategories}
             userRole={userRole}
-            currentUsername={currentUser.username}
             shifts={pastShifts}
             onUpdateStockTransaction={handleUpdateStockTransaction}
             onDeleteStockTransaction={handleDeleteStockTransaction}

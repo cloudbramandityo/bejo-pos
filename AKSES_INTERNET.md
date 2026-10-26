@@ -1,6 +1,8 @@
 # AKSES APLIKASI DARI INTERNET
 ## Bejo Stiker POS — Cloudflare Tunnel + Proteksi Login
 
+> ⚠️ **Sudah tidak berlaku untuk VPS produksi.** Skrip `jalankan-online.*`, `server-always-on.ps1`, `tunnel-always-on.ps1`, `pasang-always-on.ps1`, dan `restart-always-on.ps1` sudah dihapus. VPS Windows live memakai Windows Service (NSSM: `BejoStikerPOS`, `PocketBase`, `Caddy`) dan deploy dengan `deploy\deploy-vps.ps1`. Dokumen ini disimpan hanya sebagai catatan historis akses sementara.
+
 > **📌 Sedang menyiapkan hosting VPS + domain `bejodigitalprint.com`?**
 > Panduan migrasi lengkap ada di **[MIGRASI-VPS.md](./MIGRASI-VPS.md)** — berisi setup DNS, VPS, PM2/Caddy/HTTPS, environment variable, instalasi **PocketBase** (database + realtime + auth), checklist verifikasi, sampai rollback.
 > Dokumen ini menjelaskan cara *sementara* membuka aplikasi dari komputer/HP lain **di luar jaringan lokal** (lewat internet), beserta batasan dan risikonya.
@@ -14,6 +16,8 @@ Klik dua kali file berikut di folder project:
 ```
 jalankan-online.bat
 ```
+
+*(Historis: file ini sudah dihapus. Untuk VPS produksi gunakan `deploy\deploy-vps.ps1`.)*
 
 Skrip akan otomatis:
 1. Menjalankan server aplikasi di `http://localhost:3000`
@@ -205,9 +209,11 @@ Dengan cara ini alamat tidak berubah, dan bisa dijadikan layanan Windows agar me
 
 ## 9. Ringkasan Perintah Berguna
 
+> Tabel di bawah adalah catatan historis untuk pemakaian lokal/tunnel sementara. Untuk VPS produksi, gunakan service Windows dan `deploy\deploy-vps.ps1`.
+
 | Keperluan | Perintah |
 |---|---|
-| Jalankan semua (server + tunnel) | klik `jalankan-online.bat` |
+| Jalankan semua (server + tunnel) | Sudah dihapus (historis) |
 | Cek server lokal | buka `http://localhost:3000` |
 | Cek akses LAN (komputer lain di WiFi sama) | `http://192.168.1.16:3000` |
 | Hentikan server | tutup jendela "bejo-server", atau `Stop-Process -Name node -Force` |
@@ -221,8 +227,9 @@ Dengan cara ini alamat tidak berubah, dan bisa dijadikan layanan Windows agar me
 
 | File | Fungsi |
 |---|---|
-| `jalankan-online.bat` | Peluncur satu klik |
-| `jalankan-online.ps1` | Skrip utama (server + tunnel + tampilkan URL) |
+| `jalankan-online.bat` | Sudah dihapus (historis) |
+| `jalankan-online.ps1` | Sudah dihapus (historis) |
+| `deploy\deploy-vps.ps1` | Satu-satunya skrip deploy VPS Windows |
 | `server.ts` | Lapisan proteksi login akses luar (Basic Auth) |
 | `vite.config.ts` | `allowedHosts` agar domain terowongan tidak diblokir Vite |
 | `.env` | Kredensial akses (`REMOTE_ACCESS_USER`, `REMOTE_ACCESS_PASS`) |

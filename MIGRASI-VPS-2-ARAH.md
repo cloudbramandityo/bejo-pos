@@ -184,18 +184,14 @@ Get-Service BejoStikerPOS, Caddy
 **Cara 1 — lewat RDP + FileZilla/Windows Explorer (paling sederhana)**
 - Copy folder project (tanpa `node_modules`, `dist`, `.env`) ke `C:\bejo-pos` di VPS lewat RDP drive sharing / FileZilla SFTP.
 
-**Cara 2 — otomatis dari PC (kalau OpenSSH sudah aktif)**
-```powershell
-.\deploy\deploy-vps.ps1 -Host <IP_VPS> -User Administrator -KeyPath "$env:USERPROFILE\.ssh\id_ed25519"
-```
-Skrip ini: build lokal → paket source → SCP → jalankan `remote-run.ps1` di VPS → ekstrak → `deploy-vps-windows.ps1` → backup → `npm ci` → build → **restart service** → **health check** → rollback bila gagal.
+**Cara 2 — deploy dari dalam VPS (lewat RDP)**
+> Skrip deploy lama berbasis SSH (`remote-run.ps1`, `deploy-vps-windows.ps1`) sudah dihapus. Deploy produksi dijalankan di dalam VPS agar Caddy, NSSM, dan PocketBase ikut diverifikasi.
 
 ## B8. Jalankan deploy (di VPS)
 ```powershell
-cd C:\bejo-pos
-powershell -NoProfile -ExecutionPolicy Bypass -File C:\bejo-pos\deploy\deploy-vps-windows.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\bejo-pos\deploy\deploy-vps.ps1 -Force
 ```
-Output: backup build lama → `npm ci` → build → `Restart-Service BejoStikerPOS` → health check.
+Skrip universal ini: unduh source `main` dari GitHub → `npm ci` + build → pasang Caddyfile → restart `BejoStikerPOS` → health check + rollback → verifikasi DNS/HTTPS/domain publik.
 
 ## B9. Isi `.env` di VPS
 ```powershell
@@ -211,7 +207,7 @@ Caddy sudah dikonfigurasi oleh `install-vps-windows.ps1` (Caddyfile di `C:\caddy
 Setelah deploy selesai, Caddy membaca Caddyfile terbaru:
 ```powershell
 # refresh Caddyfile dari project (punya domain + header keamanan)
-Copy-Item C:\bejo-pos\deploy\Caddyfile C:\caddy\Caddyfile -Force
+Copy-Item C:\bejo-pos\deploy\Caddyfile.windows C:\caddy\Caddyfile -Force
 & C:\caddy\caddy.exe fmt --overwrite C:\caddy\Caddyfile
 Restart-Service Caddy
 ```
@@ -335,9 +331,9 @@ Set-Content "D:\DOCUMENTS\Default Project\.stop-supervisor" "stop"
 ```
 
 ## B14. Update berikutnya
+Commit + push ke `main`, lalu di VPS lewat RDP:
 ```powershell
-# di PC: ubah kode lalu
-.\deploy\deploy-vps.ps1 -Host <IP_VPS> -User Administrator
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\bejo-pos\deploy\deploy-vps.ps1 -Force
 ```
 Rollback (di VPS):
 ```powershell
@@ -382,7 +378,7 @@ Restart-Service BejoStikerPOS
 | Console: 401 Unauthorized | Akun sinkronisasi belum dibuat / password beda | Buat user `sync@bejo.local`; samakan dengan `VITE_PB_SYNC_PASSWORD` di `.env` → build ulang |
 | Console: 403 / 400 Failed to create record | API rules koleksi masih kosong | Jalankan ulang `node scripts\create-pocketbase-collections.mjs --drop` |
 | Realtime tidak berubah | Caddy tidak meneruskan SSE `/api/pb` | Pastikan Caddyfile punya `handle /api/pb/*`; `Restart-Service Caddy` |
-| 404 di `/api/pb/...` | Route proxy belum ada / service Caddy belum reload | `Copy-Item C:\bejo-pos\deploy\Caddyfile C:\caddy\Caddyfile -Force; Restart-Service Caddy` |
+| 404 di `/api/pb/...` | Route proxy belum ada / service Caddy belum reload | `Copy-Item C:\bejo-pos\deploy\Caddyfile.windows C:\caddy\Caddyfile -Force; Restart-Service Caddy` |
 | Sertifikat SSL gagal terbit | DNS belum propagasi / port 80 tertutup | Cek `nslookup`, buka 80 di panel, `Caddyfile` → `Restart-Service Caddy` |
 | Halaman terbuka tanpa login Basic Auth | `REMOTE_ACCESS_PASS` kosong | Isi `.env` → `Restart-Service BejoStikerPOS` |
 | `API key should be set` | `GEMINI_API_KEY` kosong | Isi `.env` → restart service |

@@ -143,7 +143,7 @@ Write-Step "6/7 Menyiapkan Caddyfile"
 $caddyfile = @"
 # =====================================================================
 #  BEJO STIKER POS - Caddy (Windows VPS)
-#  Diperbarui otomatis oleh deploy-vps-windows.ps1
+#  Diperbarui otomatis oleh deploy-vps.ps1
 # =====================================================================
 
 $WwwDomain {
@@ -243,7 +243,7 @@ Write-Host "  Domain         : https://$Domain" -ForegroundColor White
 Write-Host ""
 Write-Host "  LANGKAH BERIKUTNYA:" -ForegroundColor Yellow
 Write-Host "   1. Upload source ke $AppDir (SCP/FileZilla), lalu jalankan:" -ForegroundColor Yellow
-Write-Host "        powershell -ExecutionPolicy Bypass -File $AppDir\deploy\deploy-vps-windows.ps1" -ForegroundColor Yellow
+Write-Host "        powershell -NoProfile -ExecutionPolicy Bypass -File $AppDir\deploy\deploy-vps.ps1 -Force" -ForegroundColor Yellow
 Write-Host "   2. Isi $AppDir\.env (APP_URL, GEMINI_API_KEY, REMOTE_ACCESS_*)" -ForegroundColor Yellow
 Write-Host "   3. Restart service: net stop BejoStikerPOS && net start BejoStikerPOS" -ForegroundColor Yellow
 Write-Host "   4. Cek: curl https://$Domain/api/health" -ForegroundColor Yellow

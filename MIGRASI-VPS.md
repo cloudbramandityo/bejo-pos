@@ -3,7 +3,7 @@
 > 📌 **PANDUAN UTAMA (VPS WINDOWS — Rumah Web):** **[MIGRASI-VPS-2-ARAH.md](./MIGRASI-VPS-2-ARAH.md)**
 > Dipecah jelas antara **sisi Dashboard VPS (panel Rumah Web)** dan **sisi Aplikasi (PC Anda)**, lengkap dengan perintah, urutan, checklist, dan troubleshooting.
 >
-> 📎 Dokumen ini (dan skrip `install-vps.sh` / `deploy-vps.sh`) adalah **variante Linux/Ubuntu** — dipakai bila VPS memakai Linux. Untuk VPS Windows gunakan skrip `deploy\install-vps-windows.ps1`, `deploy\deploy-vps-windows.ps1`, `deploy\remote-run.ps1`, dan `deploy\deploy-vps.ps1`.
+> 📎 Dokumen ini menyimpan catatan historis varian Linux/Ubuntu. Skrip Linux (`install-vps.sh` / `deploy-vps.sh`) sudah dihapus. Untuk VPS Windows yang sudah live, satu-satunya skrip deploy adalah `deploy\deploy-vps.ps1`; skrip instalasi awal tetap `install-vps-windows.ps1`, `setup-pocketbase.ps1`, dan `finish-deploy.ps1`.
 
 Panduan lengkap memindahkan aplikasi ke VPS hosting dengan domain
 **bejodigitalprint.com** (VPS: `vps.bejodigitalprint.com`).
@@ -70,6 +70,8 @@ Di registrar domain (Cloudflare / Namecheap / GoDaddy):
 
 ## 3. Bootstrap VPS (sekali saja)
 
+> Skrip `install-vps.sh` sudah dihapus. Langkah di bawah hanya catatan historis Linux.
+
 Login ke VPS:
 
 ```bash
@@ -99,31 +101,13 @@ Yang dilakukan skrip:
 
 ## 4. Upload source & deploy
 
-### Cara A — otomatis (dari komputer Windows)
+> Skrip Linux (`install-vps.sh`, `deploy-vps.sh`) dan skrip deploy lama berbasis SSH sudah dihapus. Bagian ini hanya catatan historis.
+
+Untuk VPS Windows yang sudah live, deploy dilakukan di dalam VPS lewat RDP:
 
 ```powershell
-.\deploy\deploy-vps.ps1 -Host vps.bejodigitalprint.com -User root -KeyPath "$env:USERPROFILE\.ssh\id_ed25519"
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\bejo-pos\deploy\deploy-vps.ps1 -Force
 ```
-
-Skrip ini: build produksi lokal → paket source (tanpa `node_modules`, `dist`, `.env`) → SCP ke VPS → jalankan `deploy/deploy-vps.sh` di VPS → health check otomatis.
-
-### Cara B — manual
-
-```bash
-# di komputer: paketkan source
-tar -czf bejo-deploy.tar.gz --exclude=node_modules --exclude=dist --exclude=.git --exclude=.env .
-
-# unggah
-scp bejo-deploy.tar.gz root@vps.bejodigitalprint.com:/tmp/
-
-# di VPS
-mkdir -p /srv/bejo-pos
-tar -xzf /tmp/bejo-deploy.tar.gz -C /srv/bejo-pos
-cd /srv/bejo-pos
-bash deploy/deploy-vps.sh
-```
-
-`deploy-vps.sh` melakukan: backup build lama → `npm ci` → `npm run build` → `pm2 reload` → `pm2 save` → **health check** (bila gagal, build lama tetap ada di `/var/backups/bejo-pos`).
 
 ---
 
@@ -294,10 +278,11 @@ systemctl restart pocketbase      # restart database
 ```
 
 ### Update aplikasi (setelah ada perubahan kode)
+Untuk VPS Windows (di dalam VPS lewat RDP):
 ```powershell
-.\deploy\deploy-vps.ps1 -Host vps.bejodigitalprint.com -User root
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\bejo-pos\deploy\deploy-vps.ps1 -Force
 ```
-Rollback bila deploy bermasalah:
+Rollback Linux (historis):
 ```bash
 ls -lt /var/backups/bejo-pos/                 # pilih build lama
 cd /srv/bejo-pos && tar -xzf /var/backups/bejo-pos/dist-<STAMP>.tar.gz && pm2 restart bejo-pos
@@ -347,7 +332,7 @@ cd /srv/bejo-pos && tar -xzf /var/backups/bejo-pos/dist-<STAMP>.tar.gz && pm2 re
 
 ## 12. Opsi tambahan
 
-- **Cloudflare named tunnel** (URL tetap tanpa membuka port): isi `CLOUDFLARE_TUNNEL_TOKEN` + `CLOUDFLARE_PUBLIC_URL` di `.env`, jalankan `tunnel-always-on.ps1` di server → aplikasi tetap punya alamat tetap misalnya `app.bejodigitalprint.com`.
+- **Cloudflare named tunnel (historis)**: skrip `tunnel-always-on.ps1` sudah dihapus. VPS Windows produksi memakai Caddy + domain langsung.
 - **Docker**: `docker build -t bejo-pos . && docker run -d -p 3000:3000 --env-file .env --restart always bejo-pos` (image sudah siap di `Dockerfile`).
 - **Cloud Run**: `gcloud run deploy bejo-pos --source . --set-env-vars-from-file .env` (butuh Dockerfile + akses GCP).
 - **Multi-VPS / scaling**: `instances: 2` pada `ecosystem.config.cjs` + sticky session bila memakai WebSocket (saat ini aplikasi tidak memakai WebSocket, jadi aman).

@@ -8,6 +8,16 @@ This contains everything you need to run your app locally.
 
 View your app in AI Studio: https://ai.studio/apps/72b37ab8-0067-4169-ad03-3579d8ed03ec
 
+## Deploy VPS Windows
+
+Satu-satunya skrip deploy produksi ada di `deploy/deploy-vps.ps1` dan dijalankan di dalam VPS Windows sebagai Administrator:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\bejo-pos\deploy\deploy-vps.ps1 -Force
+```
+
+Skrip mengunduh source `main`, menjalankan build, memperbarui Caddyfile, me-restart service, melakukan health check + rollback, lalu memverifikasi akses internet.
+
 ## Run Locally
 
 **Prerequisites:**  Node.js

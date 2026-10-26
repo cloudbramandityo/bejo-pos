@@ -21,7 +21,7 @@ export const JournalEmptyState: React.FC<JournalEmptyStateProps> = ({ year, canE
         <p className="text-xs text-slate-500 mt-1 leading-relaxed">
           {canEdit
             ? 'Tempel tautan di atas lalu tekan Simpan. Iframe akan menampilkan sheet secara real-time lengkap dengan tab sheet, formula, baris, dan kolom.'
-            : 'Hanya akun DEVELOPER yang dapat mengisi tautan ini. Hubungi Developer untuk melengkapi konfigurasi Jurnal tahun tersebut.'}
+            : 'Jurnal tahun tersebut belum di-publish. Cek secara berkala atau konfirmasi dengan Admin bersangkutan.'}
         </p>
       </div>
       {canEdit ? (

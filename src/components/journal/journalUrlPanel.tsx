@@ -89,22 +89,11 @@ export const JournalUrlPanel: React.FC<JournalUrlPanelProps> = ({
       savedUrl={savedUrl}
       draftDiffers={draftDiffers}
     />
-    {canEdit ? (
+    {canEdit && (
       <p className="flex items-start gap-1.5 text-[10px] sm:text-[11px] text-slate-500 leading-relaxed">
         <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-slate-400" />
         Tempel link /edit, /pubhtml, atau tautan berbagi. Pastikan sheet dibagikan ke
         &quot;Siapa saja yang memiliki link&quot; agar iframe dapat menampilkannya.
-      </p>
-    ) : savedUrl ? (
-      <p className="flex items-start gap-1.5 text-[10px] sm:text-[11px] text-sky-700 leading-relaxed">
-        <Lock className="w-3.5 h-3.5 shrink-0 mt-0.5 text-sky-500" />
-        Hanya akun DEVELOPER yang dapat mengubah tautan Jurnal tahun ini.
-      </p>
-    ) : (
-      <p className="flex items-start gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] sm:text-[11px] text-amber-800 leading-relaxed">
-        <Lock className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600" />
-        Tautan Google Sheet {year ? `tahun ${year}` : 'untuk tahun ini'} belum diatur.
-        Hanya akun DEVELOPER yang dapat mengisi tautan ini.
       </p>
     )}
   </div>

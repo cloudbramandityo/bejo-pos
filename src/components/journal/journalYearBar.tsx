@@ -8,6 +8,7 @@ interface JournalYearBarProps {
   onSelect: (year: number) => void;
   onAdd: () => void;
   onDelete: () => void;
+  canEdit: boolean;
 }
 
 export const JournalYearBar: React.FC<JournalYearBarProps> = ({
@@ -16,6 +17,7 @@ export const JournalYearBar: React.FC<JournalYearBarProps> = ({
   onSelect,
   onAdd,
   onDelete,
+  canEdit,
 }) => (
   <div className="flex flex-col sm:flex-row sm:items-center gap-2">
     <div className="flex items-center gap-1.5 overflow-x-auto pb-1 flex-1 min-w-0">
@@ -46,24 +48,26 @@ export const JournalYearBar: React.FC<JournalYearBarProps> = ({
         );
       })}
     </div>
-    <div className="flex items-center gap-1.5 shrink-0">
-      <button
-        type="button"
-        onClick={onAdd}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors cursor-pointer"
-      >
-        <Plus className="w-3.5 h-3.5" />
-        Tambah Tahun
-      </button>
-      <button
-        type="button"
-        onClick={onDelete}
-        disabled={years.length <= 1}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-        Hapus Tahun
-      </button>
-    </div>
+    {canEdit && (
+      <div className="flex items-center gap-1.5 shrink-0">
+        <button
+          type="button"
+          onClick={onAdd}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors cursor-pointer"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Tambah Tahun
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={years.length <= 1}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+          Hapus Tahun
+        </button>
+      </div>
+    )}
   </div>
 );

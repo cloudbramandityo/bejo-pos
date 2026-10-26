@@ -14,11 +14,12 @@ interface DraftInput {
   selectedYear: number;
   embedMode: JournalEmbedMode;
   showToast: (message: string, tone?: 'ok' | 'error') => void;
+  canEdit: boolean;
 }
 
 export function useJournalDraft(input: DraftInput) {
   const { settingsRef } = input.core;
-  const { embedMode, persist, savedUrl, selectedYear, showToast } = input;
+  const { canEdit, embedMode, persist, savedUrl, selectedYear, showToast } = input;
   const [draftUrl, setDraftUrl] = useState(savedUrl);
 
   useEffect(() => {
@@ -32,6 +33,10 @@ export function useJournalDraft(input: DraftInput) {
   const draftDiffers = draftUrl.trim() !== savedUrl.trim();
 
   const handleSaveUrl = useCallback(() => {
+    if (!canEdit) {
+      showToast('Hanya akun DEVELOPER yang dapat mengubah tautan Jurnal.', 'error');
+      return;
+    }
     const current = settingsRef.current;
     const target = current.years.find((item) => item.year === current.selectedYear);
     if (!target) return;
@@ -47,9 +52,13 @@ export function useJournalDraft(input: DraftInput) {
     showToast(
       trimmed ? `Tautan Jurnal ${target.year} tersimpan.` : `Tautan Jurnal ${target.year} dikosongkan.`
     );
-  }, [draftUrl, persist, settingsRef, showToast]);
+  }, [canEdit, draftUrl, persist, settingsRef, showToast]);
 
   const handlePaste = useCallback(async () => {
+    if (!canEdit) {
+      showToast('Hanya akun DEVELOPER yang dapat mengubah tautan Jurnal.', 'error');
+      return;
+    }
     if (!navigator.clipboard?.readText) {
       showToast('Browser tidak mendukung tempel otomatis. Gunakan Ctrl+V di kolom tautan.', 'error');
       return;
@@ -71,7 +80,7 @@ export function useJournalDraft(input: DraftInput) {
     } catch {
       showToast('Browser menolak akses clipboard. Tempel manual dengan Ctrl+V.', 'error');
     }
-  }, [settingsRef, showToast]);
+  }, [canEdit, settingsRef, showToast]);
 
   const handleModeChange = useCallback(
     (mode: JournalEmbedMode) => {

@@ -9,7 +9,7 @@ import {
 import type { JournalSettings } from '../../utils/journalStorage';
 import type { JournalCore } from './useJournalCore';
 
-export function useJournalCloud(core: JournalCore) {
+export function useJournalCloud(core: JournalCore, canEdit = true) {
   const {
     applySettings,
     cloudOn,
@@ -41,6 +41,10 @@ export function useJournalCloud(core: JournalCore) {
 
   const persist = useCallback(
     (next: JournalSettings, immediate = false) => {
+      if (!canEdit) {
+        applySettings(next);
+        return;
+      }
       const { stamped, id } = applySettings(next, true);
       if (!cloudOn.current) return;
       if (timer.current) window.clearTimeout(timer.current);
@@ -50,7 +54,7 @@ export function useJournalCloud(core: JournalCore) {
       }
       timer.current = window.setTimeout(() => void runSave(stamped, id), 650);
     },
-    [applySettings, cloudOn, runSave]
+    [applySettings, canEdit, cloudOn, runSave]
   );
 
   const bootstrap = useCallback(async () => {
@@ -60,6 +64,21 @@ export function useJournalCloud(core: JournalCore) {
     try {
       const remote = await fetchRemoteJournalSettings();
       if (!mounted.current) return;
+      if (!canEdit) {
+        if (remote.settings && remote.settings.years.length > 0) {
+          const local = settingsRef.current;
+          const keepSelectedYear = remote.settings.years.some(
+            (item) => item.year === local.selectedYear
+          );
+          applySettings({
+            ...remote.settings,
+            selectedYear: keepSelectedYear ? local.selectedYear : remote.settings.selectedYear,
+            embedMode: local.embedMode,
+          });
+        }
+        setCloudState('synced');
+        return;
+      }
       if (editId.current > 0) {
         await runSave(settingsRef.current, editId.current);
         return;
@@ -83,6 +102,7 @@ export function useJournalCloud(core: JournalCore) {
     }
   }, [
     applySettings,
+    canEdit,
     cloudOn,
     editId,
     mounted,

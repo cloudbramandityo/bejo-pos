@@ -2,6 +2,7 @@ import React from 'react';
 import { CloudOff, FileSpreadsheet, RefreshCw } from 'lucide-react';
 import { CloudStatusChip } from './journalStatusUi';
 import type { JournalCloudState } from '../../lib/journalMirrorSync';
+import type { UserRole } from '../../types';
 
 interface JournalHeaderProps {
   linkedCount: number;
@@ -9,6 +10,8 @@ interface JournalHeaderProps {
   modeLabel: string;
   cloudState: JournalCloudState;
   cloudError: string;
+  canEdit: boolean;
+  userRole?: UserRole;
   onRetryCloud: () => void;
 }
 
@@ -18,6 +21,8 @@ export const JournalHeader: React.FC<JournalHeaderProps> = ({
   modeLabel,
   cloudState,
   cloudError,
+  canEdit,
+  userRole,
   onRetryCloud,
 }) => (
   <div className="space-y-3">
@@ -31,8 +36,12 @@ export const JournalHeader: React.FC<JournalHeaderProps> = ({
             <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
               Jurnal — Google Sheet Mirror
             </h2>
-            <span className="px-2 py-0.5 rounded-full bg-slate-900 text-white text-[10px] font-bold tracking-wide">
-              DEVELOPER
+            <span
+              className={`px-2 py-0.5 rounded-full text-white text-[10px] font-bold tracking-wide ${
+                canEdit ? 'bg-slate-900' : 'bg-sky-600'
+              }`}
+            >
+              {canEdit ? 'DEVELOPER' : `${userRole ?? 'PENGGUNA'} · HANYA LIHAT`}
             </span>
           </div>
           <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">

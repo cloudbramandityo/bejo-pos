@@ -11,6 +11,7 @@ interface JournalViewerProps {
   iframeKey: number;
   refreshing: boolean;
   isFullscreen: boolean;
+  canEdit: boolean;
   onRefresh: () => void;
   onCopy: () => void;
   onOpen: () => void;
@@ -25,6 +26,7 @@ export const JournalViewer: React.FC<JournalViewerProps> = ({
   iframeKey,
   refreshing,
   isFullscreen,
+  canEdit,
   onRefresh,
   onCopy,
   onOpen,
@@ -95,7 +97,7 @@ export const JournalViewer: React.FC<JournalViewerProps> = ({
           )}
         </>
       ) : (
-        <JournalEmptyState year={year} />
+        <JournalEmptyState year={year} canEdit={canEdit} />
       )}
     </div>
   </div>

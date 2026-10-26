@@ -23,9 +23,12 @@ import {
   Invoice,
 } from '../../types';
 import { FinancialSettings } from '../../utils/financialStorage';
+import { getJournalAccess } from '../journal/journalAccess';
 
-const JurnalScreen = React.lazy(() =>
-  import('../journal/JurnalScreen').then((module) => ({ default: module.JurnalScreen }))
+const LaporanJurnalScreen = React.lazy(() =>
+  import('../journal/LaporanJurnalScreen').then((module) => ({
+    default: module.LaporanJurnalScreen,
+  }))
 );
 
 interface LaporanScreenProps {
@@ -55,13 +58,22 @@ type LaporanSubTab = 'penjualan' | 'keuangan' | 'jurnal';
 
 export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
   const [activeSubTab, setActiveSubTab] = useState<LaporanSubTab>('penjualan');
-  const isDeveloper = props.userRole === 'DEVELOPER';
+  const journalAccess = getJournalAccess(props.userRole);
+  const canAccessJurnal = journalAccess !== 'none';
 
   const subTabs: { key: LaporanSubTab; label: string; icon: React.ElementType; desc: string }[] = [
     { key: 'penjualan', label: 'Laporan Penjualan', icon: Receipt, desc: 'Riwayat & analisis transaksi penjualan' },
     { key: 'keuangan', label: 'Laporan Keuangan', icon: Landmark, desc: 'Laba Rugi, Modal, Neraca & Arus Kas' },
-    ...(isDeveloper
-      ? [{ key: 'jurnal' as const, label: 'Jurnal', icon: BookOpen, desc: 'Google Sheet Mirror per tahun (khusus DEVELOPER)' }]
+    ...(canAccessJurnal
+      ? [{
+          key: 'jurnal' as const,
+          label: 'Jurnal',
+          icon: BookOpen,
+          desc:
+            journalAccess === 'edit'
+              ? 'Google Sheet Mirror per tahun (kelola sebagai DEVELOPER)'
+              : 'Google Sheet Mirror per tahun (hanya lihat)',
+        }]
       : []),
   ];
 
@@ -103,7 +115,7 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
 
       {/* Konten sub-tab aktif */}
       {activeSubTab === 'jurnal' ? (
-        isDeveloper ? (
+        canAccessJurnal ? (
           <React.Suspense
             fallback={
               <div className="flex items-center justify-center py-24 text-sm text-slate-500">
@@ -111,11 +123,11 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
               </div>
             }
           >
-            <JurnalScreen />
+            <LaporanJurnalScreen userRole={props.userRole} />
           </React.Suspense>
         ) : (
           <div className="flex items-center justify-center py-24 text-sm text-slate-500">
-            Modul Jurnal hanya dapat diakses oleh DEVELOPER.
+            Modul Jurnal hanya dapat diakses oleh DEVELOPER, OWNER, dan ADMIN.
           </div>
         )
       ) : activeSubTab === 'penjualan' ? (

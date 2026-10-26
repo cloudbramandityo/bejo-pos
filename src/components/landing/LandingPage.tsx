@@ -1768,7 +1768,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     const siteTitle = (config.brand?.siteTitle || '').trim();
 
     /* --- favicon --- */
-    let icon = document.getElementById('bejo-landing-favicon') as HTMLLinkElement | null;
+    let icon = head.querySelector('link[rel~="icon"]') as HTMLLinkElement | null;
     const hadIcon = !!icon;
     if (!icon) {
       icon = document.createElement('link');
@@ -1777,15 +1777,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       head.appendChild(icon);
     }
     if (favicon) {
-      icon.type = 'image/png';
+      /* Server sudah menyuntikkan <link rel="icon">; jangan paksa tipe PNG
+         agar favicon JPG/SVG lama tetap tampil. */
+      if (/^data:image\/png/i.test(favicon)) icon.type = 'image/png';
+      else icon.removeAttribute('type');
       icon.href = favicon;
     } else if (!hadIcon) {
       icon.remove();
     }
-
-    /* --- judul tab browser --- */
-    const previousTitle = document.title;
-    if (siteTitle) document.title = siteTitle;
 
     /* --- meta description --- */
     const meta = head.querySelector('meta[name="description"]') as HTMLMetaElement | null;
@@ -1804,7 +1803,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     return () => {
       /* kembalikan seperti semula saat meninggalkan halaman publik */
       if (!hadIcon && icon) icon.remove();
-      document.title = previousTitle;
       if (meta && previousMeta !== undefined) meta.content = previousMeta;
       if (og && previousOg !== undefined) og.content = previousOg;
       if (ogTitle && previousOgTitle !== undefined) ogTitle.content = previousOgTitle;

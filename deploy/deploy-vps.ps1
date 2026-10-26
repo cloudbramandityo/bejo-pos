@@ -739,6 +739,51 @@ if ($SkipPublicCheck) {
     } else {
       Write-Warn2 "Halaman utama belum terjangkau (HTTP $($publicRoot.Code))."
     }
+
+    # Identitas website (logo, favicon, judul) hanya live bila landing sudah
+    # dipublish dan HTML publik memuat tag identitas dari server.
+    try {
+      $landingResponse = Invoke-WebRequest -Uri "$publicBase/api/landing/published" -UseBasicParsing -TimeoutSec 20
+      $landingPayload = $landingResponse.Content | ConvertFrom-Json
+      if ($landingPayload.published -and $landingPayload.config) {
+        $brand = $landingPayload.config.brand
+        $brandBits = @()
+        if ($brand.logoUrl) { $brandBits += 'logo' }
+        if ($brand.faviconUrl) { $brandBits += 'favicon' }
+        if ($brand.siteTitle) { $brandBits += 'judul' }
+        $brandText = if ($brandBits.Count -gt 0) { $brandBits -join ', ' } else { 'belum diisi' }
+        Write-Ok "Landing published terbaca - identitas: $brandText."
+
+        if ($brand.faviconUrl -or $brand.siteTitle) {
+          try {
+            $headResponse = Invoke-WebRequest -Uri "$publicBase/" -UseBasicParsing -TimeoutSec 20
+            $headChecks = @()
+            $headOk = $true
+            if ($brand.faviconUrl) {
+              $faviconOk = $headResponse.Content -match '<link\s+rel="icon"'
+              if (-not $faviconOk) { $headOk = $false }
+              $headChecks += $(if ($faviconOk) { 'favicon: OK' } else { 'favicon: BELUM ADA' })
+            }
+            if ($brand.siteTitle) {
+              $titleOk = $headResponse.Content -match [regex]::Escape($brand.siteTitle)
+              if (-not $titleOk) { $headOk = $false }
+              $headChecks += $(if ($titleOk) { 'judul: OK' } else { 'judul: BELUM ADA' })
+            }
+            if ($headOk) {
+              Write-Ok "Identitas di HTML publik - $($headChecks -join ' | ')."
+            } else {
+              Write-Warn2 "Identitas belum lengkap di HTML publik - $($headChecks -join ' | '). Periksa Simpan & Publish."
+            }
+          } catch {
+            Write-Warn2 "HTML publik tidak dapat diperiksa: $($_.Exception.Message)"
+          }
+        }
+      } else {
+        Write-Warn2 'Landing page belum dipublish. Identitas belum tampil live di internet.'
+      }
+    } catch {
+      Write-Warn2 "Cek identitas Landing gagal: $($_.Exception.Message)"
+    }
   } catch {
     Write-Warn2 "URL publik tidak valid: $($_.Exception.Message)"
   }

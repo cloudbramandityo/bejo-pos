@@ -1,11 +1,16 @@
 import express from "express";
+import fs from "fs";
 import path from "path";
 import http from "http";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import { registerMarketingRoutes } from "./server/marketingApi";
 import { registerJournalRoutes } from "./server/journalApi";
-import { registerLandingRoutes } from "./server/landingApi";
+import {
+  registerLandingRoutes,
+  getPublishedLandingIdentity,
+  type PublishedLandingIdentity,
+} from "./server/landingApi";
 
 dotenv.config();
 
@@ -1673,6 +1678,106 @@ app.post("/api/invoices/store-identity", (req, res) => {
 });
 
 // Vite middleware setup
+let indexTemplatePromise: Promise<string> | null = null;
+
+function readIndexTemplate(distPath: string): Promise<string> {
+  if (!indexTemplatePromise) {
+    indexTemplatePromise = fs.promises
+      .readFile(path.join(distPath, 'index.html'), 'utf8')
+      .catch((err) => {
+        // Jangan simpan kegagalan: coba baca ulang pada request berikutnya.
+        indexTemplatePromise = null;
+        throw err;
+      });
+  }
+  return indexTemplatePromise;
+}
+
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => HTML_ESCAPES[char] || char);
+}
+
+function setMetaTag(html: string, attr: 'name' | 'property', key: string, content: string): string {
+  const tag = `<meta ${attr}="${key}" content="${escapeHtml(content)}" />`;
+  const pattern = new RegExp(`<meta\\s+${attr}="${key}"[^>]*>`, 'i');
+  if (pattern.test(html)) return html.replace(pattern, tag);
+  return html.replace('</head>', `    ${tag}\n  </head>`);
+}
+
+/** Ubah URL media relatif (/api/landing/media/...) menjadi absolut untuk OG. */
+function absoluteMediaUrl(value: string, req: express.Request): string {
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  if (!value.startsWith('/')) return '';
+  const origin = APP_URL || `${req.protocol}://${req.get('host') || ''}`;
+  return `${origin.replace(/\/+$/, '')}${value}`;
+}
+
+/** Jangan biarkan PocketBase yang lambat menahan pengiriman HTML halaman. */
+const IDENTITY_TIMEOUT_MS = 1500;
+
+async function getIdentityWithinTimeout(): Promise<PublishedLandingIdentity | null> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), IDENTITY_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([getPublishedLandingIdentity().catch(() => null), timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * Suntikkan identitas brand (judul, deskripsi, favicon, gambar OG) dari
+ * konfigurasi Landing Page yang sudah dipublish ke HTML awal. Dengan begitu
+ * logo/favicon/identitas tetap terlihat walau JavaScript belum dijalankan
+ * (mis. pratinjau tautan WhatsApp atau crawler mesin pencari).
+ */
+async function renderIndexHtml(distPath: string, req: express.Request): Promise<string> {
+  const html = await readIndexTemplate(distPath);
+  const identity = await getIdentityWithinTimeout();
+  if (!identity) return html;
+
+  let output = html;
+  const { siteTitle, metaDescription } = identity;
+  const favicon = absoluteMediaUrl(identity.faviconUrl, req);
+  const socialImage = absoluteMediaUrl(identity.logoUrl, req);
+
+  if (siteTitle) {
+    output = output.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(siteTitle)}</title>`);
+    output = setMetaTag(output, 'property', 'og:title', siteTitle);
+    output = setMetaTag(output, 'name', 'twitter:title', siteTitle);
+  }
+  if (metaDescription) {
+    output = setMetaTag(output, 'name', 'description', metaDescription);
+    output = setMetaTag(output, 'property', 'og:description', metaDescription);
+    output = setMetaTag(output, 'name', 'twitter:description', metaDescription);
+  }
+  if (socialImage) {
+    output = setMetaTag(output, 'property', 'og:image', socialImage);
+    output = setMetaTag(output, 'name', 'twitter:image', socialImage);
+  }
+  if (favicon) {
+    const iconTag = `<link rel="icon" href="${escapeHtml(favicon)}" />`;
+    if (/<link\s+rel="icon"[^>]*>/i.test(output)) {
+      output = output.replace(/<link\s+rel="icon"[^>]*>/i, iconTag);
+    } else {
+      output = output.replace('</head>', `    ${iconTag}\n  </head>`);
+    }
+  }
+
+  return output;
+}
+
 async function setupVite() {
   if (process.env.NODE_ENV !== "production") {
     const isHmrDisabled = process.env.DISABLE_HMR === 'true';
@@ -1690,6 +1795,9 @@ async function setupVite() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath, {
+      // Biarkan route di bawah menangani semua HTML agar identitas brand
+      // bisa disuntikkan sebelum halaman dikirim ke browser.
+      index: false,
       maxAge: "1h",
       setHeaders: (res, filePath) => {
         if (filePath.endsWith(".html")) {
@@ -1700,8 +1808,14 @@ async function setupVite() {
         }
       }
     }));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    app.get('*', async (req, res) => {
+      try {
+        res.setHeader('Cache-Control', 'no-cache');
+        res.type('html').send(await renderIndexHtml(distPath, req));
+      } catch (err) {
+        console.error('[Server] Gagal menyajikan index.html:', err);
+        res.status(500).send('Aplikasi belum dapat dimuat.');
+      }
     });
   }
 

@@ -134,12 +134,12 @@ async function findRecordByLegacyId(id: string): Promise<any | null> {
     if (err?.status !== 400 && err?.status !== 404) throw err;
   }
 
-  // Fallback untuk koleksi lama: baca batch tanpa filter/sort, lalu cocokkan
-  // `legacyId` di memori (mis. bila field belum bisa difilter).
+  // Fallback untuk koleksi lama: baca seluruh halaman tanpa filter/sort, lalu
+  // cocokkan `legacyId` di memori (mis. bila field belum bisa difilter).
+  // Media landing juga bisa berada di luar 500 record pertama.
   let items: any[];
   try {
-    const list = await service.getList(1, 500);
-    items = list.items;
+    items = await readAllSettings(service);
   } catch (err) {
     throw filterError || err;
   }
@@ -148,9 +148,32 @@ async function findRecordByLegacyId(id: string): Promise<any | null> {
     .filter((item) => item?.legacyId === id)
     .sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
 
-  if (matches[0]) return matches[0];
-  console.warn(`[Landing] Record ${id} tidak ditemukan di ${items.length} record settings.`);
-  return null;
+  const match = matches[0];
+  if (!match) {
+    console.warn(`[Landing] Record ${id} tidak ditemukan di ${items.length} record settings.`);
+    return null;
+  }
+
+  // Pindai hanya id/legacyId/updated; ambil record lengkap sekali saja karena
+  // record media bisa memuat base64 berukuran besar.
+  return service.getOne(match.id);
+}
+
+/** Baca semua record `settings` per halaman agar media lama tetap ditemukan. */
+async function readAllSettings(service: any): Promise<any[]> {
+  const perPage = 200;
+  const maxPages = 100;
+  const items: any[] = [];
+
+  for (let page = 1; page <= maxPages; page++) {
+    const list = await service.getList(page, perPage, { fields: 'id,legacyId,updated' });
+    const batch = Array.isArray(list.items) ? list.items : [];
+    items.push(...batch);
+    if (batch.length < perPage) break;
+    if (typeof list.totalPages === 'number' && page >= list.totalPages) break;
+  }
+
+  return items;
 }
 
 /** Log penyebab kegagalan tanpa membocorkan isi record. */
@@ -174,6 +197,56 @@ function recordPayload(record: any): Record<string, any> | null {
   }
   const { id, legacyId, data, collectionId, collectionName, expand, ...flat } = record;
   return flat;
+}
+
+export interface PublishedLandingIdentity {
+  siteTitle: string;
+  metaDescription: string;
+  logoUrl: string;
+  faviconUrl: string;
+}
+
+let identityCache: { at: number; value: PublishedLandingIdentity } | null = null;
+let lastIdentityErrorAt = 0;
+const IDENTITY_TTL_MS = 15_000;
+const IDENTITY_ERROR_LOG_INTERVAL_MS = 60_000;
+
+/**
+ * Identitas brand dari konfigurasi yang sudah dipublish, dipakai untuk
+ * menyuntikkan title/favicon/OG ke HTML awal agar terlihat oleh pengunjung
+ * dan crawler yang tidak menjalankan JavaScript.
+ */
+export async function getPublishedLandingIdentity(): Promise<PublishedLandingIdentity | null> {
+  const now = Date.now();
+  if (identityCache && now - identityCache.at < IDENTITY_TTL_MS) return identityCache.value;
+
+  try {
+    const record = await findRecordByLegacyId(PUBLISHED_ID);
+    const config = recordPayload(record);
+    if (!config || config.isPublished === false) {
+      identityCache = null;
+      return null;
+    }
+
+    const brand = (config.brand && typeof config.brand === 'object' ? config.brand : {}) as Record<string, any>;
+    const value: PublishedLandingIdentity = {
+      siteTitle: typeof brand.siteTitle === 'string' ? brand.siteTitle.trim() : '',
+      metaDescription: typeof brand.metaDescription === 'string' ? brand.metaDescription.trim() : '',
+      logoUrl: typeof brand.logoUrl === 'string' ? brand.logoUrl : '',
+      faviconUrl: typeof brand.faviconUrl === 'string' ? brand.faviconUrl : '',
+    };
+    identityCache = { at: now, value };
+    return value;
+  } catch (err) {
+    if (now - lastIdentityErrorAt > IDENTITY_ERROR_LOG_INTERVAL_MS) {
+      lastIdentityErrorAt = now;
+      console.error(
+        '[Landing] Identitas publik gagal dibaca:',
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+    return identityCache?.value ?? null;
+  }
 }
 
 export function registerLandingRoutes(app: Express): void {

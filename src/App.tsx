@@ -354,6 +354,14 @@ export default function App() {
     };
   }, []);
 
+  /* Teks tab browser mengikuti identitas website yang sudah dipublish,
+     termasuk saat pengguna berada di dashboard atau pratinjau website. */
+  useEffect(() => {
+    if (!landingConfig.isPublished) return;
+    const siteTitle = (landingConfig.brand?.siteTitle || '').trim();
+    if (siteTitle) document.title = siteTitle;
+  }, [landingConfig.isPublished, landingConfig.brand?.siteTitle]);
+
   useEffect(() => {
     const handleInvoicesUpdated = (e: any) => {
       if (e.detail && Array.isArray(e.detail)) {

@@ -758,7 +758,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
         <div className="min-w-0 space-y-4">
           {/* ============================ IDENTITAS ============================ */}
           {active === 'brand' && (
-            <SectionCard title="Identitas & Logo" description="Logo, favicon, dan deskripsi website yang tampil pada header, tab browser, dan mesin pencari.">
+            <SectionCard title="Identitas & Logo" description="Logo, favicon, dan deskripsi website yang tampil pada header, tab browser, dan mesin pencari. Perubahan identitas tayang live setelah Simpan & Publish.">
               <div className="grid gap-5 md:grid-cols-2">
                 <ImageField
                   label="Logo (PNG transparan)"

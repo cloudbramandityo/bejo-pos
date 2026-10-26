@@ -80,6 +80,7 @@ import {
   saveInvoiceStoreIdentityCloud
 } from '../backend/pocketbaseBackend';
 import { buildOpenAccountInvoiceItems } from '../utils/openAccountStorage';
+import { exportInvoiceToPDF } from '../utils/invoicePdf';
 import { StoreLogo } from './StoreLogo';
 import { SalesTransactionPickerModal } from './modals/SalesTransactionPickerModal';
 
@@ -1724,6 +1725,23 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
 
   const handleExecutePrint = () => {
     window.print();
+  };
+
+  const handleDownloadInvoicePdf = () => {
+    if (!selectedInvoice) return;
+    try {
+      const { filename, pageCount } = exportInvoiceToPDF(selectedInvoice, {
+        paperSize,
+        orientation: paperOrientation,
+        docType: printDocType,
+        storeIdentity,
+        allInvoices: invoices,
+      });
+      showToast(`PDF ${filename} berhasil dibuat (${pageCount} halaman).`, 'success');
+    } catch (error) {
+      console.error('Gagal membuat PDF invoice', error);
+      showToast('Gagal membuat file PDF. Silakan coba lagi atau gunakan tombol Cetak.', 'error');
+    }
   };
 
   // =========================================================================
@@ -5019,13 +5037,24 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                   </div>
                 )}
 
+                {printMode === 'a4' && (
+                  <button
+                    type="button"
+                    onClick={handleDownloadInvoicePdf}
+                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    title={`Unduh file PDF ${paperSize.toUpperCase()} ${paperOrientation === 'portrait' ? 'vertikal' : 'horizontal'}`}
+                  >
+                    <Download className="w-4 h-4" /> Unduh PDF
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={handleExecutePrint}
-                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer"
-                  title="Cetak langsung atau simpan sebagai dokumen PDF"
+                  className="px-3.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  title={printMode === 'thermal' ? 'Cetak struk thermal' : 'Buka dialog cetak browser'}
                 >
-                  <Printer className="w-4 h-4" /> Cetak / Unduh PDF
+                  <Printer className="w-4 h-4" /> {printMode === 'thermal' ? 'Cetak Struk' : 'Cetak'}
                 </button>
 
                 <button
@@ -5502,7 +5531,10 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
               {/* FORMAT 2: MINI THERMAL RECEIPT (80mm/58mm) */}
               {/* ============================================================= */}
               {printMode === 'thermal' && (
-                <div className="w-[80mm] bg-white p-4 shadow-md border border-slate-200 font-mono text-[11px] leading-tight text-slate-900 print:border-none print:shadow-none print:p-0">
+                <div
+                  id="thermal-receipt"
+                  className="w-[80mm] bg-white p-4 shadow-md border border-slate-200 font-mono text-[11px] leading-tight text-slate-900 print:border-none print:shadow-none print:p-0"
+                >
                   <div className="text-center pb-2 border-b border-dashed border-slate-400">
                     <h3 className="font-extrabold text-xs">{storeIdentity.storeName}</h3>
                     <p className="text-[9px]">{storeIdentity.address}</p>

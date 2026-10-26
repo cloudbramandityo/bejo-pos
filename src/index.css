@@ -435,7 +435,7 @@
     overflow: visible !important;
   }
 
-  body:has(#invoice-print-clean) html {
+  html:has(#invoice-print-clean) {
     width: 100% !important;
     height: auto !important;
     overflow: visible !important;
@@ -453,6 +453,20 @@
     position: static !important;
     width: 100% !important;
     max-width: 100% !important;
+    background: transparent !important;
+  }
+
+  /* The thermal print rules above hide .bg-slate-100 wrappers; the invoice
+     preview lives inside one, so it must be restored for A4/F4 printing. */
+  body:has(#invoice-print-clean) div.fixed.inset-0.z-50.flex > div > div.bg-slate-100,
+  body:has(#invoice-print-clean) div.fixed.inset-0.z-50.flex > div > div.p-4.bg-slate-50 {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
     background: transparent !important;
   }
 

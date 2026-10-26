@@ -79,6 +79,7 @@ import {
   subscribeInvoiceStoreIdentity,
   saveInvoiceStoreIdentityCloud
 } from '../backend/pocketbaseBackend';
+import { buildOpenAccountInvoiceItems } from '../utils/openAccountStorage';
 import { StoreLogo } from './StoreLogo';
 import { SalesTransactionPickerModal } from './modals/SalesTransactionPickerModal';
 
@@ -324,6 +325,13 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
 
   const loadOpenAccountGroup = (group: any) => {
     if (!group) return;
+
+    const importedItems = buildOpenAccountInvoiceItems(group);
+    if (importedItems.length === 0) {
+      showToast('Tidak ada sisa tagihan Open Account untuk diterbitkan invoice.', 'info');
+      return;
+    }
+
     setActiveSubTab('create');
     setFormDocType('COMMERCIAL');
     setFormCustomer({
@@ -336,50 +344,8 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
     });
     setSelectedCustomerOption('custom');
     setFormProjectTitle(`Tagihan Open Account - ${group.customerName || 'Pelanggan'}`);
-    if (group.notes) {
-      setFormNotes(`Catatan Rekening Terbuka (Open Account):\n${group.notes}`);
-    }
-
-    const importedItems: InvoiceItem[] = [];
-    let idx = 0;
-    (group.orders || []).forEach((ord: any) => {
-      (ord.items || []).forEach((it: any) => {
-        const qty = it.qty || 1;
-        const total = it.totalPrice || 0;
-        importedItems.push({
-          id: `item-oa-${ord.id}-${it.id || idx}`,
-          itemName: `[${ord.orderNumber}] ${it.jobName || it.materialName}`,
-          description: `${it.materialName} • ${it.lengthMeters}x${it.widthMeters}m (${qty} pcs)${ord.dpPaid > 0 ? ` (DP: -Rp ${ord.dpPaid.toLocaleString('id-ID')})` : ''}`,
-          quantity: qty,
-          unit: it.saleMode === 'lembar' ? 'lembar' : `${it.lengthMeters}x${it.widthMeters}m`,
-          unitPrice: it.unitPrice || Math.round(total / qty),
-          discountPercent: 0,
-          discountAmount: 0,
-          isTaxable: true,
-          totalPrice: total
-        });
-        idx++;
-      });
-    });
-
-    if (group.adjustment && group.adjustment !== 0) {
-      importedItems.push({
-        id: `item-oa-adj-${Date.now()}`,
-        itemName: `Penyesuaian Sisa Tagihan (+/-): ${group.adjustmentReason || 'Penyesuaian Plafon'}`,
-        description: group.adjustmentReason || 'Penyesuaian Biaya Tagihan Open Account',
-        quantity: 1,
-        unit: 'paket',
-        unitPrice: group.adjustment,
-        discountPercent: 0,
-        discountAmount: 0,
-        isTaxable: true,
-        totalPrice: group.adjustment
-      });
-    }
-
-    if (importedItems.length > 0) {
-      setFormItems(importedItems);
-    }
+    setFormNotes(group.notes ? `Catatan Rekening Terbuka (Open Account):\n${group.notes}` : '');
+    setFormItems(importedItems);
     showToast(`Tagihan Open Account ${group.customerName} berhasil dimuat ke rincian invoice!`, 'success');
   };
 
@@ -529,18 +495,20 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
       
       // Auto recalculate row total
       const qty = Math.max(0.01, Number(updated.quantity) || 1);
-      const price = Math.max(0, Number(updated.unitPrice) || 0);
+      const price = Number(updated.unitPrice) || 0;
       const rawTotal = qty * price;
       
       let disc = 0;
       if (updated.discountPercent && updated.discountPercent > 0) {
         disc = (rawTotal * updated.discountPercent) / 100;
         updated.discountAmount = Math.round(disc);
+      } else if (field === 'discountPercent') {
+        updated.discountAmount = 0;
       } else if (updated.discountAmount) {
-        disc = updated.discountAmount;
+        disc = Number(updated.discountAmount) || 0;
       }
       
-      updated.totalPrice = Math.max(0, Math.round(rawTotal - disc));
+      updated.totalPrice = Math.round(rawTotal - disc);
       return updated;
     }));
   };
@@ -2775,7 +2743,6 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                             <td className="py-2 px-2.5 align-top pt-2.5">
                               <input
                                 type="number"
-                                min="0"
                                 required
                                 value={item.unitPrice}
                                 onChange={e => handleUpdateItemField(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}

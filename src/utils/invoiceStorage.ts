@@ -70,32 +70,42 @@ export function calculateInvoiceTotals(
   let taxableSubtotal = 0;
 
   for (const item of items) {
-    const rawItemTotal = item.quantity * item.unitPrice;
+    const gross = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
     let discAmt = 0;
     if (item.discountPercent && item.discountPercent > 0) {
-      discAmt = (rawItemTotal * item.discountPercent) / 100;
+      discAmt = (gross * item.discountPercent) / 100;
     } else if (item.discountAmount) {
-      discAmt = item.discountAmount;
+      discAmt = Number(item.discountAmount) || 0;
     }
-    const cleanItemTotal = Math.max(0, rawItemTotal - discAmt);
-    
-    subtotal += rawItemTotal;
+    const calculatedNet = gross - discAmt;
+
+    // totalPrice adalah nilai baris yang ditampilkan dan disimpan. Untuk item
+    // hasil tarikan SPK berbasis m2, nilai ini bisa berbeda dari qty x harga.
+    const storedTotal = Number(item.totalPrice);
+    const lineNet =
+      Number.isFinite(storedTotal) && (storedTotal !== 0 || gross === 0)
+        ? storedTotal
+        : calculatedNet;
+
+    subtotal += lineNet + discAmt;
     totalDiscount += discAmt;
     if (item.isTaxable) {
-      taxableSubtotal += cleanItemTotal;
+      taxableSubtotal += lineNet;
     }
   }
 
-  const taxableBase = Math.round(taxableSubtotal);
+  const roundedSubtotal = Math.round(subtotal);
+  const roundedDiscount = Math.round(totalDiscount);
+  const taxableBase = Math.max(0, Math.round(taxableSubtotal));
   const taxAmount = taxRatePercent > 0 ? Math.round((taxableBase * taxRatePercent) / 100) : 0;
-  const grandTotal = Math.round(subtotal - totalDiscount + taxAmount);
+  const grandTotal = Math.max(0, roundedSubtotal - roundedDiscount + taxAmount);
   
   const dpRequiredAmount = dpPercent > 0 ? Math.round((grandTotal * dpPercent) / 100) : 0;
   const balanceDue = Math.max(0, grandTotal - amountPaid);
 
   return {
-    subtotal,
-    discountAmount: totalDiscount,
+    subtotal: roundedSubtotal,
+    discountAmount: roundedDiscount,
     taxableBase,
     taxRate: taxRatePercent,
     taxAmount,

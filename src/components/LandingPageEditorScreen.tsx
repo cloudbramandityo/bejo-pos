@@ -95,6 +95,8 @@ const moveItem = <T,>(arr: T[], from: number, to: number): T[] => {
   return next;
 };
 
+const isImageOnlySlide = (slide: LandingSlide) => slide.displayMode === 'image';
+
 /* -------------------------------------------------------------------------- */
 /*  Kompresi gambar di browser (canvas → JPEG)                                */
 /* -------------------------------------------------------------------------- */
@@ -888,6 +890,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                       subtitle: '',
                       ctaText: 'Klik Di Sini',
                       imageUrl: undefined,
+                      displayMode: 'overlay',
                       isActive: true,
                     };
                     updateList('slides', [...config.slides, slide]);
@@ -905,7 +908,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                     key={slide.id}
                     id={slide.id}
                     title={slide.title || `Slide ${i + 1}`}
-                    subtitle={`${slide.eyebrow} · ${slide.imageUrl ? 'gambar siap' : 'belum ada gambar'}`}
+                    subtitle={`${isImageOnlySlide(slide) ? 'Gambar saja' : slide.eyebrow} · ${slide.imageUrl ? 'gambar siap' : 'belum ada gambar'}`}
                     open={openItem === slide.id}
                     onToggle={() => setOpenItem(openItem === slide.id ? null : slide.id)}
                     onDelete={() => updateList('slides', config.slides.filter((s) => s.id !== slide.id))}
@@ -913,38 +916,84 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                     onDown={i < config.slides.length - 1 ? () => updateList('slides', moveItem(config.slides, i, i + 1)) : undefined}
                     right={<Toggle active={slide.isActive} onChange={(v) => updateList('slides', config.slides.map((s) => (s.id === slide.id ? { ...s, isActive: v } : s)))} />}
                   >
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <ImageField
-                        label="Foto Banner"
-                        value={slide.imageUrl}
-                        onChange={(v) => updateList('slides', config.slides.map((s) => (s.id === slide.id ? { ...s, imageUrl: v } : s)))}
-                        recommended="1280 × 720 px"
-                        maxW={1600}
-                        maxH={900}
-                      />
-                      <div className="space-y-3">
-                        <Field label="Label Kecil (eyebrow)" hint="Contoh: TEMPLATE DESIGN">
-                          <input
-                            value={slide.eyebrow}
-                            onChange={(e) => updateList('slides', config.slides.map((s) => (s.id === slide.id ? { ...s, eyebrow: e.target.value } : s)))}
-                            className={inputCls}
-                          />
-                        </Field>
-                        <Field label="Judul Slide" hint="Gunakan Enter untuk baris baru.">
-                          <textarea
-                            rows={2}
-                            value={slide.title}
-                            onChange={(e) => updateList('slides', config.slides.map((s) => (s.id === slide.id ? { ...s, title: e.target.value } : s)))}
-                            className={areaCls}
-                          />
-                        </Field>
-                        <Field label="Teks Tombol">
-                          <input
-                            value={slide.ctaText || ''}
-                            onChange={(e) => updateList('slides', config.slides.map((s) => (s.id === slide.id ? { ...s, ctaText: e.target.value } : s)))}
-                            className={inputCls}
-                          />
-                        </Field>
+                    <div className="space-y-4">
+                      <Field
+                        label="Mode Tampilan Banner"
+                        hint="Mode 1 menampilkan gambar beserta tulisan dengan gradient gelap agar tulisan mudah dibaca. Mode 2 hanya menampilkan gambar tanpa gradient maupun bayangan."
+                      >
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <button
+                            type="button"
+                            onClick={() => updateList('slides', config.slides.map((s) => (s.id === slide.id ? { ...s, displayMode: 'overlay' } : s)))}
+                            className={`rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                              isImageOnlySlide(slide)
+                                ? 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                                : 'border-slate-900 bg-slate-900 text-white'
+                            }`}
+                          >
+                            <span className="block text-[11.5px] font-bold">Mode 1 — Teks + Gradient</span>
+                            <span className={`mt-0.5 block text-[10px] font-medium ${isImageOnlySlide(slide) ? 'text-slate-500' : 'text-white/70'}`}>
+                              Gambar dengan gradient dan tulisan di atasnya.
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateList('slides', config.slides.map((s) => (s.id === slide.id ? { ...s, displayMode: 'image' } : s)))}
+                            className={`rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                              isImageOnlySlide(slide)
+                                ? 'border-slate-900 bg-slate-900 text-white'
+                                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span className="block text-[11.5px] font-bold">Mode 2 — Gambar Saja</span>
+                            <span className={`mt-0.5 block text-[10px] font-medium ${isImageOnlySlide(slide) ? 'text-white/70' : 'text-slate-500'}`}>
+                              Gambar tampil penuh tanpa gradient dan bayangan.
+                            </span>
+                          </button>
+                        </div>
+                      </Field>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <ImageField
+                          label="Foto Banner"
+                          value={slide.imageUrl}
+                          onChange={(v) => updateList('slides', config.slides.map((s) => (s.id === slide.id ? { ...s, imageUrl: v } : s)))}
+                          recommended="1280 × 720 px"
+                          maxW={1600}
+                          maxH={900}
+                        />
+                        <div className="space-y-3">
+                          {isImageOnlySlide(slide) && (
+                            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10.5px] font-semibold text-amber-700">
+                              Mode Gambar Saja aktif — label, judul, dan teks tombol tidak ditampilkan di halaman publik.
+                            </p>
+                          )}
+                          <Field label="Label Kecil (eyebrow)" hint="Contoh: TEMPLATE DESIGN">
+                            <input
+                              value={slide.eyebrow}
+                              disabled={isImageOnlySlide(slide)}
+                              onChange={(e) => updateList('slides', config.slides.map((s) => (s.id === slide.id ? { ...s, eyebrow: e.target.value } : s)))}
+                              className={`${inputCls} disabled:cursor-not-allowed disabled:opacity-50`}
+                            />
+                          </Field>
+                          <Field label="Judul Slide" hint="Gunakan Enter untuk baris baru.">
+                            <textarea
+                              rows={2}
+                              value={slide.title}
+                              disabled={isImageOnlySlide(slide)}
+                              onChange={(e) => updateList('slides', config.slides.map((s) => (s.id === slide.id ? { ...s, title: e.target.value } : s)))}
+                              className={`${areaCls} disabled:cursor-not-allowed disabled:opacity-50`}
+                            />
+                          </Field>
+                          <Field label="Teks Tombol">
+                            <input
+                              value={slide.ctaText || ''}
+                              disabled={isImageOnlySlide(slide)}
+                              onChange={(e) => updateList('slides', config.slides.map((s) => (s.id === slide.id ? { ...s, ctaText: e.target.value } : s)))}
+                              className={`${inputCls} disabled:cursor-not-allowed disabled:opacity-50`}
+                            />
+                          </Field>
+                        </div>
                       </div>
                     </div>
                   </ItemAccordion>

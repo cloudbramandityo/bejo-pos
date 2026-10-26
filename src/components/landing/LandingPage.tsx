@@ -202,52 +202,59 @@ const HeroSlider: React.FC<{ slides: LandingSlide[]; onCta: () => void }> = ({ s
     );
   }
 
-  const slide = slides[index];
+  const controlsOnImage = slides[index]?.displayMode === 'image';
 
   return (
     <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl bg-slate-900 sm:aspect-[16/9]">
-      {slides.map((s, i) => (
-        <div
-          key={s.id}
-          className={cx(
-            'absolute inset-0 transition-opacity duration-700',
-            i === index ? 'opacity-100' : 'pointer-events-none opacity-0'
-          )}
-        >
-          {s.imageUrl ? (
-            <img src={s.imageUrl} alt={s.title || `Banner ${i + 1}`} className="h-full w-full object-cover" />
-          ) : (
-            <div
-              className="h-full w-full"
-              style={{ background: 'linear-gradient(120deg, #0f172a 0%, #1e3a5f 55%, #00AAFF 150%)' }}
-            />
-          )}
-        </div>
-      ))}
+      {slides.map((s, i) => {
+        const overlayMode = s.displayMode !== 'image';
 
-      <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/30 to-transparent" />
-
-      <div className="absolute inset-0 flex flex-col justify-center px-6 py-8 sm:px-10 md:px-16">
-        {slide.eyebrow && (
-          <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.32em] text-white/90 md:text-[12px]">
-            {slide.eyebrow}
-          </p>
-        )}
-        {slide.title && (
-          <h2 className="max-w-[720px] whitespace-pre-line text-2xl font-semibold leading-[1.15] text-white sm:text-3xl md:text-[42px]">
-            {slide.title}
-          </h2>
-        )}
-        {slide.ctaText && (
-          <button
-            type="button"
-            onClick={onCta}
-            className="mt-6 w-fit rounded-full border border-white/90 px-7 py-2 text-[12px] font-semibold text-white transition-colors hover:bg-white hover:text-[#111] md:text-[13px]"
+        return (
+          <div
+            key={s.id}
+            className={cx(
+              'absolute inset-0 transition-opacity duration-700',
+              i === index ? 'opacity-100' : 'pointer-events-none opacity-0'
+            )}
           >
-            {slide.ctaText}
-          </button>
-        )}
-      </div>
+            {s.imageUrl ? (
+              <img src={s.imageUrl} alt={s.title || `Banner ${i + 1}`} className="h-full w-full object-cover" />
+            ) : (
+              <div
+                className="h-full w-full"
+                style={{ background: 'linear-gradient(120deg, #0f172a 0%, #1e3a5f 55%, #00AAFF 150%)' }}
+              />
+            )}
+
+            {overlayMode && (
+              <>
+                <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/30 to-transparent" />
+                <div className="absolute inset-0 flex flex-col justify-center px-6 py-8 sm:px-10 md:px-16">
+                  {s.eyebrow && (
+                    <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.32em] text-white/90 md:text-[12px]">
+                      {s.eyebrow}
+                    </p>
+                  )}
+                  {s.title && (
+                    <h2 className="max-w-[720px] whitespace-pre-line text-2xl font-semibold leading-[1.15] text-white sm:text-3xl md:text-[42px]">
+                      {s.title}
+                    </h2>
+                  )}
+                  {s.ctaText && (
+                    <button
+                      type="button"
+                      onClick={onCta}
+                      className="mt-6 w-fit rounded-full border border-white/90 px-7 py-2 text-[12px] font-semibold text-white transition-colors hover:bg-white hover:text-[#111] md:text-[13px]"
+                    >
+                      {s.ctaText}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })}
 
       {total > 1 && (
         <>
@@ -256,7 +263,10 @@ const HeroSlider: React.FC<{ slides: LandingSlide[]; onCta: () => void }> = ({ s
               type="button"
               onClick={() => setIndex((i) => (i - 1 + total) % total)}
               aria-label="Banner sebelumnya"
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 text-white transition-colors hover:bg-white hover:text-[#111]"
+              className={cx(
+                'flex h-9 w-9 items-center justify-center rounded-full border border-white/70 text-white transition-colors hover:bg-white hover:text-[#111]',
+                controlsOnImage && 'bg-black/30'
+              )}
             >
               <ChevronLeft size={16} />
             </button>
@@ -264,12 +274,20 @@ const HeroSlider: React.FC<{ slides: LandingSlide[]; onCta: () => void }> = ({ s
               type="button"
               onClick={() => setIndex((i) => (i + 1) % total)}
               aria-label="Banner berikutnya"
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 text-white transition-colors hover:bg-white hover:text-[#111]"
+              className={cx(
+                'flex h-9 w-9 items-center justify-center rounded-full border border-white/70 text-white transition-colors hover:bg-white hover:text-[#111]',
+                controlsOnImage && 'bg-black/30'
+              )}
             >
               <ChevronRight size={16} />
             </button>
           </div>
-          <div className="absolute bottom-6 right-6 flex items-center gap-1.5 md:right-10">
+          <div
+            className={cx(
+              'absolute bottom-6 right-6 flex items-center gap-1.5 md:right-10',
+              controlsOnImage && 'rounded-full bg-black/30 px-2 py-1'
+            )}
+          >
             {slides.map((s, i) => (
               <button
                 key={s.id}

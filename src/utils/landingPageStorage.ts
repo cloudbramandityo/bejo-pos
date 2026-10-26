@@ -54,6 +54,7 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
       subtitle: 'Template kemasan siap pakai, tinggal ganti logo dan warna.',
       ctaText: 'Klik Di Sini',
       imageUrl: undefined,
+      displayMode: 'overlay',
       isActive: true
     },
     {
@@ -63,6 +64,7 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
       subtitle: 'Hasil cetak tajam, laminasi rapi, siap kirim seluruh Indonesia.',
       ctaText: 'Klik Di Sini',
       imageUrl: undefined,
+      displayMode: 'overlay',
       isActive: true
     },
     {
@@ -72,6 +74,7 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
       subtitle: 'Tumbler, tas canvas, plakat akrilik, hingga merchandise event.',
       ctaText: 'Klik Di Sini',
       imageUrl: undefined,
+      displayMode: 'overlay',
       isActive: true
     }
   ],
@@ -710,6 +713,7 @@ function migrateConfig(parsed: unknown): LandingPageConfig {
         subtitle: s?.subtitle || '',
         ctaText: s?.ctaText || '',
         imageUrl: s?.imageUrl,
+        displayMode: s?.displayMode === 'image' ? ('image' as const) : ('overlay' as const),
         isActive: s?.isActive !== false
       }))
     : defaults.slides;
@@ -871,12 +875,31 @@ function stripPbMeta(value: LandingPageConfig): Record<string, any> {
   for (const key of PB_META_KEYS) delete copy[key];
   delete copy.lastModifiedAt;
   delete copy.lastPublishedAt;
+  /* Konfigurasi lama belum punya displayMode — anggap mode gradient (overlay). */
+  if (Array.isArray(copy.slides)) {
+    copy.slides = copy.slides.map((s: any) => ({
+      ...s,
+      displayMode: s?.displayMode === 'image' ? 'image' : 'overlay'
+    }));
+  }
   return copy;
+}
+
+/** Stringify dengan key terurut agar urutan properti tidak memengaruhi perbandingan. */
+function stableStringify(value: any): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
 }
 
 /** Bandingkan draft vs published tanpa terpengaruh timestamp. */
 export function isLandingConfigEqual(a: LandingPageConfig, b: LandingPageConfig): boolean {
-  return JSON.stringify(stripPbMeta(a)) === JSON.stringify(stripPbMeta(b));
+  return stableStringify(stripPbMeta(a)) === stableStringify(stripPbMeta(b));
 }
 
 /**
@@ -888,7 +911,7 @@ export function isLandingContentEqual(a: LandingPageConfig, b: LandingPageConfig
   const right = stripPbMeta(b);
   delete left.isPublished;
   delete right.isPublished;
-  return JSON.stringify(left) === JSON.stringify(right);
+  return stableStringify(left) === stableStringify(right);
 }
 
 /**

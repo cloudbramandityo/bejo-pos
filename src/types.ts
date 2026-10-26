@@ -719,6 +719,8 @@ export interface LandingSlide {
   subtitle?: string; // tidak ditampilkan di banner, dipakai sebagai metadata
   ctaText?: string; // teks tombol pil di dalam banner
   imageUrl?: string;
+  /** overlay = gambar + tulisan dengan gradient (default); image = gambar saja tanpa gradient */
+  displayMode?: 'overlay' | 'image';
   isActive: boolean;
 }
 

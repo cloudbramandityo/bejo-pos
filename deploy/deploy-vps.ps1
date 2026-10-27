@@ -611,13 +611,22 @@ if (-not $SkipSourceUpdate) {
   if ((Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath (Join-Path $AppDir '.git'))) {
     $gitQuiet = '-c', 'core.safecrlf=false', '-c', 'advice.detachedHead=false'
     $remoteRef = "origin/$Branch"
-    & git -C $AppDir @gitQuiet fetch origin $Branch 2>$null | Out-Null
-    $fetchOk = ($LASTEXITCODE -eq 0)
+    $fetchOk = $false
+    try {
+        & git -C $AppDir @gitQuiet fetch origin $Branch 2>$null | Out-Null
+        $fetchOk = ($LASTEXITCODE -eq 0)
+    } catch {
+        $fetchOk = $false
+        Write-Warn2 "Git fetch gagal, akan mencoba unduhan arsip dari GitHub."
+    }
 
-    $dirty = @(& git -C $AppDir @gitQuiet status --porcelain --untracked-files=no --ignore-cr-at-eol 2>$null | Where-Object {
-      -not [string]::IsNullOrWhiteSpace($_) -and
-      ($_.Substring(3).Trim('"') -notmatch '^(data|logs|backups|dist|node_modules)[/\\]')
-    })
+    $dirty = @()
+    if ($fetchOk) {
+        $dirty = @(& git -C $AppDir @gitQuiet status --porcelain --untracked-files=no --ignore-cr-at-eol 2>$null | Where-Object {
+            -not [string]::IsNullOrWhiteSpace($_) -and
+            ($_.Substring(3).Trim('"') -notmatch '^(data|logs|backups|dist|node_modules)[/\\]')
+        })
+    }
     if ($dirty.Count -gt 0) {
       # Worktree VPS ditulis ulang dari arsip source, jadi HEAD bisa tertinggal dan
       # line-ending bisa berbeda. Bila isinya sebenarnya sama dengan remote, ini

@@ -612,20 +612,34 @@ if (-not $SkipSourceUpdate) {
     $gitQuiet = '-c', 'core.safecrlf=false', '-c', 'advice.detachedHead=false'
     $remoteRef = "origin/$Branch"
     $fetchOk = $false
+    $previousEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     try {
-        & git -C $AppDir @gitQuiet fetch origin $Branch 2>$null | Out-Null
+        & git -C $AppDir @gitQuiet fetch origin $Branch 2>&1 | Out-Null
         $fetchOk = ($LASTEXITCODE -eq 0)
-    } catch {
-        $fetchOk = $false
-        Write-Warn2 "Git fetch gagal, akan mencoba unduhan arsip dari GitHub."
+        if (-not $fetchOk) {
+            Write-Warn2 "Git fetch gagal, akan mencoba unduhan arsip dari GitHub."
+        }
+    } finally {
+        $ErrorActionPreference = $previousEap
     }
 
     $dirty = @()
     if ($fetchOk) {
-        $dirty = @(& git -C $AppDir @gitQuiet status --porcelain --untracked-files=no --ignore-cr-at-eol 2>$null | Where-Object {
-            -not [string]::IsNullOrWhiteSpace($_) -and
-            ($_.Substring(3).Trim('"') -notmatch '^(data|logs|backups|dist|node_modules)[/\\]')
-        })
+        $previousEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $statusOut = & git -C $AppDir @gitQuiet status --porcelain --untracked-files=no --ignore-cr-at-eol 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                $dirty = @($statusOut | Where-Object {
+                    -not [string]::IsNullOrWhiteSpace($_) -and
+                    $_.Length -ge 4 -and
+                    ($_.Substring(3).Trim('"') -notmatch '^(data|logs|backups|dist|node_modules)[/\\]')
+                })
+            }
+        } finally {
+            $ErrorActionPreference = $previousEap
+        }
     }
     if ($dirty.Count -gt 0) {
       # Worktree VPS ditulis ulang dari arsip source, jadi HEAD bisa tertinggal dan
@@ -633,17 +647,34 @@ if (-not $SkipSourceUpdate) {
       # bukan perubahan lokal dan tidak perlu dicadangkan sebagai patch.
       $realChanges = @()
       if ($fetchOk) {
-        $realChanges = @(& git -C $AppDir @gitQuiet diff --name-only --ignore-cr-at-eol $remoteRef -- 2>$null | Where-Object {
-          -not [string]::IsNullOrWhiteSpace($_)
-        })
+        $previousEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $diffOut = & git -C $AppDir @gitQuiet diff --name-only --ignore-cr-at-eol $remoteRef -- 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                $realChanges = @($diffOut | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            }
+        } finally {
+            $ErrorActionPreference = $previousEap
+        }
       }
 
       if ($realChanges.Count -eq 0) {
         Write-Warn2 "$($dirty.Count) entri hanyalah HEAD tertinggal / beda line-ending, isi worktree = $remoteRef."
-        & git -C $AppDir @gitQuiet reset --hard $remoteRef 2>$null | Out-Null
-        if ($LASTEXITCODE -ne 0) { Fail 'Gagal menyelaraskan HEAD repositori VPS ke remote.' }
-        Write-Ok 'HEAD repositori VPS diselaraskan ke source terbaru.'
-        $dirty = @()
+        $previousEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            & git -C $AppDir @gitQuiet reset --hard $remoteRef 2>&1 | Out-Null
+        } finally {
+            $ErrorActionPreference = $previousEap
+        }
+        if ($LASTEXITCODE -ne 0) { 
+            Write-Warn2 'Gagal menyelaraskan HEAD repositori VPS ke remote. Akan mencoba unduhan arsip dari GitHub.'
+            $dirty = @()
+        } else {
+            Write-Ok 'HEAD repositori VPS diselaraskan ke source terbaru.'
+            $dirty = @()
+        }
       } else {
         Write-Host ($dirty -join "`n") -ForegroundColor DarkYellow
         Write-Warn2 "Perbedaan nyata vs ${remoteRef}: $($realChanges -join ', ')"

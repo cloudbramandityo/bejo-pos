@@ -62,7 +62,6 @@ import {
   INITIAL_SHIFT,
   INITIAL_TRANSACTIONS,
   INITIAL_CASHIERS,
-  INITIAL_USERS,
   INITIAL_SUPPLIERS,
   INITIAL_AGENTS
 } from '../data/initialData';
@@ -419,7 +418,7 @@ async function flushOutbox(): Promise<number> {
         writeOutbox(rest);
         flushed += 1;
       } catch (err: any) {
-        if (isNetworkError(err)) break;
+        if (isRetryableWriteError(err)) break;
         console.error(`[PocketBase] Antrean tulis ${entry.collection}/${entry.docId} dibuang:`, err);
         writeOutbox(readOutbox().filter((e) => e.id !== entry.id));
       }
@@ -663,8 +662,16 @@ const LEGACY_ID_FIELD = 'legacyId';
 /** Pola primary key PocketBase (15 karakter huruf/angka kecil). */
 const PB_ID_PATTERN = /^[a-z0-9]{15}$/;
 
-/** Koleksi users merupakan auth collection PocketBase (email + password). */
+/**
+ * Koleksi users merupakan auth collection PocketBase (email + password) dan
+ * hanya boleh ditulis superuser, jadi browser tidak pernah menulisnya langsung:
+ * permintaan akun dikirim ke server (server/userAdmin.ts) yang mengerjakan
+ * dengan token admin dan memproyeksikan hasilnya ke `app_users`.
+ */
 const USERS_COLLECTION = 'users';
+
+/** Direktori staf yang dibaca + dipantau realtime oleh browser. Tanpa rahasia. */
+const USERS_READ_COLLECTION = 'app_users';
 
 /**
  * Setiap record menyimpan salinan UTUH objek aplikasi pada field JSON `data`.
@@ -718,10 +725,41 @@ async function findByAppId(collection: string, appId: string): Promise<any | nul
 const writeQueues = new Map<string, Promise<void>>();
 
 /**
- * Jalankan tulis cloud: bila gagal karena jaringan, simpan di outbox agar
- * dikirim ulang saat koneksi kembali; entri lama untuk target yang sama dibuang
- * karena tulis ini sudah membawa kondisi terbaru.
+ * Panggil endpoint manajemen akun di server. Gagal jaringan menghasilkan error
+ * dengan pesan "Failed to fetch" sehingga outbox dapat mengenalinya dan mengulang.
  */
+async function accountApiRequest(
+  path: string,
+  options: { method: string; body?: any }
+): Promise<void> {
+  const response = await fetch(path, {
+    method: options.method,
+    credentials: 'same-origin',
+    headers: options.body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  });
+  if (response.ok) return;
+
+  const data = await response.json().catch(() => null);
+  const err: any = new Error(String(data?.error || `Gagal menyimpan akun (HTTP ${response.status}).`));
+  err.status = response.status;
+  err.code = data?.code;
+  throw err;
+}
+
+/**
+ * Jalankan tulis cloud: bila gagal karena jaringan (atau server sedang sibuk),
+ * simpan di outbox agar dikirim ulang saat koneksi kembali; entri lama untuk
+ * target yang sama dibuang karena tulis ini sudah membawa kondisi terbaru.
+ * Penolakan 4xx dari PocketBase/server dibuang dari antrean karena payload-nya
+ * memang tidak akan pernah diterima.
+ */
+function isRetryableWriteError(err: any): boolean {
+  if (isNetworkError(err)) return true;
+  const status = Number(err?.status || 0);
+  return status === 408 || status === 429 || (status >= 500 && status <= 599);
+}
+
 async function guardNetworkWrite(
   collection: string,
   docId: string,
@@ -733,7 +771,7 @@ async function guardNetworkWrite(
     await run();
     dropOutboxTarget(collection, docId);
   } catch (err) {
-    if (isNetworkError(err)) {
+    if (isRetryableWriteError(err)) {
       enqueueOutbox({ collection, docId, action, data });
     }
     throw err;
@@ -773,6 +811,13 @@ async function executeUpsert(
   id: string,
   data: Record<string, any>
 ): Promise<void> {
+  // Akun staf tidak boleh ditulis browser ke koleksi auth (butuh superuser),
+  // jadi serahkan ke server yang memproyeksikannya ke `app_users`.
+  if (collection === USERS_COLLECTION) {
+    await accountApiRequest('/api/users', { method: 'POST', body: data });
+    return;
+  }
+
   const service = pbService(collection);
   const payload = stripPbFields(sanitizeForDb(data));
   // Salinan utuh objek aplikasi (field yang tidak ada di skema tetap tersimpan)
@@ -780,25 +825,12 @@ async function executeUpsert(
   delete payload.id;
   payload[LEGACY_ID_FIELD] = id;
   payload[DATA_MIRROR_FIELD] = mirror;
-
-  const isUser = collection === USERS_COLLECTION;
-  if (isUser) {
-    // Simpan password versi aplikasi; password auth PocketBase hanya saat create.
-    payload.appPassword = (data as any)?.password || '';
-  } else {
-    delete payload.password;
-  }
+  delete payload.password;
 
   // 1) Coba update langsung memakai id (hanya bila id cocok pola primary key PocketBase)
   if (PB_ID_PATTERN.test(id)) {
     try {
-      const updatePayload = { ...payload };
-      if (isUser) {
-        delete updatePayload.email;
-        delete updatePayload.password;
-        delete updatePayload.passwordConfirm;
-      }
-      await service.update(id, updatePayload);
+      await service.update(id, payload);
       return;
     } catch (err: any) {
       if (err?.status !== 404) throw err;
@@ -808,74 +840,18 @@ async function executeUpsert(
   // 2) Cari berdasarkan legacyId
   const existing = await findByAppId(collection, id);
   if (existing) {
-    const updatePayload = { ...payload };
-    if (isUser) {
-      delete updatePayload.email;
-      delete updatePayload.password;
-      delete updatePayload.passwordConfirm;
-    }
-    await service.update(existing.id, updatePayload);
+    await service.update(existing.id, payload);
     return;
   }
 
   // 3) Buat record baru (PocketBase membuat primary key sendiri)
-  if (isUser) {
-    const pwd =
-      payload.password && String(payload.password).length >= 6
-        ? String(payload.password)
-        : 'bejo-' + id;
-    const emailBase = String(payload.username || id)
-      .replace(/[^a-zA-Z0-9._-]/g, '-')
-      .toLowerCase();
-    payload.password = pwd;
-    payload.passwordConfirm = pwd;
-    try {
-      payload.email = emailBase + '@bejo.local';
-      await service.create(payload);
-    } catch (err: any) {
-      if (err?.status === 400) {
-        // Email sudah dipakai -> pakai email unik
-        try {
-          payload.email = emailBase + '-' + Date.now() + '@bejo.local';
-          await service.create(payload);
-        } catch (err2: any) {
-          // Race condition / unique constraint: record mungkin sudah dibuat proses lain.
-          const existing = await findByAppId(collection, id);
-          if (existing) {
-            const updatePayload = { ...payload };
-            delete updatePayload.email;
-            delete updatePayload.password;
-            delete updatePayload.passwordConfirm;
-            await service.update(existing.id, updatePayload);
-            return;
-          }
-          throw err2;
-        }
-        return;
-      }
-      // Race condition: record sudah dibuat oleh proses lain (unique constraint pada legacyId).
-      const existing = await findByAppId(collection, id);
-      if (existing) {
-        const updatePayload = { ...payload };
-        delete updatePayload.email;
-        delete updatePayload.password;
-        delete updatePayload.passwordConfirm;
-        await service.update(existing.id, updatePayload);
-        return;
-      }
-      throw err;
-    }
-    return;
-  }
-
   try {
     await service.create(payload);
   } catch (err: any) {
     // Race condition antar tab/proses: record dengan legacyId yang sama sudah dibuat.
-    const existing = await findByAppId(collection, id);
-    if (existing) {
-      const updatePayload = { ...payload };
-      await service.update(existing.id, updatePayload);
+    const raced = await findByAppId(collection, id);
+    if (raced) {
+      await service.update(raced.id, payload);
       return;
     }
     throw err;
@@ -889,6 +865,10 @@ async function removeRecord(collection: string, id: string): Promise<void> {
 }
 
 async function executeRemoveRecord(collection: string, id: string): Promise<void> {
+  if (collection === USERS_COLLECTION) {
+    await accountApiRequest(`/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    return;
+  }
   const service = pbService(collection);
   if (PB_ID_PATTERN.test(id)) {
     try {
@@ -1494,24 +1474,46 @@ export async function deleteCashierCloud(cashierId: string): Promise<void> {
 
 /* -------------------------------------------------------------------------- */
 /*  9. Users                                                                   */
+/*                                                                             */
+/*  Baca:  `app_users` (bayangan tanpa rahasia, rules: login wajib)             */
+/*  Tulis: endpoint /api/users di server (token superuser)                     */
 /* -------------------------------------------------------------------------- */
 export function subscribeUsers(onData: (users: AppUser[]) => void): () => void {
-  return createSafeSubscription('users', OperationType.LIST, (onError) =>
-    subscribeCollection('users', (items) => onData(items as AppUser[]), onError, {
-      filter: 'isActive = true',
-    })
+  return createSafeSubscription(USERS_READ_COLLECTION, OperationType.LIST, (onError) =>
+    subscribeCollection(
+      USERS_READ_COLLECTION,
+      (items) => onData(items as AppUser[]),
+      onError,
+      { filter: 'isActive = true' }
+    )
   );
 }
 
 export async function saveUserCloud(user: AppUser): Promise<void> {
   return safeCloudWrite(async () => {
-    await upsertRecord('users', user.id, user as any);
+    await upsertRecord(USERS_COLLECTION, user.id, user as any);
   }, OperationType.WRITE, `users/${user.id}`);
+}
+
+/**
+ * Laporkan kehadiran ke bayangan direktori. Lewat server karena record akun
+ * tidak boleh diubah browser; kegagalan di sini tidak pernah meng-hapus data.
+ */
+export async function updateUserPresenceCloud(user: AppUser): Promise<void> {
+  await accountApiRequest('/api/users/presence', {
+    method: 'POST',
+    body: {
+      id: user.id,
+      isOnline: user.isOnline !== false,
+      lastActiveAt: user.lastActiveAt || Date.now(),
+      lastLoginAt: user.lastLoginAt,
+    },
+  });
 }
 
 export async function deleteUserCloud(userId: string): Promise<void> {
   return safeCloudWrite(async () => {
-    await removeRecord('users', userId);
+    await removeRecord(USERS_COLLECTION, userId);
   }, OperationType.DELETE, `users/${userId}`);
 }
 
@@ -2115,7 +2117,9 @@ async function runSeed(): Promise<void> {
     await seed('customer_categories', INITIAL_CATEGORIES as any);
     await seed('customers', INITIAL_CUSTOMERS as any);
     await seed('cashiers', INITIAL_CASHIERS as any);
-    await seed('users', INITIAL_USERS as any);
+    // Akun staf TIDAK pernah di-seed dari browser: pembuatannya butuh token
+    // superuser dan password default yang ikut ter-bundle sudah dianggap bocor.
+    // Server yang memproyeksikan daftar akun ke `app_users` saat menyala.
     await seed('suppliers', INITIAL_SUPPLIERS as any);
     await seed('agents', INITIAL_AGENTS as any);
     await seed(

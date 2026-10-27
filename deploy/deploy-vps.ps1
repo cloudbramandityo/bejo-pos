@@ -20,12 +20,16 @@
        PUBLIC_SITE=true  : landing publik terbuka, dashboard wajib login,
                            PB_ADMIN_* wajib, hardening PocketBase wajib.
        PUBLIC_SITE=false : Basic Auth REMOTE_ACCESS_PASS (atau LAN-only).
-    5. Perketat aturan akses koleksi PocketBase (--harden)
+    5. Perketat aturan akses koleksi PocketBase (--harden) + perbaiki skema field
+       yang hilang, lalu verifikasi skema akun: `app_users` (direktori yang dibaca
+       browser) dan `users` (kredensial, hanya ditulis server). Deploy berhenti
+       bila skema ini salah, karena semua tulis akun dari aplikasi akan gagal.
     6. Backup dist dan Caddyfile, lalu pasang Caddyfile (batas body 110MB)
     7. npm ci + build produksi
     8. Restart service aplikasi, health check lokal, rollback otomatis bila gagal
     9. Verifikasi lokal: service, Jurnal, auth developer, broker PocketBase,
-       Marketing, dan jalur SSE realtime PocketBase (PB_CONNECT benar-benar mengalir)
+       Marketing, jalur SSE realtime PocketBase (PB_CONNECT benar-benar mengalir),
+       dan isi direktori akun hasil proyeksi boot server
     10. Verifikasi live: DNS, HTTPS, APP_URL publik, identitas Landing,
         PocketBase publik + realtime publik + isi bundle browser (URL DB)
     11. Ringkasan hasil deploy
@@ -977,9 +981,79 @@ if ($missingMarketing.Count -gt 0) {
   Write-Ok 'Env Marketing terisi (nilai tidak dicetak).'
 }
 
+# ---------------------------------------------------------------------------
+# Skema AKUN. `app_users` = direktori yang dibaca + dipantau browser,
+# `users` = record kredensial yang hanya boleh ditulis server (superuser).
+# Bila salah satu tidak sesuai, SEMUA tulis akun dari aplikasi gagal dengan
+# "Only superusers can perform this action." dan akun baru hilang saat refresh.
+# ---------------------------------------------------------------------------
+function Get-PbSuperToken {
+  param([string]$BaseUrl, [string]$Email, [string]$Password)
+  $body = @{ identity = $Email; password = $Password } | ConvertTo-Json -Compress
+  foreach ($path in @('/api/collections/_superusers/auth-with-password', '/api/admins/auth-with-password')) {
+    # Kedua jalur dicoba diam-diam (versi PocketBase lama); pesan error tidak dicetak.
+    try {
+      $resp = Invoke-RestMethod -Method Post -Uri "$BaseUrl$path" -ContentType 'application/json' -Body $body -TimeoutSec 15
+      if ($resp.token) { return $resp.token }
+    } catch { }
+  }
+  return $null
+}
+
+function Get-PbCollectionMeta {
+  param([string]$BaseUrl, [string]$Token, [string]$Name)
+  try {
+    return Invoke-RestMethod -Uri "$BaseUrl/api/collections/$Name" -Headers @{ Authorization = $Token } -TimeoutSec 15
+  } catch { return $null }
+}
+
+function Get-PbRecordCount {
+  param([string]$BaseUrl, [string]$Token, [string]$Name)
+  try {
+    $resp = Invoke-RestMethod -Uri "$BaseUrl/api/collections/$Name/records?perPage=1" -Headers @{ Authorization = $Token } -TimeoutSec 15
+    return [int]$resp.totalItems
+  } catch { return -1 }
+}
+
+function Test-PbAccountSchema {
+  param([string]$BaseUrl, [string]$Token)
+  $problems = @()
+
+  $dir = Get-PbCollectionMeta -BaseUrl $BaseUrl -Token $Token -Name 'app_users'
+  if (-not $dir) {
+    $problems += 'koleksi app_users tidak ada/tidak terbaca'
+  } else {
+    $dirFields = @($dir.fields | ForEach-Object { $_.name })
+    foreach ($field in @('username', 'role', 'isActive', 'legacyId', 'authId', 'data')) {
+      if ($dirFields -notcontains $field) { $problems += "app_users.field `$field hilang" }
+    }
+    foreach ($rule in @('createRule', 'updateRule', 'deleteRule')) {
+      if ($dir.$rule) { $problems += "app_users.$rule harus kosong (hanya server yang menulis direktori)" }
+    }
+    if (-not $dir.listRule) { $problems += 'app_users.listRule kosong: direktori akun terbaca publik' }
+  }
+
+  $cred = Get-PbCollectionMeta -BaseUrl $BaseUrl -Token $Token -Name 'users'
+  if (-not $cred) {
+    $problems += 'koleksi users tidak ada/tidak terbaca'
+  } else {
+    $credFields = @($cred.fields | ForEach-Object { $_.name })
+    foreach ($field in @('username', 'role', 'legacyId', 'appPassword', 'data')) {
+      if ($credFields -notcontains $field) { $problems += "users.field `$field hilang (tulis akun akan dibuang diam-diam)" }
+    }
+    foreach ($rule in @('createRule', 'updateRule', 'deleteRule')) {
+      if ($cred.$rule) { $problems += "users.$rule harus kosong (browser tidak boleh menulis kredensial)" }
+    }
+  }
+
+  return $problems
+}
+
 # ----------------------------------------------------------- pocketbase hardening
 Write-Step '3/8 Perketat aturan akses PocketBase'
 $pbHardeningStatus = 'dilewati'
+$pbAccountSchemaStatus = 'dilewati'
+$pbDirectoryCount = -1
 if ($SkipPbHardening) {
   if ($publicSite) {
     Fail 'PUBLIC_SITE=true mewajibkan hardening aturan koleksi PocketBase. Jalankan deploy tanpa -SkipPbHardening.'
@@ -1027,6 +1101,25 @@ if ($SkipPbHardening) {
     }
     Write-Ok 'Aturan akses koleksi PocketBase sudah diperketat.'
     $pbHardeningStatus = 'OK'
+
+    # Verifikasi SKEMA AKUN: hardening di atas sudah memperbaiki field yang hilang,
+    # tapi deploy harus berhenti kalau direktori akun tetap tidak benar karena
+    # seluruh tulis akun dari aplikasi akan gagal senyap.
+    $verifyToken = Get-PbSuperToken -BaseUrl $pbUpstream -Email $pbAdminEmail -Password $pbAdminPassword
+    if (-not $verifyToken) {
+      Write-Warn2 'Skema akun tidak dapat diverifikasi (login superuser PocketBase gagal).'
+      $pbAccountSchemaStatus = 'tidak terverifikasi'
+    } else {
+      $schemaProblems = @(Test-PbAccountSchema -BaseUrl $pbUpstream -Token $verifyToken)
+      if ($schemaProblems.Count -gt 0) {
+        Fail ("Skema akun PocketBase belum benar: " + ($schemaProblems -join '; ') +
+          '. Perbaiki skema (node scripts/create-pocketbase-collections.mjs --harden) lalu deploy ulang.')
+      }
+      $pbDirectoryCount = Get-PbRecordCount -BaseUrl $pbUpstream -Token $verifyToken -Name 'app_users'
+      $credentialCount = Get-PbRecordCount -BaseUrl $pbUpstream -Token $verifyToken -Name 'users'
+      Write-Ok "Skema akun (users + app_users) sesuai. Direktori: $pbDirectoryCount baris, kredensial: $credentialCount record."
+      $pbAccountSchemaStatus = "OK ($pbDirectoryCount baris direktori)"
+    }
   }
 }
 
@@ -1301,6 +1394,32 @@ if ($SkipRealtimeCheck) {
   }
 }
 
+# Direktori akun harus sudah terisi setelah server menyala (proyeksi berjalan di
+# boot). Direktori kosong = aplikasi hanya punya data lokal dan akun baru hilang
+# saat refresh, jadi ini diperiksa sampai tuntas sebelum verifikasi publik.
+if (-not $SkipPbHardening -and $pbAccountSchemaStatus -like 'OK*') {
+  $projToken = Get-PbSuperToken -BaseUrl $pbLocalUrl -Email (Get-EnvValue $envPath 'PB_ADMIN_EMAIL') -Password (Get-EnvValue $envPath 'PB_ADMIN_PASSWORD')
+  if (-not $projToken) {
+    Write-Warn2 'Proyeksi direktori akun tidak dapat diperiksa (login superuser gagal).'
+  } else {
+    $credentialTotal = Get-PbRecordCount -BaseUrl $pbLocalUrl -Token $projToken -Name 'users'
+    $directoryTotal = Get-PbRecordCount -BaseUrl $pbLocalUrl -Token $projToken -Name 'app_users'
+    $projectionTries = 0
+    while ($credentialTotal -gt 0 -and $directoryTotal -eq 0 -and $projectionTries -lt 4) {
+      Start-Sleep -Seconds 5
+      $directoryTotal = Get-PbRecordCount -BaseUrl $pbLocalUrl -Token $projToken -Name 'app_users'
+      $projectionTries += 1
+    }
+    if ($credentialTotal -gt 0 -and $directoryTotal -eq 0) {
+      Fail ("Direktori akun (app_users) masih kosong padahal ada $credentialTotal record kredensial. " +
+        'Server belum selesai memproyeksikan akun. Periksa baris "[UserAdmin]" pada log service, lalu buka menu Pengguna ' +
+        'sekali untuk memicu sinkronisasi.')
+    }
+    Write-Ok "Direktori akun terisi: $directoryTotal baris app_users dari $credentialTotal record kredensial."
+    $pbAccountSchemaStatus = "OK ($directoryTotal baris direktori)"
+  }
+}
+
 $marketingConfigured = $false
 $marketingRequiredFailed = $false
 $notLive = @()
@@ -1551,6 +1670,7 @@ Write-Host "   Service aplikasi  : $appStatus"
 Write-Host "   Caddy             : $caddyStatusText"
 Write-Host "   PocketBase        : $pbStatusText"
 Write-Host "   Aturan PB         : $pbHardeningStatus"
+Write-Host "   Skema akun PB     : $pbAccountSchemaStatus"
 Write-Host "   Sync realtime PB  : $pbRealtimeStatus"
 Write-Host "   URL PB browser    : $(if ($pbBrowserUrl) { $pbBrowserUrl } else { Get-EnvValue $envPath 'VITE_POCKETBASE_URL' })"
 Write-Host "   Akses internet    : $(if ($publicSite) { 'PUBLIK (landing terbuka, dashboard wajib login)' } elseif ($lanOnlyMode) { 'LAN-only (403 dari internet)' } elseif ([string]::IsNullOrWhiteSpace($remoteAccessPass)) { 'tanpa password (hanya lokal/LAN)' } else { 'dengan password REMOTE_ACCESS_PASS' })"

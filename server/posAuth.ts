@@ -5,8 +5,8 @@
  * ikut tersimpan di bundle/localStorage. Modul ini memindahkan keputusan login
  * ke server:
  *   - DEVELOPER : password hash scrypt di .env (DEV_PASSWORD_HASH)
- *   - STAF      : dibaca dari koleksi `users` PocketBase memakai kredensial
- *                 admin/sync yang HANYA ada di server
+ *   - STAF      : direktori `app_users` + record kredensial `users` PocketBase,
+ *                 dibaca memakai kredensial admin yang HANYA ada di server
  *
  * Hasil login adalah cookie HttpOnly bertanda tangan HMAC. Endpoint privat
  * (/api/invoices, /api/backend, /api/lan, /api/marketing, AI, broker PocketBase)
@@ -22,6 +22,7 @@ import {
   issueDevSession,
   verifyDevCredentials,
 } from './devAuth';
+import { loadStaffAccounts, verifyStaffPassword, type StaffAccount } from './staffStore';
 
 const COOKIE_NAME = 'bejo_pos_session';
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
@@ -114,6 +115,16 @@ function developerLoginConfigured(): boolean {
 
 function allowDefaultStaffPasswords(): boolean {
   return truthy(env('ALLOW_DEFAULT_STAFF_PASSWORDS'));
+}
+
+/**
+ * True bila password termasuk default yang sudah ikut ter-bundle sehingga login
+ * publik akan menolaknya. Dipakai juga saat MEMBUAT akun agar tidak lahir akun
+ * yang langsung gagal login dari internet.
+ */
+export function isDefaultStaffPassword(password: string): boolean {
+  if (!isPublicSite() || allowDefaultStaffPasswords()) return false;
+  return KNOWN_DEFAULT_PASSWORDS.has(String(password || '').trim().toLowerCase());
 }
 
 /* ---------------------------------------------------------------------- */
@@ -266,17 +277,32 @@ function assertSameOrigin(req: Request): void {
 }
 
 /* ---------------------------------------------------------------------- */
-/*  Pembacaan akun staf dari PocketBase                                    */
+/*  Pembacaan akun staf                                                    */
 /* ---------------------------------------------------------------------- */
-async function loadStaffUsers(): Promise<StaffRecord[]> {
-  if (!staffLoginConfigured()) {
-    throw new PosAuthError(
-      'Login staf belum dikonfigurasi di server (PB_ADMIN_EMAIL/PB_ADMIN_PASSWORD).',
-      503,
-      'STAFF_AUTH_UNAVAILABLE'
-    );
+
+/**
+ * Sumber utama: direktori `app_users` + record kredensialnya (server/staffStore.ts).
+ * Fallback: koleksi `users` lama yang masih menaruh username/role/appPassword di
+ * dalam record. VPS yang belum sempat membangun direktori tetap bisa login.
+ */
+async function loadStaffAccountsForLogin(): Promise<StaffAccount[]> {
+  if (adminConfigured()) {
+    try {
+      const accounts = await loadStaffAccounts();
+      if (accounts.length) return accounts;
+    } catch (error) {
+      console.warn(
+        '[Auth] Direktori staf tidak terbaca; mencoba koleksi users lama:',
+        error instanceof Error ? error.message : error
+      );
+    }
   }
 
+  const records = await loadLegacyUserRecords();
+  return records.map(legacyAccountOf).filter(Boolean) as StaffAccount[];
+}
+
+async function loadLegacyUserRecords(): Promise<StaffRecord[]> {
   if (adminConfigured()) {
     try {
       const admin = new PocketBase(pbUpstream());
@@ -313,11 +339,7 @@ async function loadStaffUsers(): Promise<StaffRecord[]> {
     }
   }
 
-  throw new PosAuthError(
-    'Server tidak dapat memeriksa akun staf saat ini. Coba lagi beberapa saat lagi.',
-    503,
-    'STAFF_AUTH_UNAVAILABLE'
-  );
+  return [];
 }
 
 function patchOf(record: StaffRecord): Record<string, unknown> {
@@ -326,47 +348,40 @@ function patchOf(record: StaffRecord): Record<string, unknown> {
     : {};
 }
 
-function recordUsername(record: StaffRecord): string {
+function legacyAccountOf(record: StaffRecord): StaffAccount | null {
   const mirror = patchOf(record);
-  return String(record.username || mirror.username || '').trim();
-}
-
-async function verifyStaffPassword(
-  record: StaffRecord,
-  suppliedPassword: string
-): Promise<boolean> {
-  const mirror = patchOf(record);
-  const stored = String(record.appPassword || mirror.password || '');
-
-  if (stored) return safeEqual(suppliedPassword, stored);
-
-  // Record lama tanpa appPassword: verifikasi lewat auth PocketBase.
+  const username = String(record.username || mirror.username || '').trim().toLowerCase();
+  if (!username) return null;
+  const id = String(record.legacyId || mirror.id || record.id || '').trim();
+  if (!id) return null;
   const email = String(record.email || '').trim();
-  if (!email) return false;
-  try {
-    const pb = new PocketBase(pbUpstream());
-    pb.autoCancellation(false);
-    await pb.collection('users').authWithPassword(email, suppliedPassword);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function toAppUser(record: StaffRecord) {
-  const mirror = patchOf(record);
-  const username = recordUsername(record);
-  const role = String(record.role || mirror.role || '').trim().toUpperCase();
   return {
-    id: String(record.legacyId || mirror.id || record.id || ''),
+    id,
     username,
-    password: '••••••••',
-    name: String(record.name || mirror.name || username),
-    role,
-    phone: record.phone ?? mirror.phone ?? '',
-    spkRoleCategory: record.spkRoleCategory ?? mirror.spkRoleCategory,
+    name: String(record.name || mirror.name || username).trim(),
+    role: String(record.role || mirror.role || '').trim().toUpperCase(),
+    phone: String(record.phone ?? mirror.phone ?? ''),
+    spkRoleCategory: String(record.spkRoleCategory ?? mirror.spkRoleCategory ?? ''),
     isActive: record.isActive !== false && mirror.isActive !== false,
     createdAt: String(record.createdAt || mirror.createdAt || ''),
+    authId: String(record.id || ''),
+    email,
+    appPassword: String(record.appPassword || mirror.password || ''),
+  };
+}
+
+function toAppUser(account: StaffAccount) {
+  return {
+    id: account.id,
+    username: account.username,
+    // Password tidak pernah turun ke browser: hanya penanda untuk UI lama.
+    password: '••••••••',
+    name: account.name,
+    role: account.role,
+    phone: account.phone,
+    spkRoleCategory: account.spkRoleCategory,
+    isActive: account.isActive,
+    createdAt: account.createdAt,
   };
 }
 
@@ -509,13 +524,20 @@ export function registerPosAuthRoutes(app: Express): void {
         );
       }
 
-      const records = await loadStaffUsers();
-      const wanted = username.toLowerCase();
-      const record = records.find(
-        (item) => recordUsername(item).toLowerCase() === wanted
-      );
+      const accounts = await loadStaffAccountsForLogin();
+      if (!accounts.length) {
+        console.error('[Auth] Daftar akun staf kosong / PocketBase tidak terbaca.');
+        throw new PosAuthError(
+          'Server tidak dapat memeriksa akun staf saat ini. Coba lagi beberapa saat lagi.',
+          503,
+          'STAFF_AUTH_UNAVAILABLE'
+        );
+      }
 
-      if (!record) {
+      const wanted = username.toLowerCase();
+      const account = accounts.find((item) => item.username.toLowerCase() === wanted);
+
+      if (!account) {
         console.warn(`[Auth] Login staf gagal (akun tidak ditemukan) dari ${ip}.`);
         throw new PosAuthError(
           'Username atau password salah.',
@@ -524,7 +546,7 @@ export function registerPosAuthRoutes(app: Express): void {
         );
       }
 
-      const passwordOk = await verifyStaffPassword(record, password);
+      const passwordOk = await verifyStaffPassword(account, password);
       if (!passwordOk) {
         console.warn(`[Auth] Login staf gagal (password salah) dari ${ip}.`);
         throw new PosAuthError(
@@ -534,7 +556,7 @@ export function registerPosAuthRoutes(app: Express): void {
         );
       }
 
-      const user = toAppUser(record);
+      const user = toAppUser(account);
       if (!user.id || !user.username || !user.role) {
         throw new PosAuthError(
           'Data akun tidak lengkap. Hubungi Developer.',

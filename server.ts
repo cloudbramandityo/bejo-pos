@@ -10,6 +10,7 @@ import { registerJournalRoutes } from "./server/journalApi";
 import { registerDevAuthRoutes } from "./server/devAuth";
 import { registerPbSessionRoutes } from "./server/pbSession";
 import { getPosSession, registerPosAuthRoutes } from "./server/posAuth";
+import { registerUserAdminRoutes, ensureStaffDirectory } from "./server/userAdmin";
 import {
   registerLandingRoutes,
   getPublishedLandingIdentity,
@@ -177,6 +178,7 @@ const PRIVATE_API_PREFIXES = [
   '/api/ai-assistant',
   '/api/marketing',
   '/api/pocketbase/session',
+  '/api/users',
 ];
 
 function isPrivateApiPath(pathname: string): boolean {
@@ -2059,6 +2061,18 @@ async function setupVite() {
     console.log(`Server running on port ${PORT}`);
     if (APP_URL) console.log(`Public URL  : ${APP_URL}`);
     console.log(`Mode        : ${process.env.NODE_ENV === 'production' ? 'production (dist/)' : 'development'}`);
+
+    // Direktori staf dibaca browser dari koleksi `app_users`; akun yang sudah ada
+    // di koleksi auth harus diproyeksikan dulu agar langsung terlihat.
+    ensureStaffDirectory()
+      .then((result) => {
+        if (result.added || result.removed) {
+          console.log(`[UserAdmin] Direktori staf: ${result.added} akun ditambahkan, ${result.removed} bayangan yatim dihapus.`);
+        }
+      })
+      .catch((err) => {
+        console.warn('[UserAdmin] Pembangunan direktori staf ditunda:', err?.message || err);
+      });
   });
 }
 
@@ -2095,6 +2109,7 @@ registerJournalRoutes(app);
 registerPosAuthRoutes(app);
 registerDevAuthRoutes(app);
 registerPbSessionRoutes(app);
+registerUserAdminRoutes(app);
 registerMarketingRoutes(app);
 registerLandingRoutes(app);
 

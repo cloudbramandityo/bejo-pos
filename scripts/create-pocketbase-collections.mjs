@@ -91,6 +91,45 @@ const COLLECTIONS = [
       T('spkRoleCategory'),
       T('appPassword', false, 128),
     ],
+    // Koleksi ini hanya berisi kredensial. Write dikosongkan supaya tidak ada
+    // token browser (termasuk akun sinkronisasi) yang bisa mengubah password
+    // atau role record siapa pun; server menulis pakai token superuser.
+    rules: {
+      listRule: 'id = @request.auth.id',
+      viewRule: 'id = @request.auth.id',
+      createRule: null,
+      updateRule: null,
+      deleteRule: null,
+    },
+  },
+  {
+    // Bayangan direktori staf untuk dibaca + dipantau realtime oleh browser.
+    // Sengaja TANPA field rahasia apa pun (appPassword/email tetap di `users`).
+    // Ditulis hanya oleh server (superuser) lewat server/userAdmin.ts.
+    name: 'app_users',
+    type: 'base',
+    fields: [
+      T('name', true),
+      T('username'),
+      T('role'),
+      T('phone'),
+      B('isActive'),
+      B('isOnline'),
+      N('lastActiveAt'),
+      N('lastLoginAt'),
+      T('createdAt'),
+      T('spkRoleCategory'),
+      // Penunjuk ke record auth `users` (kredensial). Sengaja tidak menyimpan
+      // email/password agar koleksi yang dibaca browser tetap bebas rahasia.
+      T('authId', false, 40),
+    ],
+    rules: {
+      listRule: '@request.auth.id != ""',
+      viewRule: '@request.auth.id != ""',
+      createRule: null,
+      updateRule: null,
+      deleteRule: null,
+    },
   },
   {
     name: 'products',
@@ -542,27 +581,58 @@ async function main() {
   let skipped = 0;
 
   // Aturan akses: tidak ada operasi publik. Koleksi auth (users) hanya boleh
-  // dibaca/diubah oleh pemilik record; koleksi data wajib login.
+  // dibaca/diubah oleh pemilik record; koleksi data wajib login. Koleksi dengan
+  // `rules` sendiri memakai aturannya (mis. app_users: baca wajib login, tulis
+  // hanya superuser).
   const rulesFor = (def) => {
     const isAuth = def.type === 'auth';
     const authRule = '@request.auth.id != ""';
     return {
-      listRule: isAuth ? 'id = @request.auth.id' : authRule,
-      viewRule: isAuth ? 'id = @request.auth.id' : authRule,
-      // Pembuatan akun hanya lewat admin PocketBase (tidak ada signup publik).
-      createRule: isAuth ? null : authRule,
-      updateRule: isAuth ? 'id = @request.auth.id' : authRule,
-      deleteRule: isAuth ? 'id = @request.auth.id' : authRule,
+      ...{
+        listRule: isAuth ? 'id = @request.auth.id' : authRule,
+        viewRule: isAuth ? 'id = @request.auth.id' : authRule,
+        // Pembuatan akun hanya lewat admin PocketBase (tidak ada signup publik).
+        createRule: isAuth ? null : authRule,
+        updateRule: isAuth ? 'id = @request.auth.id' : authRule,
+        deleteRule: isAuth ? 'id = @request.auth.id' : authRule,
+      },
+      ...(def.rules || {}),
     };
   };
 
+  /**
+   * Tambahkan field yang belum ada pada koleksi yang SUDAH ADA.
+   *
+   * Tanpa langkah ini PocketBase membuang DIAM-DIAM setiap field di luar skema.
+   * Koleksi `users` bawaan PocketBase hanya punya field internal, jadi
+   * username/role/appPassword/legacyId yang dikirim aplikasi tidak pernah
+   * tersimpan — akun staf hilang tanpa pesan error.
+   */
+  const ensureFields = async (existing, wanted) => {
+    const have = new Set((existing.fields || []).map((f) => f.name));
+    const missing = wanted.filter((f) => !have.has(f.name));
+    if (!missing.length) return [];
+    try {
+      // Skema dikirim utuh: PocketBase mengganti SELURUH daftar field, sehingga
+      // field bawaan yang sudah ada harus ikut disertakan agar tidak terhapus.
+      await pb.collections.update(existing.id, { fields: [...(existing.fields || []), ...missing] });
+    } catch (e) {
+      const detail = e?.response?.data?.message || e?.message;
+      fail(`Gagal menambahkan field pada ${existing.name}: ${detail}`);
+    }
+    return missing.map((f) => f.name);
+  };
+
   for (const def of COLLECTIONS) {
+    const wantedFields = [...(def.fields || []), T('legacyId', false, 128), J('data', false, 5000000)];
     try {
       const existing = await pb.collections.getOne(def.name);
+      const added = await ensureFields(existing, wantedFields);
+      if (added.length) ok(`${def.name}: ${added.length} field dilengkapi (${added.join(', ')})`);
       if (HARDEN) {
         await pb.collections.update(existing.id, rulesFor(def));
         console.log(`   * ${def.name} (aturan akses diperketat)`);
-      } else {
+      } else if (!added.length) {
         console.log(`   = ${def.name} (sudah ada, dilewati — jalankan --harden untuk memperketat aturan)`);
       }
       skipped++;

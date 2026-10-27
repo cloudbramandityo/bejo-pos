@@ -173,6 +173,7 @@ import {
   subscribeUsers,
   saveUserCloud,
   deleteUserCloud,
+  updateUserPresenceCloud,
   subscribeStockTransactions,
   saveStockTransactionCloud,
   saveBatchStockTransactionsCloud,
@@ -275,7 +276,7 @@ export default function App() {
         isOnline: onlineState,
         lastActiveAt: Date.now()
       };
-      saveUserCloud(updatedUser).catch((err) => {
+      updateUserPresenceCloud(updatedUser).catch((err) => {
         console.warn('[Presence] Cloud sync paused (using Local Storage Mode):', err);
       });
     };
@@ -1194,7 +1195,7 @@ export default function App() {
     saveStoredAuthUser(updatedUser);
     // Akun developer hanya hidup di sesi server; jangan pernah disinkronkan ke PocketBase.
     if (user.role !== 'DEVELOPER') {
-      saveUserCloud(updatedUser).catch(console.error);
+      updateUserPresenceCloud(updatedUser).catch(console.error);
     }
 
     if (user.role === 'SPK') {
@@ -1220,14 +1221,14 @@ export default function App() {
 
   const handleLogout = () => {
     currentUserRef.current = null; // Clear ref immediately to prevent race condition re-logins from PocketBase snapshot listener
-    logoutAccount().catch(() => {});
     if (currentUser) {
+      // Presence dikirim sebelum logoutAccount() menghapus cookie sesi server.
       const offlineUser: AppUser = {
         ...currentUser,
         isOnline: false,
         lastActiveAt: Date.now()
       };
-      saveUserCloud(offlineUser).catch(console.error);
+      updateUserPresenceCloud(offlineUser).catch(console.error);
 
       recordActivityLog(
         'LOGOUT',
@@ -1235,12 +1236,19 @@ export default function App() {
         `Pengguna @${currentUser.username} (${currentUser.name}) keluar dari aplikasi`
       );
     }
+    logoutAccount().catch(() => {});
     setCurrentUser(null);
     saveStoredAuthUser(null);
     setCurrentTab('spk');
   };
 
-  const handleSaveAppUser = (userToSave: AppUser) => {
+  const handleSaveAppUser = async (userToSave: AppUser) => {
+    // Akun staf tidak lagi bisa ditulis browser ke PocketBase, jadi server adalah
+    // satu-satunya tempat data itu hidup. Simpan ke cloud TERLEBIH DAHULU: kalau
+    // server menolak, jangan perbarui state lokal (kalau tidak, akun tampak jadi
+    // sesaat lalu hilang saat refresh).
+    await saveUserCloud(userToSave);
+
     setUsers((prev) => {
       const exists = prev.some((u) => u.id === userToSave.id);
       const next = exists
@@ -1249,7 +1257,6 @@ export default function App() {
       saveStoredUsers(next);
       return next;
     });
-    saveUserCloud(userToSave).catch(console.error);
 
     recordActivityLog(
       'USER_MANAGEMENT',
@@ -1297,14 +1304,15 @@ export default function App() {
     );
   };
 
-  const handleDeleteAppUser = (userId: string) => {
+  const handleDeleteAppUser = async (userId: string) => {
     const targetUser = users.find((u) => u.id === userId);
+    await deleteUserCloud(userId);
+
     setUsers((prev) => {
       const next = prev.filter((u) => u.id !== userId);
       saveStoredUsers(next);
       return next;
     });
-    deleteUserCloud(userId).catch(console.error);
 
     recordActivityLog(
       'USER_MANAGEMENT',

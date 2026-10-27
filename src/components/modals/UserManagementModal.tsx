@@ -43,8 +43,8 @@ interface UserManagementModalProps {
   currentUserId?: string;
   currentUserRole?: UserRole;
   activityLogs?: UserActivityLog[];
-  onSaveUser: (user: AppUser) => void;
-  onDeleteUser: (userId: string) => void;
+  onSaveUser: (user: AppUser) => Promise<void> | void;
+  onDeleteUser: (userId: string) => Promise<void> | void;
   onClearLogs?: () => void;
 }
 
@@ -73,6 +73,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [formIsActive, setFormIsActive] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Extract all custom user roles dynamically
   const customRolesFromUsers = useMemo(() => {
@@ -110,7 +111,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const handleOpenEdit = (user: AppUser) => {
     setEditingUser(user);
     setFormUsername(user.username);
-    setFormPassword(user.password);
+    setFormPassword(user.password || '');
     setFormName(user.name);
     setFormRole(user.role);
     if (!['ADMIN', 'KASIR', 'AGEN', 'OWNER', 'DEVELOPER', 'SPK'].includes(user.role.toUpperCase())) {
@@ -124,7 +125,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     setIsFormOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -136,8 +137,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       setFormError('Username wajib diisi.');
       return;
     }
-    if (!cleanPassword) {
-      setFormError('Password wajib diisi.');
+    if (!cleanPassword && !editingUser) {
+      setFormError('Password wajib diisi untuk akun baru.');
       return;
     }
     if (!cleanName) {
@@ -180,8 +181,17 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       createdAt: editingUser ? editingUser.createdAt : dateFormatted,
     };
 
-    onSaveUser(updatedUser);
-    setIsFormOpen(false);
+    // Server yang menyimpan akun ini (browser tidak punya hak tulis koleksi auth),
+    // jadi form baru boleh ditutup setelah penyimpanan dikonfirmasi.
+    setIsSaving(true);
+    try {
+      await onSaveUser(updatedUser);
+      setIsFormOpen(false);
+    } catch (err: any) {
+      setFormError(err?.message || 'Akun gagal disimpan ke database cloud. Coba lagi.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Filtered activity logs
@@ -432,16 +442,16 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Password *
+                      Password {editingUser ? '(opsional)' : '*'}
                     </label>
                     <div className="relative">
                       <input
                         type={showPassword ? 'text' : 'password'}
                         value={formPassword}
                         onChange={(e) => setFormPassword(e.target.value)}
-                        placeholder="Masukkan password"
+                        placeholder={editingUser ? 'Kosongkan bila tidak diganti' : 'Masukkan password'}
                         className="w-full bg-white dark:bg-[#2b2b2b] border border-slate-300 dark:border-[#3c3c3c] rounded-xl pl-3 pr-9 py-2 text-xs focus:ring-2 focus:ring-blue-500 font-medium text-slate-900 dark:text-white"
-                        required
+                        required={!editingUser}
                       />
                       <button
                         type="button"
@@ -758,9 +768,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer"
+                    disabled={isSaving}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer disabled:cursor-not-allowed"
                   >
-                    {editingUser ? 'Perbarui Akun' : 'Simpan Pengguna'}
+                    {isSaving ? 'Menyimpan ke cloud...' : editingUser ? 'Perbarui Akun' : 'Simpan Pengguna'}
                   </button>
                 </div>
               </form>
@@ -816,7 +827,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                   </td>
                                   <td className="py-3 px-3.5 font-mono text-slate-600 dark:text-slate-300">
                                     <span className="bg-slate-100 dark:bg-[#202020] px-2 py-0.5 rounded text-[11px] border border-slate-200 dark:border-[#3c3c3c]">
-                                      {u.password}
+                                      {u.password || '••••••••'}
                                     </span>
                                   </td>
                                   <td className="py-3 px-3.5">
@@ -877,9 +888,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                       {visibleUsers.length > 1 && (
                                         <button
                                           type="button"
-                                          onClick={() => {
-                                            if (confirm(`Hapus akun @${u.username} (${u.name})?`)) {
-                                              onDeleteUser(u.id);
+                                          onClick={async () => {
+                                            if (!confirm(`Hapus akun @${u.username} (${u.name})?`)) return;
+                                            try {
+                                              await onDeleteUser(u.id);
+                                            } catch (err: any) {
+                                              alert(err?.message || 'Akun gagal dihapus dari database cloud.');
                                             }
                                           }}
                                           className="p-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-lg transition-colors cursor-pointer"

@@ -369,7 +369,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
   const openEditUser = (user: AppUser) => {
     setEditingUser(user);
     setUUsername(user.username);
-    setUPassword(user.password);
+    setUPassword(user.password || '');
     setUName(user.name);
     setURole(user.role);
     setUPhone(user.phone || '');
@@ -391,8 +391,8 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
       setUserFormError('Username wajib diisi.');
       return;
     }
-    if (!cleanPassword) {
-      setUserFormError('Password wajib diisi.');
+    if (!cleanPassword && !editingUser) {
+      setUserFormError('Password wajib diisi untuk akun baru.');
       return;
     }
     if (!cleanName) {
@@ -3149,7 +3149,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                             <td className="py-3.5 px-4 font-mono text-xs">
                               <div className="flex items-center gap-2">
                                 <span className="bg-slate-100 px-2 py-0.5 rounded font-semibold text-slate-800">
-                                  {isVisible ? u.password : '••••••••'}
+                                  {isVisible && u.password ? u.password : '••••••••'}
                                 </span>
                                 <button
                                   type="button"
@@ -3422,16 +3422,16 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Password *
+                    Password {editingUser ? '(opsional)' : '*'}
                   </label>
                   <div className="relative">
                     <input
                       type={showModalPassword ? 'text' : 'password'}
                       value={uPassword}
                       onChange={(e) => setUPassword(e.target.value)}
-                      placeholder="Masukkan password"
+                      placeholder={editingUser ? 'Kosongkan bila tidak diganti' : 'Masukkan password'}
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-3.5 pr-9 py-2.5 text-xs font-mono font-bold focus:outline-hidden focus:ring-2 focus:ring-purple-500 focus:bg-white"
-                      required
+                      required={!editingUser}
                     />
                     <button
                       type="button"

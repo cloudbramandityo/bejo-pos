@@ -605,56 +605,29 @@ app.post("/api/lan/ping-machine", async (req, res) => {
 
     socket.on("close", () => {
       clearTimeout(timer);
-      const simLatency = isConnected ? latencyMs : Math.floor(Math.random() * 15) + 4;
       res.json({
         success: true,
         ipAddress,
         port,
         name,
-        isOnline: true,
-        status: "ONLINE",
-        latencyMs: simLatency,
+        isOnline: isConnected,
+        status: isConnected ? "ONLINE" : "OFFLINE",
+        latencyMs: isConnected ? latencyMs : 0,
         timestamp: Date.now()
       });
     });
   } catch (err: any) {
-    const simLatency = Math.floor(Math.random() * 15) + 5;
-    res.json({
-      success: true,
+    res.status(500).json({
+      success: false,
+      error: err?.message || "probe gagal dijalankan",
       ipAddress,
       port,
       name,
-      isOnline: true,
-      status: "ONLINE",
-      latencyMs: simLatency,
       timestamp: Date.now()
     });
   }
 });
 
-app.post("/api/lan/scan-machines", async (req, res) => {
-  const { machines = [] } = req.body || {};
-  const scanned = machines.map((m: any) => {
-    const isMaintenance = m.status === 'UNDER_MAINTENANCE';
-    const latency = isMaintenance ? 0 : Math.floor(Math.random() * 16) + 4;
-    return {
-      ...m,
-      lanStatus: isMaintenance ? 'STANDBY' : 'ONLINE',
-      pingLatencyMs: latency,
-      lastPingTime: Date.now()
-    };
-  });
-
-  res.json({
-    success: true,
-    totalCount: scanned.length,
-    onlineCount: scanned.filter((s: any) => s.lanStatus === 'ONLINE').length,
-    machines: scanned,
-    timestamp: Date.now()
-  });
-});
-
-// Simulate Error (For testing error notification and Fix button)
 app.post("/api/backend/simulate-error", (req, res) => {
   const { type } = req.body || {};
   let newErr: ServerBackendError;

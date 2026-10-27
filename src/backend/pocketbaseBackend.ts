@@ -33,6 +33,7 @@ import {
   AgentNotification,
   SpkOrder,
   MachineItem,
+  SharedLanFolderConfig,
   AiInternalChatMessage,
   UserMentionNotification,
   PrivateChatMessage,
@@ -1364,6 +1365,28 @@ export async function saveStoreInfoCloud(info: StoreInfo): Promise<void> {
   return safeCloudWrite(async () => {
     await upsertRecord('settings', 'store_info', info as any);
   }, OperationType.WRITE, 'settings/store_info');
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Folder bersama LAN untuk berkas SPK (collection: settings)                 */
+/* -------------------------------------------------------------------------- */
+/**
+ * Lokasi folder bersama disimpan di cloud, bukan hanya di localStorage, supaya
+ * path yang disetel desainer otomatis dipakai semua perangkat lain. localStorage
+ * hanyalah cache agar aplikasi tetap jalan saat cloud belum terjangkau.
+ */
+export function subscribeSharedLanFolder(onData: (cfg: SharedLanFolderConfig) => void): () => void {
+  return createSafeSubscription('settings/spk_lan_folder', OperationType.GET, (onError) =>
+    subscribeRecord('settings', 'spk_lan_folder', (item) => {
+      if (item) onData(item as SharedLanFolderConfig);
+    }, onError)
+  );
+}
+
+export async function saveSharedLanFolderCloud(cfg: SharedLanFolderConfig): Promise<void> {
+  return safeCloudWrite(async () => {
+    await upsertRecord('settings', 'spk_lan_folder', cfg as any);
+  }, OperationType.WRITE, 'settings/spk_lan_folder');
 }
 
 /* -------------------------------------------------------------------------- */

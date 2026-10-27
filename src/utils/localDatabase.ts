@@ -41,7 +41,6 @@ import {
   getStoredMachines,
   saveStoredMachines
 } from './storage';
-import { getStoredDefaultLocalDirectory } from './localFileVault';
 import { generateBackupPayload, restoreBackupToStorage } from './backupUtils';
 
 export type LocalDbSyncMode = 'HYBRID_REALTIME' | 'OFFLINE_ONLY' | 'CLOUD_PRIORITY';

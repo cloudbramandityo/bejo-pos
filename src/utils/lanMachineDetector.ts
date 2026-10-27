@@ -35,11 +35,14 @@ export interface LanDiscoveredNode {
  */
 export async function pingLanMachine(machine: MachineItem): Promise<{
   isOnline: boolean;
-  status: 'ONLINE' | 'OFFLINE' | 'STANDBY' | 'PRINTING';
+  status: 'ONLINE' | 'OFFLINE' | 'STANDBY' | 'PRINTING' | 'CHECKING';
   latencyMs: number;
 }> {
   const startTime = Date.now();
-  const targetIp = machine.ipAddress || '192.168.1.100';
+  if (!machine.ipAddress) {
+    return { isOnline: false, status: 'CHECKING', latencyMs: 0 };
+  }
+  const targetIp = machine.ipAddress;
   const targetPort = machine.port || 9100;
 
   try {
@@ -56,24 +59,19 @@ export async function pingLanMachine(machine: MachineItem): Promise<{
 
     if (res.ok) {
       const data = await res.json();
+      const online = data.isOnline === true;
       return {
-        isOnline: data.isOnline ?? true,
-        status: machine.status === 'UNDER_MAINTENANCE' ? 'STANDBY' : (data.status || 'ONLINE'),
-        latencyMs: data.latencyMs || Math.max(2, Date.now() - startTime)
+        isOnline: online,
+        status: machine.status === 'UNDER_MAINTENANCE' ? 'STANDBY' : online ? data.status || 'ONLINE' : 'OFFLINE',
+        latencyMs: online ? Number(data.latencyMs) || Math.max(1, Date.now() - startTime) : 0
       };
     }
   } catch {
-    // Fallback: fast network responsiveness estimation
+    /* backend probe tidak terjangkau */
   }
 
-  // Graceful client fallback
-  const isMaintenance = machine.status === 'UNDER_MAINTENANCE';
-  const latency = Math.floor(Math.random() * 14) + 4;
-  return {
-    isOnline: !isMaintenance,
-    status: isMaintenance ? 'STANDBY' : 'ONLINE',
-    latencyMs: latency
-  };
+  // Tanpa probe nyata status mesin tidak diketahui, jadi jangan dikarang ONLINE.
+  return { isOnline: false, status: 'CHECKING', latencyMs: 0 };
 }
 
 /**
@@ -120,9 +118,9 @@ export async function scanAllLanMachines(
   const offlineCount = updatedMachines.filter((m) => m.lanStatus === 'OFFLINE').length;
   const maintenanceCount = updatedMachines.filter((m) => m.status === 'UNDER_MAINTENANCE' || m.lanStatus === 'STANDBY').length;
   const validLatencies = updatedMachines.filter((m) => (m.pingLatencyMs || 0) > 0).map((m) => m.pingLatencyMs!);
-  const avgLatency = validLatencies.length > 0 
-    ? Math.round(validLatencies.reduce((a, b) => a + b, 0) / validLatencies.length) 
-    : 8;
+  const avgLatency = validLatencies.length > 0
+    ? Math.round(validLatencies.reduce((a, b) => a + b, 0) / validLatencies.length)
+    : 0;
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('bejo_lan_machines_status_updated', {
@@ -183,20 +181,6 @@ export async function discoverSubnetNodes(subnetPrefix: string = '192.168.1'): P
   }
 
   return discovered;
-}
-
-/**
- * Format UNC Network Path for easy Windows Explorer & LAN file sharing
- * e.g. folder: "\\192.168.1.100\DATA_CETAK_BEJO\", fileName: "SPK-260930-0001_Banner.pdf"
- */
-export function formatUncNetworkPath(folderPath: string, fileName?: string): string {
-  let clean = (folderPath || '').trim() || '\\\\192.168.1.100\\DATA_CETAK_BEJO\\';
-  if (!clean.endsWith('\\') && !clean.endsWith('/')) {
-    clean += clean.includes('\\') ? '\\' : '/';
-  }
-  if (!fileName || !fileName.trim()) return clean;
-  const cleanFileName = fileName.trim().replace(/\s+/g, '_');
-  return `${clean}${cleanFileName}`;
 }
 
 /**

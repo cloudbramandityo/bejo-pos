@@ -1419,9 +1419,15 @@ export function sanitizeSpkOrderForStorage(order: SpkOrder): SpkOrder {
       fileSize: typeof att.fileSize === 'number' ? att.fileSize : undefined,
       fileType: att.fileType || 'application/octet-stream',
       localPath: att.localPath || '',
+      lanFolderUrl: att.lanFolderUrl || '',
       storageKey: att.storageKey || att.id || '',
       uploadedAt: att.uploadedAt || Date.now(),
-      uploadedBy: att.uploadedBy || 'Operator'
+      uploadedBy: att.uploadedBy || 'Operator',
+      sharedCopy: att.sharedCopy === true,
+      sharedCopiedAt: att.sharedCopiedAt || undefined,
+      sharedSize: typeof att.sharedSize === 'number' ? att.sharedSize : undefined,
+      sharedFolderName: att.sharedFolderName || '',
+      originalFileName: att.originalFileName || ''
     };
   };
 
@@ -1545,9 +1551,7 @@ export const DEFAULT_MACHINES: MachineItem[] = [
     ipAddress: '192.168.1.101',
     port: 9100,
     hostName: 'RIP-KONICA-512I',
-    sharedFolderLanPath: '\\\\192.168.1.101\\HOTFOLDER_KONICA\\',
-    lanStatus: 'ONLINE',
-    pingLatencyMs: 8,
+    lanStatus: 'CHECKING',
     ripSoftware: 'PhotoPrint 19 / MainTop 6.1 RIP'
   },
   {
@@ -1563,9 +1567,7 @@ export const DEFAULT_MACHINES: MachineItem[] = [
     ipAddress: '192.168.1.102',
     port: 8080,
     hostName: 'ROLAND-VERSAWORKS-PC',
-    sharedFolderLanPath: '\\\\192.168.1.102\\VersaWorks_InputQueue\\',
-    lanStatus: 'ONLINE',
-    pingLatencyMs: 14,
+    lanStatus: 'CHECKING',
     ripSoftware: 'Roland VersaWorks 6'
   },
   {
@@ -1581,9 +1583,7 @@ export const DEFAULT_MACHINES: MachineItem[] = [
     ipAddress: '192.168.1.103',
     port: 9100,
     hostName: 'UV-FLATBED-CONTROLLER',
-    sharedFolderLanPath: '\\\\192.168.1.103\\UV_PRINT_JOBS\\',
-    lanStatus: 'ONLINE',
-    pingLatencyMs: 11,
+    lanStatus: 'CHECKING',
     ripSoftware: 'Wasatch SoftRIP UV'
   },
   {
@@ -1599,9 +1599,7 @@ export const DEFAULT_MACHINES: MachineItem[] = [
     ipAddress: '192.168.1.104',
     port: 9100,
     hostName: 'GRAPHTEC-CUTTING-STATION',
-    sharedFolderLanPath: '\\\\192.168.1.104\\Graphtec_CuttingPlotter\\',
-    lanStatus: 'ONLINE',
-    pingLatencyMs: 6,
+    lanStatus: 'CHECKING',
     ripSoftware: 'Cutting Master 4 / Cutting Controller'
   },
   {
@@ -1617,9 +1615,7 @@ export const DEFAULT_MACHINES: MachineItem[] = [
     ipAddress: '192.168.1.105',
     port: 9100,
     hostName: 'DTF-PRINT-STATION',
-    sharedFolderLanPath: '\\\\192.168.1.105\\DTF_FILMS\\',
-    lanStatus: 'ONLINE',
-    pingLatencyMs: 9,
+    lanStatus: 'CHECKING',
     ripSoftware: 'Maintop 6.1 DTF Edition'
   },
   {
@@ -1635,9 +1631,7 @@ export const DEFAULT_MACHINES: MachineItem[] = [
     ipAddress: '192.168.1.106',
     port: 50200,
     hostName: 'RUIDA-LASER-CONTROLLER',
-    sharedFolderLanPath: '\\\\192.168.1.106\\LaserWorks_RD\\',
-    lanStatus: 'ONLINE',
-    pingLatencyMs: 15,
+    lanStatus: 'CHECKING',
     ripSoftware: 'RDWorks V8.0 / LightBurn'
   }
 ];
@@ -1660,8 +1654,8 @@ export function getStoredMachines(): MachineItem[] {
           ipAddress: m.ipAddress || def.ipAddress,
           port: m.port || def.port,
           hostName: m.hostName || def.hostName,
-          sharedFolderLanPath: m.sharedFolderLanPath || def.sharedFolderLanPath,
-          lanStatus: m.lanStatus || def.lanStatus || 'ONLINE',
+          sharedFolderLanPath: m.sharedFolderLanPath,
+          lanStatus: m.lanStatus || def.lanStatus || 'CHECKING',
           ripSoftware: m.ripSoftware || def.ripSoftware
         };
       }

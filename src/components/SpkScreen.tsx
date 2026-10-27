@@ -116,8 +116,6 @@ import {
   saveStoredPrintingRejects
 } from '../utils/storage';
 import {
-  getStoredDefaultLocalDirectory,
-  saveStoredDefaultLocalDirectory,
   saveLocalPrintFile,
   openOrDownloadPrintFile,
   copyLocalShortcutToClipboard,
@@ -125,6 +123,21 @@ import {
   getFileExtensionMeta,
   formatLocalShortcutPath
 } from '../utils/localFileVault';
+import {
+  applySharedCopyToAttachment,
+  copyFileToSharedFolder,
+  copyVaultFileToSharedFolder,
+  getSharedFolderConfig,
+  getSharedFolderGrantStatus,
+  isSharedFolderApiSupported,
+  normalizeFolderPath,
+  openFileFromSharedFolder,
+  pickSharedFolder,
+  saveSharedFolderConfig,
+  startSharedFolderCloudSync,
+  verifySharedFolderFile,
+  type SharedFolderGrantStatus
+} from '../utils/sharedFolderAccess';
 import {
   formatRupiah,
   formatNumber,
@@ -152,8 +165,7 @@ import { LanNetworkFolderModal } from './modals/LanNetworkFolderModal';
 import {
   scanAllLanMachines,
   pingLanMachine,
-  copyUncPathWithCommand,
-  formatUncNetworkPath
+  copyUncPathWithCommand
 } from '../utils/lanMachineDetector';
 import {
   checkAndRunSpkAutoCleanup,
@@ -599,7 +611,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
   const [mHeadSpec, setMHeadSpec] = useState('');
   const [mOperator, setMOperator] = useState('');
   const [mNotes, setMNotes] = useState('');
-  const [mIpAddress, setMIpAddress] = useState('192.168.1.101');
+  const [mIpAddress, setMIpAddress] = useState('');
   const [mPort, setMPort] = useState('9100');
   const [mHostName, setMHostName] = useState('');
   const [mSharedFolderLanPath, setMSharedFolderLanPath] = useState('');
@@ -699,7 +711,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
     setMHeadSpec(m.headSpec || '');
     setMOperator(m.operatorDefault || '');
     setMNotes(m.notes || '');
-    setMIpAddress(m.ipAddress || '192.168.1.100');
+    setMIpAddress(m.ipAddress || '');
     setMPort(m.port ? String(m.port) : '9100');
     setMHostName(m.hostName || '');
     setMSharedFolderLanPath(m.sharedFolderLanPath || '');
@@ -729,8 +741,8 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
       hostName: mHostName.trim() || undefined,
       sharedFolderLanPath: mSharedFolderLanPath.trim() || undefined,
       ripSoftware: mRipSoftware.trim() || undefined,
-      lanStatus: mStatus === 'UNDER_MAINTENANCE' ? 'STANDBY' : (editingMachine?.lanStatus || 'ONLINE'),
-      pingLatencyMs: mStatus === 'UNDER_MAINTENANCE' ? 0 : (editingMachine?.pingLatencyMs || 8),
+      lanStatus: mStatus === 'UNDER_MAINTENANCE' ? 'STANDBY' : (editingMachine?.lanStatus || 'CHECKING'),
+      pingLatencyMs: mStatus === 'UNDER_MAINTENANCE' ? 0 : editingMachine?.pingLatencyMs,
       createdAt: editingMachine ? editingMachine.createdAt : new Date().toISOString().split('T')[0]
     };
 
@@ -779,12 +791,13 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
   // Local Print File Vault & Directory Configuration States (Supports Multiple Files)
   const [newPrintFiles, setNewPrintFiles] = useState<SpkPrintFileAttachment[]>([]);
   const newPrintFile = newPrintFiles[0] || null;
-  const [newLocalDir, setNewLocalDir] = useState<string>(() => getStoredDefaultLocalDirectory());
+  const [newLocalDir, setNewLocalDir] = useState<string>(() => getSharedFolderConfig().path);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [fileToast, setFileToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
-  const [isSettingDirOpen, setIsSettingDirOpen] = useState(false);
   const [isLanFolderModalOpen, setIsLanFolderModalOpen] = useState(false);
-  const [tempLanDirInput, setTempLanDirInput] = useState<string>(() => getStoredDefaultLocalDirectory());
+  const [tempLanDirInput, setTempLanDirInput] = useState<string>(() => getSharedFolderConfig().path);
+  const [grantStatus, setGrantStatus] = useState<SharedFolderGrantStatus | null>(null);
+  const [isSharedFolderBusy, setIsSharedFolderBusy] = useState(false);
   const lanDirectoryInputRef = useRef<HTMLInputElement>(null);
 
   const showFileToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
@@ -797,97 +810,220 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
     setIsLanFolderModalOpen(true);
   };
 
-  const handleBrowseLanFolder = async () => {
-    // 1. Try modern File System Access API (showDirectoryPicker) in Chromium browsers
-    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
-      try {
-        const dirHandle = await (window as any).showDirectoryPicker({
-          mode: 'read'
-        });
-        if (dirHandle && dirHandle.name) {
-          const suggestedPath = `D:/${dirHandle.name}/`;
-          setTempLanDirInput(suggestedPath);
-          showFileToast(`Folder "${dirHandle.name}" terpilih!`, 'success');
-          return;
-        }
-      } catch (err: any) {
-        if (err.name === 'AbortError') return;
-        console.warn('showDirectoryPicker fallback:', err);
-      }
+  const refreshGrantStatus = useCallback(async () => {
+    setGrantStatus(await getSharedFolderGrantStatus());
+  }, []);
+
+  // Lokasi folder bersama adalah konfigurasi bersama antar perangkat: dibaca dari
+  // cloud, localStorage hanyalah cache agar aplikasi tetap jalan saat cloud Offline.
+  useEffect(() => {
+    const stopCloudSync = startSharedFolderCloudSync();
+    const syncFromConfig = () => {
+      const path = getSharedFolderConfig().path;
+      setNewLocalDir(path);
+      setTempLanDirInput((prev) => prev || path);
+      void refreshGrantStatus();
+    };
+    syncFromConfig();
+    window.addEventListener('bejo_lan_folder_updated', syncFromConfig);
+    return () => {
+      stopCloudSync();
+      window.removeEventListener('bejo_lan_folder_updated', syncFromConfig);
+    };
+  }, [refreshGrantStatus]);
+
+  /**
+   * Path display untuk catatan lampiran. Browser tidak pernah memberi tahu path
+   * UNC dari folder yang dipilih, jadi urutannya: konfigurasi bersama -> nama
+   * folder di perangkat ini -> hanya nama berkas (tidak mengarang drive).
+   */
+  const sharedFolderDisplayPath = useMemo(() => {
+    if (newLocalDir) return newLocalDir;
+    return grantStatus?.folderName ? `${grantStatus.folderName}/` : '';
+  }, [newLocalDir, grantStatus]);
+
+  const buildSharedFilePath = useCallback(
+    (fileName?: string): string => {
+      if (!fileName) return '';
+      return sharedFolderDisplayPath ? formatLocalShortcutPath(sharedFolderDisplayPath, fileName) : fileName;
+    },
+    [sharedFolderDisplayPath]
+  );
+
+  /** Folder bersama adalah alat kerja sehari-hari, bukan fitur khusus developer. */
+  const canUseLanHub = Boolean(currentUser) && currentUser?.role !== 'AGEN';
+
+  /**
+   * Lencana status folder pada form pesanan. Hanya boleh menyebut "tersambung"
+   * bila izin baca-tulis benar-benar ada di perangkat ini.
+   */
+  const sharedFolderBadge = (() => {
+    if (!grantStatus) {
+      return { label: 'Memeriksa izin...', cls: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400' };
     }
-    // 2. Fallback to hidden directory file input
-    if (lanDirectoryInputRef.current) {
-      lanDirectoryInputRef.current.click();
+    if (!grantStatus.supported) {
+      return { label: 'Browser Tidak Dukung', cls: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400' };
+    }
+    if (!grantStatus.configuredPath) {
+      return { label: 'Folder Belum Disetel', cls: 'bg-rose-50 text-rose-800 border-rose-200', dot: 'bg-rose-500' };
+    }
+    if (grantStatus.granted && grantStatus.nameMatches) {
+      return { label: 'Folder Siap Dipakai', cls: 'bg-emerald-50 text-emerald-800 border-emerald-200', dot: 'bg-emerald-600' };
+    }
+    if (grantStatus.granted) {
+      return {
+        label: `Folder Perangkat Ini: "${grantStatus.folderName}"`,
+        cls: 'bg-amber-50 text-amber-800 border-amber-200',
+        dot: 'bg-amber-500',
+      };
+    }
+    return { label: 'Izin Perlu Dikonfirmasi', cls: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500' };
+  })();
+
+  const handleBrowseLanFolder = async () => {
+    if (!isSharedFolderApiSupported()) {
+      if (lanDirectoryInputRef.current) lanDirectoryInputRef.current.click();
+      return;
+    }
+    setIsSharedFolderBusy(true);
+    try {
+      const res = await pickSharedFolder();
+      showFileToast(res.message, res.ok ? 'success' : 'error');
+      await refreshGrantStatus();
+    } finally {
+      setIsSharedFolderBusy(false);
     }
   };
 
   const handleDirectoryInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Fallback browser tanpa File System Access API: dialog ini hanya bisa
+    // membaca daftar isi folder, jadi nama folder saja yang dipakai sebagai
+    // display dan tidak ada path palsu yang disimpan.
     const files = e.target.files;
     if (files && files.length > 0) {
-      const sample = files[0];
-      const relPath = (sample as any).webkitRelativePath || '';
-      const rootFolder = relPath.split('/')[0] || sample.name;
-      if (rootFolder) {
-        const path = `D:/${rootFolder}/`;
-        setTempLanDirInput(path);
-        showFileToast(`Folder "${rootFolder}" berhasil dipilih dari komputer/jaringan!`, 'success');
-      }
+      const relPath = (files[0] as any).webkitRelativePath || '';
+      const rootFolder = relPath.split('/')[0] || files[0].name;
+      setTempLanDirInput((prev) => prev || `${rootFolder}/`);
+      showFileToast(
+        `Folder "${rootFolder}" terbaca, tetapi browser ini tidak dapat memberi izin tulis. Gunakan Chrome/Edge di komputer tersebut lalu klik "Hubungkan Folder".`,
+        'info'
+      );
     }
+    if (e.target) e.target.value = '';
   };
 
-  const handleApplyLanFolder = (customPath?: string) => {
-    const target = (customPath || tempLanDirInput || '').trim();
+  const handleApplyLanFolder = async (customPath?: string) => {
+    const target = normalizeFolderPath((customPath || tempLanDirInput || '').trim());
     if (!target) {
-      alert('Mohon masukkan lokasi folder jaringan / lokal.');
+      alert('Mohon masukkan lokasi folder jaringan / lokal, contoh: \\\\SERVER-TOKO\\DATA_CETAK\\');
       return;
     }
 
-    let clean = target;
-    const usesBackslash = clean.includes('\\');
-    if (usesBackslash) {
-      if (!clean.endsWith('\\')) clean += '\\';
-    } else {
-      if (!clean.endsWith('/')) clean += '/';
+    setIsSharedFolderBusy(true);
+    try {
+      const res = await saveSharedFolderConfig(target, currentUser?.name || 'Operator');
+      const savedPath = normalizeFolderPath(res.path);
+      setNewLocalDir(savedPath);
+      setTempLanDirInput(savedPath);
+      await refreshGrantStatus();
+      setIsLanFolderModalOpen(false);
+      if (res.cloudError) {
+        showFileToast(`Folder disetel ke ${savedPath}, tetapi belum tersimpan ke cloud: ${res.cloudError}`, 'error');
+      } else {
+        showFileToast(`Folder bersama tersimpan untuk semua perangkat: ${savedPath}`, 'success');
+      }
+    } finally {
+      setIsSharedFolderBusy(false);
     }
-
-    saveStoredDefaultLocalDirectory(clean);
-    setNewLocalDir(clean);
-    setTempLanDirInput(clean);
-    if (newPrintFiles.length > 0) {
-      setNewPrintFiles((prev) =>
-        prev.map((pf) => ({
-          ...pf,
-          localPath: formatLocalShortcutPath(clean, pf.fileName)
-        }))
-      );
-    }
-    setIsLanFolderModalOpen(false);
-    setIsSettingDirOpen(false);
-    showFileToast(`Lokasi folder penyimpanan LAN berhasil disetel ke: ${clean}`, 'success');
   };
 
-  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  /**
+   * Satu-satunya jalur lampiran berkas SPK: simpan salinan perangkat (IndexedDB)
+   * DAN salin berkasnya ke folder bersama. Berkas hanya dianggap "ada di folder"
+   * kalau penulisannya sudah diverifikasi dari folder tersebut.
+   */
+  const attachPrintFile = useCallback(
+    async (
+      file: File,
+      orderNumber?: string
+    ): Promise<{ attachment: SpkPrintFileAttachment; warning?: string }> => {
+      const attachment = await saveLocalPrintFile(file, undefined, newLocalDir || undefined, currentUser?.name);
+      const originalName = attachment.fileName;
+      const copy = await copyFileToSharedFolder(file, originalName, orderNumber, true);
+
+      if (copy.ok) {
+        const shared = applySharedCopyToAttachment(
+          { ...attachment, originalFileName: originalName },
+          copy,
+          newLocalDir,
+          grantStatus?.folderName || ''
+        );
+        return {
+          attachment: shared,
+          warning: copy.renamed
+            ? `Nama berkas diubah menjadi "${copy.fileName}" agar tidak menimpa berkas SPK lain di folder bersama.`
+            : undefined
+        };
+      }
+
+      return {
+        attachment: {
+          ...attachment,
+          localPath: undefined,
+          lanFolderUrl: undefined,
+          sharedCopy: false,
+          originalFileName: originalName
+        },
+        warning: `${copy.message} Berkas baru tersimpan di perangkat ini, belum di folder bersama.`
+      };
+    },
+    [newLocalDir, currentUser?.name, grantStatus?.folderName]
+  );
+
+  /** Ulangi penyalinan berkas yang masih tertahan di vault perangkat. */
+  const retryCopyNewFileToFolder = async (index: number) => {
+    const target = newPrintFiles[index];
+    if (!target) return;
+    setIsSharedFolderBusy(true);
+    try {
+      const result = await copyVaultFileToSharedFolder(target);
+      if (!result.ok) {
+        showFileToast(result.message, 'error');
+        return;
+      }
+      const updated = applySharedCopyToAttachment(target, result, newLocalDir, grantStatus?.folderName || '');
+      setNewPrintFiles((prev) => prev.map((f, i) => (i === index ? updated : f)));
+      setNewFileName(updated.fileName);
+      showFileToast(result.message, 'success');
+    } finally {
+      setIsSharedFolderBusy(false);
+    }
+  };
+
+  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {    const files = e.target.files;
     if (!files || files.length === 0) return;
     setIsUploadingFile(true);
     try {
       const attachments: SpkPrintFileAttachment[] = [];
+      const warnings: string[] = [];
       for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const attachment = await saveLocalPrintFile(file, undefined, newLocalDir, currentUser?.name);
-        attachments.push(attachment);
+        const result = await attachPrintFile(files[i]);
+        attachments.push(result.attachment);
+        if (result.warning) warnings.push(result.warning);
       }
       setNewPrintFiles((prev) => {
         const existingNames = new Set(prev.map((f) => f.fileName.toLowerCase()));
         const toAdd = attachments.filter((f) => !existingNames.has(f.fileName.toLowerCase()));
         return [...prev, ...toAdd];
       });
-      if (attachments.length === 1) {
-        setNewFileName(attachments[0].fileName);
-        showFileToast(`File "${attachments[0].fileName}" berhasil dipilih!`, 'success');
+      const first = attachments[0];
+      setNewFileName(first ? first.fileName : '');
+      if (warnings.length > 0) {
+        showFileToast(warnings[0], warnings[0].startsWith('Nama berkas') ? 'info' : 'error');
+      } else if (attachments.length === 1) {
+        showFileToast(`File "${first.fileName}" ditambahkan dan tersalin ke folder bersama.`, 'success');
       } else {
-        setNewFileName(attachments[0].fileName);
-        showFileToast(`${attachments.length} file cetak berhasil ditambahkan!`, 'success');
+        showFileToast(`${attachments.length} file tersalin ke folder bersama.`, 'success');
       }
     } catch (err) {
       console.error('Failed to attach file', err);
@@ -928,15 +1064,26 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
 
   const handleOpenFile = async (fileAttachment?: SpkPrintFileAttachment, fallbackName?: string, localPath?: string) => {
     if (fileAttachment) {
+      // 1. Sumber kebenaran: berkas di folder bersama, jadi semua perangkat
+      //    membuka berkas yang sama persis dengan yang dilampirkan desainer.
+      if (fileAttachment.sharedCopy) {
+        const fromFolder = await openFileFromSharedFolder(fileAttachment);
+        if (fromFolder.ok) {
+          showFileToast(fromFolder.message, 'info');
+          return;
+        }
+        showFileToast(`${fromFolder.message} Beralih ke salinan perangkat ini.`, 'error');
+      }
+      // 2. Salinan lokal perangkat yang dulu mengunggah
       const ok = await openOrDownloadPrintFile(fileAttachment);
       if (ok) {
-        showFileToast(`Membuka file cetak: ${fileAttachment.fileName}`, 'info');
+        showFileToast(`Membuka file cetak dari vault perangkat: ${fileAttachment.fileName}`, 'info');
       } else {
         if (fileAttachment.localPath) {
           await copyLocalShortcutToClipboard(fileAttachment.localPath);
-          showFileToast(`File tersimpan di: ${fileAttachment.localPath} (Shortcut disalin!)`, 'info');
+          showFileToast(`Berkas tidak tersedia di perangkat ini. Path disalin: ${fileAttachment.localPath}`, 'info');
         } else {
-          showFileToast('File tidak ditemukan di local vault', 'error');
+          showFileToast('File tidak ditemukan di folder bersama maupun vault perangkat', 'error');
         }
       }
     } else if (localPath) {
@@ -950,11 +1097,112 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
     }
   };
 
-  const handleSaveDefaultDirectory = (dir: string) => {
-    saveStoredDefaultLocalDirectory(dir);
-    setNewLocalDir(dir);
-    setIsSettingDirOpen(false);
-    showFileToast(`Folder default penyimpanan lokal diubah ke: ${dir}`, 'success');
+  const handleSaveDefaultDirectory = async (dir: string) => {
+    const res = await saveSharedFolderConfig(dir, currentUser?.name || 'Operator');
+    const savedPath = normalizeFolderPath(res.path);
+    setNewLocalDir(savedPath);
+    setTempLanDirInput(savedPath);
+    await refreshGrantStatus();
+    showFileToast(
+      res.cloudError
+        ? `Folder diubah ke ${savedPath}, tetapi belum tersimpan ke cloud: ${res.cloudError}`
+        : `Folder bersama diubah ke ${savedPath} untuk semua perangkat.`,
+      res.cloudError ? 'error' : 'success'
+    );
+  };
+
+  /** Perbarui lampiran sebuah SPK yang sudah tersimpan (pakai jalur cloud yang sama). */
+  const replaceOrderAttachments = useCallback(
+    async (order: SpkOrder, printFiles: SpkPrintFileAttachment[], note: string): Promise<void> => {
+      const primary = printFiles[0];
+      const updatedItems = order.items.map((it, idx) =>
+        idx === 0
+          ? {
+              ...it,
+              printFile: primary,
+              printFiles,
+              printFileLocalPath: primary?.localPath,
+              designFileName: primary?.fileName
+            }
+          : it
+      );
+      const updatedOrder: SpkOrder = {
+        ...order,
+        items: updatedItems,
+        printFile: primary,
+        printFiles,
+        printFileShortcut: primary?.localPath,
+        statusLogs: [
+          ...order.statusLogs,
+          {
+            status: order.status,
+            timestamp: Date.now(),
+            formattedTime: new Date().toLocaleDateString('id-ID', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            }),
+            changedBy: currentUser?.name || 'Operator',
+            note
+          }
+        ]
+      };
+      const updatedList = updateStoredSpkOrder(order.id, updatedOrder, currentUser?.name);
+      setOrders(updatedList);
+      setSelectedOrder(updatedOrder);
+      await saveSpkOrderCloud(updatedOrder);
+    },
+    [currentUser?.name]
+  );
+
+  /**
+   * Salin berkas SPK ke folder bersama. Dipakai untuk lampiran lama yang dulu
+   * hanya dicatat path-nya tanpa pernah benar-benar disalin.
+   */
+  const handleCopyAttachmentToFolder = async (order: SpkOrder, attachment: SpkPrintFileAttachment) => {
+    setIsSharedFolderBusy(true);
+    try {
+      const result = await copyVaultFileToSharedFolder(attachment, order.orderNumber);
+      if (!result.ok) {
+        showFileToast(result.message, 'error');
+        return;
+      }
+      const updated = applySharedCopyToAttachment(
+        attachment,
+        result,
+        newLocalDir,
+        grantStatus?.folderName || ''
+      );
+      const nextFiles = (order.printFiles && order.printFiles.length > 0
+        ? order.printFiles
+        : order.printFile
+        ? [order.printFile]
+        : []
+      ).map((f) => (f.id === attachment.id ? updated : f));
+      await replaceOrderAttachments(order, nextFiles, `Salin ke folder bersama: ${updated.fileName}`);
+      showFileToast(
+        result.renamed
+          ? `Tersalin sebagai "${updated.fileName}" (nama diberi imbuhan SPK agar tidak menimpa).`
+          : `Berkas "${updated.fileName}" tersalin ke folder bersama.`,
+        'success'
+      );
+    } finally {
+      setIsSharedFolderBusy(false);
+    }
+  };
+
+  /** Cek apakah berkas yang tercatat di SPK benar-benar ada di folder bersama. */
+  const handleVerifyAttachment = async (attachment: SpkPrintFileAttachment) => {
+    setIsSharedFolderBusy(true);
+    try {
+      const result = await verifySharedFolderFile(attachment);
+      const type = result.state === 'ok' ? 'success' : result.state === 'no-access' ? 'info' : 'error';
+      showFileToast(result.message, type);
+    } finally {
+      setIsSharedFolderBusy(false);
+    }
   };
 
   const handleDetailModalAddPrintFiles = async (order: SpkOrder, filesList: FileList | File[]) => {
@@ -962,10 +1210,14 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
     setIsUploadingFile(true);
     try {
       const newAttachments: SpkPrintFileAttachment[] = [];
+      const warnings: string[] = [];
       for (let i = 0; i < filesList.length; i++) {
-        const file = filesList[i];
-        const attachment = await saveLocalPrintFile(file, undefined, newLocalDir, currentUser?.name);
-        newAttachments.push(attachment);
+        const result = await attachPrintFile(filesList[i], order.orderNumber);
+        newAttachments.push(result.attachment);
+        if (result.warning) warnings.push(result.warning);
+      }
+      if (warnings.length > 0) {
+        showFileToast(warnings[0], warnings[0].startsWith('Nama berkas') ? 'info' : 'error');
       }
 
       const existingAttachments = order.printFiles || (order.printFile ? [order.printFile] : []);
@@ -1196,7 +1448,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
     // Compute local file shortcut path: format (link folder file)(nama file)
     const resolvedPrintFiles: SpkPrintFileAttachment[] = [...newPrintFiles];
     if (resolvedPrintFiles.length === 0 && newFileName.trim()) {
-      const computedPath = formatLocalShortcutPath(newLocalDir, newFileName.trim());
+      const computedPath = buildSharedFilePath(newFileName.trim());
       resolvedPrintFiles.push({
         id: `file_${Date.now()}`,
         fileName: newFileName.trim(),
@@ -1208,7 +1460,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
 
     const finalPrintFiles = resolvedPrintFiles.map((pf) => ({
       ...pf,
-      localPath: formatLocalShortcutPath(newLocalDir, pf.fileName) || pf.localPath
+      localPath: buildSharedFilePath(pf.fileName) || pf.localPath
     }));
     const primaryPrintFile = finalPrintFiles[0] || undefined;
     const computedLocalPath = primaryPrintFile?.localPath;
@@ -1221,7 +1473,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
       const itemJobName = it.jobName.trim() || it.materialName || `Item Cetak ${idx + 1}`;
       const matchingFile = finalPrintFiles[idx] || primaryPrintFile;
       const itemDesignFile = it.designFileName?.trim() || matchingFile?.fileName;
-      const itemLocalPath = matchingFile?.localPath || (itemDesignFile ? formatLocalShortcutPath(newLocalDir, itemDesignFile) : undefined);
+      const itemLocalPath = matchingFile?.localPath || (itemDesignFile ? buildSharedFilePath(itemDesignFile) : undefined);
       const itemPrintFile = matchingFile || (itemDesignFile ? {
         id: `file_${Date.now()}_${idx}`,
         fileName: itemDesignFile,
@@ -1613,8 +1865,8 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0 flex-wrap">
-            {/* Fitur Khusus DEVELOPER ONLY: Folder File Asli (LAN) & Mesin LAN */}
-            {currentUser?.role === 'DEVELOPER' && (
+            {/* Folder bersama & mesin LAN: bisa diakses semua peran kerja, tidak lagi khusus developer */}
+            {canUseLanHub && (
               <>
                 {/* Button: Folder Berkas Asli (LAN) */}
                 <button
@@ -1624,7 +1876,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                     setIsLanNetworkHubModalOpen(true);
                   }}
                   className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer transition-all active:scale-95 shadow-xs"
-                  title="Akses folder penyimpanan berkas asli SPK di jaringan LAN toko (Khusus Developer)"
+                  title="Akses folder penyimpanan berkas asli SPK di jaringan LAN toko"
                 >
                   <FolderOpen className="w-4 h-4 text-indigo-400" />
                   <span>Folder File Asli (LAN)</span>
@@ -1638,13 +1890,17 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                     setIsLanNetworkHubModalOpen(true);
                   }}
                   className="px-3.5 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer transition-all active:scale-95 shadow-xs"
-                  title="Deteksi mesin cetak & cutting yang online di jaringan LAN (Khusus Developer)"
+                  title="Deteksi mesin cetak & cutting yang online di jaringan LAN"
                 >
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span className={`w-2 h-2 rounded-full ${machines.some((m) => m.lanStatus === 'ONLINE') ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`}></span>
                   <Wifi className="w-4 h-4 text-emerald-400" />
                   <span>Mesin LAN ({machines.filter((m) => m.lanStatus === 'ONLINE').length}/{machines.length})</span>
                 </button>
+              </>
+            )}
 
+            {currentUser?.role === 'DEVELOPER' && (
+              <>
                 <button
                   type="button"
                   onClick={() => setActiveTab('team_status')}
@@ -3276,7 +3532,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                       <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
                         {newPrintFiles.map((fileObj, fIdx) => {
                           const extMeta = getFileExtensionMeta(fileObj.fileName);
-                          const shortcutPath = formatLocalShortcutPath(newLocalDir, fileObj.fileName);
+                          const shortcutPath = buildSharedFilePath(fileObj.fileName);
                           return (
                             <div key={fileObj.id || fIdx} className="bg-slate-50/70 p-3 rounded-lg border border-slate-200 space-y-2 hover:border-slate-300 transition-all">
                               <div className="flex items-start justify-between gap-2.5">
@@ -3298,9 +3554,22 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                           <span>•</span>
                                         </>
                                       ) : null}
-                                      <span className="text-emerald-700 font-medium flex items-center gap-0.5">
-                                        <CheckCircle className="w-3 h-3" /> Tersimpan Lokal
-                                      </span>
+                                      {fileObj.sharedCopy ? (
+                                        <span className="text-emerald-700 font-medium flex items-center gap-0.5">
+                                          <CheckCircle className="w-3 h-3" /> Ada di folder bersama
+                                        </span>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => retryCopyNewFileToFolder(fIdx)}
+                                          disabled={isSharedFolderBusy}
+                                          className="text-amber-700 font-medium flex items-center gap-1 hover:underline cursor-pointer disabled:cursor-wait disabled:opacity-60"
+                                          title="Klik untuk menyalinkan berkas ini ke folder bersama"
+                                        >
+                                          <AlertTriangle className="w-3 h-3" />
+                                          {isSharedFolderBusy ? 'Menyalinkan...' : 'Baru di perangkat ini, salinkan'}
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -3310,7 +3579,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                     type="button"
                                     onClick={() => handleOpenFile(fileObj)}
                                     className="p-1.5 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 cursor-pointer flex items-center gap-1 shadow-2xs"
-                                    title="Buka / Download file"
+                                    title={fileObj.sharedCopy ? 'Buka dari folder bersama' : 'Buka berkas dari vault perangkat ini'}
                                   >
                                     <ExternalLink className="w-3.5 h-3.5" />
                                   </button>
@@ -3325,19 +3594,26 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                 </div>
                               </div>
 
-                              {/* Shortcut path box */}
+                              {/* Lokasi berkas */}
                               <div className="bg-white p-2 rounded-lg border border-slate-200 flex items-center justify-between gap-2 text-xs">
                                 <div className="flex items-center gap-1.5 overflow-hidden min-w-0">
-                                  <FolderSymlink className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                                  <span className="font-mono text-slate-700 font-medium text-[11px] truncate select-all">
-                                    {shortcutPath}
-                                  </span>
+                                  <FolderSymlink className={`w-3.5 h-3.5 shrink-0 ${fileObj.sharedCopy ? 'text-indigo-600' : 'text-slate-400'}`} />
+                                  {fileObj.sharedCopy ? (
+                                    <span className="font-mono text-slate-700 font-medium text-[11px] truncate select-all" title={shortcutPath}>
+                                      {shortcutPath}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-500 text-[11px]">
+                                      Berkas hanya ada di vault perangkat ini
+                                    </span>
+                                  )}
                                 </div>
                                 <button
                                   type="button"
                                   onClick={() => handleCopyShortcut(shortcutPath)}
-                                  className="px-2 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[10.5px] font-medium rounded border border-slate-200 cursor-pointer shrink-0 flex items-center gap-1 shadow-2xs active:scale-95"
-                                  title="Salin path shortcut lokasi lokal"
+                                  disabled={!fileObj.sharedCopy}
+                                  className="px-2 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[10.5px] font-medium rounded border border-slate-200 cursor-pointer shrink-0 flex items-center gap-1 shadow-2xs active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title={fileObj.sharedCopy ? 'Salin path lokasi bersama' : 'Salinkan dulu ke folder bersama agar path tersedia'}
                                 >
                                   <Copy className="w-3 h-3" />
                                   <span>Salin Path</span>
@@ -3409,41 +3685,34 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                     <div className="flex items-center gap-2 overflow-hidden min-w-0">
                       <HardDrive className="w-4 h-4 text-slate-600 shrink-0" />
                       <div className="truncate">
-                        <span className="text-[10px] text-slate-500 font-medium uppercase block">Folder Aktif Saat Ini:</span>
+                        <span className="text-[10px] text-slate-500 font-medium uppercase block">Folder Bersama Saat Ini:</span>
                         <span className="font-mono font-medium text-slate-800 text-xs truncate block">
-                          {newLocalDir}
+                          {newLocalDir || 'Belum disetel. Klik "Ubah Folder".'}
                         </span>
                       </div>
                     </div>
-                    <span className="text-[10px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                      <span>LAN Aktif</span>
+                    <span
+                      className={`text-[10px] font-medium border px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 ${sharedFolderBadge.cls}`}
+                      title={grantStatus?.message || 'Sedang memeriksa izin folder perangkat ini.'}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${sharedFolderBadge.dot}`}></span>
+                      <span>{sharedFolderBadge.label}</span>
                     </span>
                   </div>
 
-                  {/* Preset Quick Folders */}
-                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                    <span className="text-[10px] text-slate-500 font-medium uppercase">Preset Cepat:</span>
-                    {[
-                      'D:/DATA_CETAK_BEJO/',
-                      '\\\\SERVER-CETAK\\DATA_CETAK\\',
-                      '\\\\192.168.1.100\\DATA_CETAK\\',
-                      'Z:/DATA_SHARED_LAN/',
-                      'E:/SERVER_RIP_MESIN/'
-                    ].map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => handleApplyLanFolder(preset)}
-                        className={`text-[10.5px] font-mono font-medium px-2 py-0.5 rounded-md border transition-colors cursor-pointer ${
-                          newLocalDir === preset
-                            ? 'bg-indigo-50 text-indigo-900 border-indigo-300 font-semibold'
-                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:text-slate-900'
-                        }`}
-                      >
-                        {preset}
-                      </button>
-                    ))}
+                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={handleBrowseLanFolder}
+                      disabled={isSharedFolderBusy}
+                      className="text-[10.5px] font-semibold px-2 py-0.5 rounded-md border border-indigo-300 bg-indigo-50 text-indigo-900 hover:bg-indigo-100 transition-colors cursor-pointer disabled:cursor-wait disabled:opacity-60"
+                      title="Pilih folder yang sama di komputer ini supaya berkas bisa dibaca-tulis langsung"
+                    >
+                      {grantStatus?.granted ? 'Pindah / Ganti Folder Perangkat Ini' : 'Hubungkan Folder di Perangkat Ini'}
+                    </button>
+                    <span className="text-[10.5px] text-slate-500">
+                      Izin folder diberikan per komputer. Lokasi foldernya sendiri sudah otomatis sama untuk semua pengguna.
+                    </span>
                   </div>
                 </div>
 
@@ -3464,13 +3733,13 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                         <div className="overflow-hidden">
                           <span className="text-[10px] text-slate-500 font-medium uppercase block">link shortcut :</span>
                           <span className="font-mono text-slate-800 font-medium text-xs truncate block select-all">
-                            {formatLocalShortcutPath(newLocalDir, newFileName)}
+                            {buildSharedFilePath(newFileName)}
                           </span>
                         </div>
                       </div>
                       <button
                         type="button"
-                        onClick={() => handleCopyShortcut(formatLocalShortcutPath(newLocalDir, newFileName))}
+                        onClick={() => handleCopyShortcut(buildSharedFilePath(newFileName))}
                         className="px-2.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-medium rounded-lg border border-slate-200 hover:border-slate-300 cursor-pointer shrink-0 flex items-center gap-1 shadow-2xs active:scale-95"
                         title="Salin shortcut path lokasi lokal"
                       >
@@ -3603,8 +3872,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
               ).length;
 
               const isReady = m.status === 'READY';
-              const isLanOnline = m.lanStatus === 'ONLINE' || isReady;
-              const latency = m.pingLatencyMs || 8;
+              const latency = m.pingLatencyMs || 0;
 
               return (
                 <div
@@ -3620,7 +3888,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                           {m.category}
                         </span>
                         <span className="text-[10px] font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                          {m.ipAddress || '192.168.1.100'}:{m.port || 9100}
+                          {m.ipAddress ? `${m.ipAddress}:${m.port || 9100}` : 'IP belum disetel'}
                         </span>
                       </div>
                       <h3 className="font-black text-sm text-slate-950 mt-1.5">{m.name}</h3>
@@ -3636,7 +3904,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                         }`}
                       >
                         <span className={`w-2 h-2 rounded-full ${isReady ? 'bg-emerald-600 animate-pulse' : 'bg-amber-600'}`}></span>
-                        {isReady ? `ONLINE (${latency}ms)` : 'MAINTENANCE'}
+                        {isReady ? (m.lanStatus === 'ONLINE' ? `ONLINE (${latency}ms)` : 'SIAP (belum dipindai)') : 'MAINTENANCE'}
                       </span>
                     </div>
                   </div>
@@ -4401,6 +4669,42 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                   </span>
                 </div>
 
+                {/* Status folder bersama di perangkat ini */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <FolderOpen className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-bold text-slate-800 truncate">
+                        {sharedFolderDisplayPath || 'Folder bersama belum disetel'}
+                      </div>
+                      <div className={`text-[10.5px] font-medium ${grantStatus?.granted ? 'text-emerald-700' : 'text-amber-700'}`}>
+                        {grantStatus?.message || 'Memeriksa izin folder perangkat ini...'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      disabled={isSharedFolderBusy}
+                      onClick={handleBrowseLanFolder}
+                      className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-lg cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                    >
+                      <FolderOpen className="w-3.5 h-3.5" />
+                      <span>Hubungkan Folder</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTempLanDirInput(newLocalDir);
+                        setIsLanFolderModalOpen(true);
+                      }}
+                      className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-300 cursor-pointer"
+                    >
+                      Ubah Lokasi
+                    </button>
+                  </div>
+                </div>
+
                 {(() => {
                   // Collect all attached files (Order-level and Item-level)
                   const filesMap = new Map<string, { fileObj?: SpkPrintFileAttachment; fileName: string; shortcut: string; forJob?: string }>();
@@ -4408,12 +4712,12 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                   if (selectedOrder.printFiles && selectedOrder.printFiles.length > 0) {
                     selectedOrder.printFiles.forEach((pf, i) => {
                       if (pf && pf.fileName) {
-                        const sCut = pf.localPath || formatLocalShortcutPath(newLocalDir, pf.fileName);
+                        const sCut = pf.localPath || buildSharedFilePath(pf.fileName);
                         filesMap.set(pf.fileName.toLowerCase(), { fileObj: pf, fileName: pf.fileName, shortcut: sCut, forJob: 'Semua Produk' });
                       }
                     });
                   } else if (selectedOrder.printFile && selectedOrder.printFile.fileName) {
-                    const sCut = selectedOrder.printFile.localPath || selectedOrder.printFileShortcut || formatLocalShortcutPath(newLocalDir, selectedOrder.printFile.fileName);
+                    const sCut = selectedOrder.printFile.localPath || selectedOrder.printFileShortcut || buildSharedFilePath(selectedOrder.printFile.fileName);
                     filesMap.set(selectedOrder.printFile.fileName.toLowerCase(), { fileObj: selectedOrder.printFile, fileName: selectedOrder.printFile.fileName, shortcut: sCut, forJob: 'Order SPK' });
                   }
 
@@ -4421,16 +4725,16 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                     if (it.printFiles && it.printFiles.length > 0) {
                       it.printFiles.forEach((pf) => {
                         if (pf && pf.fileName && !filesMap.has(pf.fileName.toLowerCase())) {
-                          const sCut = pf.localPath || formatLocalShortcutPath(newLocalDir, pf.fileName);
+                          const sCut = pf.localPath || buildSharedFilePath(pf.fileName);
                           filesMap.set(pf.fileName.toLowerCase(), { fileObj: pf, fileName: pf.fileName, shortcut: sCut, forJob: it.jobName });
                         }
                       });
                     }
                     if (it.printFile && it.printFile.fileName && !filesMap.has(it.printFile.fileName.toLowerCase())) {
-                      const sCut = it.printFileLocalPath || it.printFile.localPath || formatLocalShortcutPath(newLocalDir, it.printFile.fileName);
+                      const sCut = it.printFileLocalPath || it.printFile.localPath || buildSharedFilePath(it.printFile.fileName);
                       filesMap.set(it.printFile.fileName.toLowerCase(), { fileObj: it.printFile, fileName: it.printFile.fileName, shortcut: sCut, forJob: it.jobName });
                     } else if (it.designFileName && !filesMap.has(it.designFileName.toLowerCase())) {
-                      const sCut = it.printFileLocalPath || formatLocalShortcutPath(newLocalDir, it.designFileName);
+                      const sCut = it.printFileLocalPath || buildSharedFilePath(it.designFileName);
                       filesMap.set(it.designFileName.toLowerCase(), { fileName: it.designFileName, shortcut: sCut, forJob: it.jobName });
                     }
                   });
@@ -4488,26 +4792,72 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                 </div>
 
                                 {/* Action Buttons */}
-                                <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenFile(fileObj, fileName, shortcut)}
-                                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black rounded-lg cursor-pointer transition-all shadow-xs flex items-center gap-1.5 active:scale-95"
-                                    title="Buka preview / Download file dari lokal storage"
-                                  >
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                    <span>Buka / Download</span>
-                                  </button>
+                                <div className="flex flex-col items-end gap-1.5 self-end sm:self-auto shrink-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenFile(fileObj, fileName, shortcut)}
+                                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black rounded-lg cursor-pointer transition-all shadow-xs flex items-center gap-1.5 active:scale-95"
+                                      title={fileObj?.sharedCopy
+                                        ? 'Buka berkas yang ada di folder bersama LAN'
+                                        : 'Buka preview / unduh dari vault perangkat ini'}
+                                    >
+                                      <ExternalLink className="w-3.5 h-3.5" />
+                                      <span>{fileObj?.sharedCopy ? 'Buka dari Folder LAN' : 'Buka / Download'}</span>
+                                    </button>
 
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCopyShortcut(shortcut)}
-                                    className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 text-xs font-bold rounded-lg border border-slate-300 cursor-pointer flex items-center gap-1.5 active:scale-95"
-                                    title="Salin path shortcut lokasi lokal"
+                                    {fileObj && !fileObj.sharedCopy && (
+                                      <button
+                                        type="button"
+                                        disabled={isSharedFolderBusy}
+                                        onClick={() => handleCopyAttachmentToFolder(selectedOrder, fileObj)}
+                                        className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 text-xs font-bold rounded-lg border border-slate-300 cursor-pointer flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                                        title="Salin berkas ini ke folder bersama LAN"
+                                      >
+                                        <FolderOpen className="w-3.5 h-3.5 text-indigo-600" />
+                                        <span>Salin ke Folder LAN</span>
+                                      </button>
+                                    )}
+
+                                    {fileObj?.sharedCopy && (
+                                      <button
+                                        type="button"
+                                        disabled={isSharedFolderBusy}
+                                        onClick={() => handleVerifyAttachment(fileObj)}
+                                        className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 text-xs font-bold rounded-lg border border-slate-300 cursor-pointer flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                                        title="Cek keberadaan dan ukuran berkas di folder bersama"
+                                      >
+                                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>Cek Folder</span>
+                                      </button>
+                                    )}
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopyShortcut(shortcut)}
+                                      className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 text-xs font-bold rounded-lg border border-slate-300 cursor-pointer flex items-center gap-1.5 active:scale-95"
+                                      title="Salin path shortcut lokasi lokal"
+                                    >
+                                      <Copy className="w-3.5 h-3.5 text-indigo-600" />
+                                      <span>Salin Path</span>
+                                    </button>
+                                  </div>
+
+                                  <span
+                                    className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border ${
+                                      !fileObj
+                                        ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                        : fileObj.sharedCopy
+                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                        : 'bg-amber-50 text-amber-800 border-amber-300'
+                                    }`}
                                   >
-                                    <Copy className="w-3.5 h-3.5 text-indigo-600" />
-                                    <span>Salin Path</span>
-                                  </button>
+                                    {!fileObj
+                                      ? 'Hanya catatan nama berkas'
+                                      : fileObj.sharedCopy
+                                      ? 'Ada di folder bersama'
+                                      : 'Belum tersalin ke folder'}
+                                  </span>
                                 </div>
                               </div>
 
@@ -4520,7 +4870,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                   </div>
                                 </div>
                                 <span className="text-[10px] text-slate-400 uppercase font-mono font-bold shrink-0 hidden sm:inline">
-                                  Shortcut Lokasi
+                                  {fileObj?.sharedCopy ? 'Folder Bersama' : 'Shortcut Lokasi'}
                                 </span>
                               </div>
                             </div>
@@ -5010,35 +5360,55 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                 </p>
               </div>
 
-              {/* Opsi 3: Preset Cepat Folder Jaringan Populer */}
+              {/* Opsi 3: Contoh format penulisan path (hanya mengisi kolom, bukan menyimpan) */}
               <div className="space-y-2 pt-1 border-t border-slate-200">
                 <label className="font-bold text-slate-800 block text-[11px] uppercase tracking-wider">
-                  3. Atau Pilih Dari Preset Folder Jaringan Siap Pakai:
+                  3. Contoh Format Penulisan (klik untuk mengisi kolom):
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-xs">
                   {[
-                    { label: 'Server LAN Komputer', path: '\\\\SERVER-CETAK\\DATA_CETAK\\' },
-                    { label: 'IP Server Network Share', path: '\\\\192.168.1.100\\DATA_CETAK\\' },
-                    { label: 'Mapped Network Drive Z:', path: 'Z:/DATA_SHARED_LAN/' },
-                    { label: 'Drive D: Komputer Lokal', path: 'D:/DATA_CETAK_BEJO/' },
-                    { label: 'Server RIP Mesin Cetak', path: 'E:/SERVER_RIP_MESIN/' },
-                    { label: 'Folder Produksi Siap Cetak', path: 'C:/Desain_Siap_Cetak/' }
-                  ].map((preset) => (
+                    { label: 'Network Share Server', path: '\\\\SERVER-TOKO\\DATA_CETAK\\' },
+                    { label: 'IP Share + Folder', path: '\\\\192.168.1.10\\SPK\\' },
+                    { label: 'Mapped Drive', path: 'Z:/DATA_CETAK/' },
+                    { label: 'Folder Lokal / Drive', path: 'D:/DATA_CETAK/' }
+                  ].map((contoh) => (
                     <button
-                      key={preset.path}
+                      key={contoh.path}
                       type="button"
-                      onClick={() => setTempLanDirInput(preset.path)}
+                      onClick={() => setTempLanDirInput(contoh.path)}
                       className={`p-2.5 text-left rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-1 ${
-                        tempLanDirInput === preset.path
+                        tempLanDirInput === contoh.path
                           ? 'bg-indigo-100/90 border-indigo-400 ring-2 ring-indigo-400/40'
                           : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
                       }`}
                     >
-                      <span className="text-[10px] font-sans font-bold text-indigo-950 uppercase">{preset.label}</span>
-                      <span className="font-bold text-slate-900 text-[11px] truncate">{preset.path}</span>
+                      <span className="text-[10px] font-sans font-bold text-indigo-950 uppercase">{contoh.label}</span>
+                      <span className="font-bold text-slate-900 text-[11px] truncate">{contoh.path}</span>
                     </button>
                   ))}
                 </div>
+                <p className="text-[10.5px] text-slate-500">
+                  Contoh di atas hanya menunjukkan cara menulis path. Path yang benar adalah lokasi share milik toko Anda.
+                </p>
+              </div>
+
+              {/* Status izin folder pada perangkat ini */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Status folder di komputer ini</div>
+                  <div className="text-[11.5px] font-bold text-slate-900 mt-0.5">{sharedFolderBadge.label}</div>
+                  <div className="text-[10.5px] text-slate-600 mt-0.5">
+                    {grantStatus?.message || 'Lokasi folder dipakai bersama oleh semua pengguna, tetapi izin baca-tulis tetap diberikan per komputer.'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleBrowseLanFolder}
+                  disabled={isSharedFolderBusy}
+                  className="shrink-0 px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-[11px] font-bold text-slate-800 cursor-pointer disabled:cursor-wait disabled:opacity-60"
+                >
+                  Pilih Folder
+                </button>
               </div>
             </div>
 
@@ -5098,8 +5468,8 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
         </div>
       )}
 
-      {/* LAN Network File Vault & Machine Detection Modal (DEVELOPER ONLY) */}
-      {currentUser?.role === 'DEVELOPER' && (
+      {/* LAN Network File Vault & Machine Detection Modal */}
+      {canUseLanHub && (
         <LanNetworkFolderModal
           isOpen={isLanNetworkHubModalOpen}
           onClose={() => setIsLanNetworkHubModalOpen(false)}
@@ -5111,9 +5481,25 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
             saveStoredMachines(updated);
           }}
           currentLanDir={newLocalDir}
-          onLanDirChange={(newDir) => {
-            setNewLocalDir(newDir);
-            showFileToast(`Folder bersama LAN disetel ke: ${newDir}`, 'success');
+          initialTab={lanHubInitialTab}
+          onCopyToFolder={async (orderId, attachment) => {
+            const target = orders.find((o) => o.id === orderId);
+            if (target) await handleCopyAttachmentToFolder(target, attachment);
+          }}
+          onLanDirChange={async (newDir) => {
+            const saved = await saveSharedFolderConfig(newDir, currentUser?.name || 'Pengguna');
+            if (!saved.ok) {
+              showFileToast('Lokasi folder bersama tidak valid. Contoh: \\\\SERVER\\DATA_CETAK\\ atau D:/DATA_CETAK/', 'error');
+              return;
+            }
+            setNewLocalDir(saved.path);
+            await refreshGrantStatus();
+            showFileToast(
+              saved.cloudError
+                ? `Folder disetel ke ${saved.path}, tetapi belum tersimpan ke server: ${saved.cloudError}`
+                : `Folder bersama LAN disetel ke: ${saved.path}`,
+              saved.cloudError ? 'error' : 'success'
+            );
           }}
         />
       )}

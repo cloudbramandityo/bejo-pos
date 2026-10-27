@@ -498,6 +498,20 @@ export interface SpkPrintFileAttachment {
   uploadedAt: number;
   uploadedBy?: string;
   originHostIp?: string;
+  // Status penyalinan ke folder bersama LAN. Hanya boleh diisi bila file
+  // memang sudah ditulis ke folder itu dan ukurannya sudah diverifikasi.
+  sharedCopy?: boolean;
+  sharedCopiedAt?: number;
+  sharedSize?: number;
+  sharedFolderName?: string; // nama folder hasil grant perangkat ini
+  originalFileName?: string; // nama file sebelum diberi imbuhan anti-tabrakan
+}
+
+export interface SharedLanFolderConfig {
+  id?: string;
+  path: string; // UNC atau path lokal folder bersama, selalu diakhiri pemisah
+  updatedAt: number;
+  updatedBy: string;
 }
 
 export interface SpkFinishingItem {

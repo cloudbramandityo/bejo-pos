@@ -10,16 +10,18 @@ const DB_VERSION = 1;
 const STORE_NAME = 'spk_print_blobs';
 const STORAGE_KEY_DEFAULT_DIR = 'bejo_pos_default_print_directory_v1';
 
-const DEFAULT_PRINT_DIR = 'D:/DATA_CETAK_BEJO/';
-
 /**
- * Get the user-configured or default local storage directory path
+ * Nilai lama yang dipakai aplikasi sebelum folder bersama disinkronkan.
+ * Tidak boleh dianggap sebagai lokasi yang benar-benar sudah disetel user.
  */
-export function getStoredDefaultLocalDirectory(): string {
+export const LEGACY_DEFAULT_PRINT_DIR = 'D:/DATA_CETAK_BEJO/';
+
+/** Lokasi folder yang benar-benar pernah disetel; null berarti belum ada. */
+export function getRawStoredDefaultLocalDirectory(): string | null {
   try {
-    return localStorage.getItem(STORAGE_KEY_DEFAULT_DIR) || DEFAULT_PRINT_DIR;
+    return localStorage.getItem(STORAGE_KEY_DEFAULT_DIR);
   } catch {
-    return DEFAULT_PRINT_DIR;
+    return null;
   }
 }
 
@@ -29,7 +31,9 @@ export function getStoredDefaultLocalDirectory(): string {
  * => "\\192.168.1.56\Faktur_Pembelian_PB-261001-9280.pdf"
  */
 export function formatLocalShortcutPath(directoryPath: string, fileName?: string): string {
-  const dir = (directoryPath || '').trim() || getStoredDefaultLocalDirectory();
+  const raw = (directoryPath || '').trim() || getRawStoredDefaultLocalDirectory() || '';
+  const dir = raw === LEGACY_DEFAULT_PRINT_DIR ? '' : raw;
+  if (!dir) return fileName ? fileName.trim().replace(/\s+/g, '_') : '';
   const usesBackslash = dir.includes('\\');
   let cleanDir = dir;
   if (usesBackslash) {
@@ -47,7 +51,7 @@ export function formatLocalShortcutPath(directoryPath: string, fileName?: string
  */
 export function saveStoredDefaultLocalDirectory(path: string): void {
   try {
-    let cleanPath = path.trim();
+    let cleanPath = (path || '').trim();
     const usesBackslash = cleanPath.includes('\\');
     if (cleanPath) {
       if (usesBackslash) {
@@ -55,8 +59,11 @@ export function saveStoredDefaultLocalDirectory(path: string): void {
       } else {
         if (!cleanPath.endsWith('/')) cleanPath += '/';
       }
+      localStorage.setItem(STORAGE_KEY_DEFAULT_DIR, cleanPath);
+    } else {
+      localStorage.removeItem(STORAGE_KEY_DEFAULT_DIR);
+      cleanPath = '';
     }
-    localStorage.setItem(STORAGE_KEY_DEFAULT_DIR, cleanPath || DEFAULT_PRINT_DIR);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('bejo_print_dir_updated', { detail: cleanPath }));
     }
@@ -148,11 +155,13 @@ export async function saveLocalPrintFile(
   uploadedBy?: string
 ): Promise<SpkPrintFileAttachment> {
   const fileId = `file_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-  const dir = customDirectoryPath?.trim() || getStoredDefaultLocalDirectory();
-  
-  // Format local path shortcut: (link folder file)(nama file)
-  // e.g. \\192.168.1.56\Faktur_Pembelian_PB-261001-9280.pdf
-  const localShortcutPath = formatLocalShortcutPath(dir, file.name);
+  const configuredDir = customDirectoryPath?.trim() || getRawStoredDefaultLocalDirectory() || '';
+  const sharedDir =
+    !configuredDir || configuredDir === LEGACY_DEFAULT_PRINT_DIR ? '' : configuredDir;
+
+  // Hanya tulis path bila folder bersama benar-benar sudah disetel. Tanpa itu
+  // path-nya hanya tebakan dan justru membuat operator membuka berkas yang salah.
+  const localShortcutPath = sharedDir ? formatLocalShortcutPath(sharedDir, file.name) : '';
 
   // Store in IndexedDB (handles gigabytes safely without touching localStorage or PocketBase payload)
   try {

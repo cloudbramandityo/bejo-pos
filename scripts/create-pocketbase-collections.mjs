@@ -525,7 +525,13 @@ const COLLECTIONS = [
   {
     name: 'settings',
     type: 'base',
-    fields: [J('payload')],
+    fields: [
+      J('payload'),
+      // Lokasi folder bersama untuk berkas SPK (record legacyId "spk_lan_folder").
+      T('path', false, 512),
+      T('updatedBy', false, 128),
+      N('updatedAt'),
+    ],
   },  {
     name: 'taxpayer_profile',
     type: 'base',

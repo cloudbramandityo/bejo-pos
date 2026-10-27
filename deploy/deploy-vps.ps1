@@ -637,7 +637,7 @@ if (-not $SkipSourceUpdate) {
         $dirty = @()
       } else {
         Write-Host ($dirty -join "`n") -ForegroundColor DarkYellow
-        Write-Warn2 "Perbedaan nyata vs $remoteRef: $($realChanges -join ', ')"
+        Write-Warn2 "Perbedaan nyata vs ${remoteRef}: $($realChanges -join ', ')"
         $patchPath = Join-Path $BackupRoot "local-changes-$Stamp.patch"
         & git -C $AppDir @gitQuiet diff --binary --ignore-cr-at-eol --output="$patchPath" 2>$null
         if ((Test-Path -LiteralPath $patchPath) -and (Get-Item -LiteralPath $patchPath).Length -gt 0) {

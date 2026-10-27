@@ -1422,7 +1422,31 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
 
           {/* ============================ KATEGORI ============================= */}
           {active === 'categories' && (
-            <SectionCard title="Kategori & Kartu Produk" description="Tab kategori dan kartu slider 9:16. Rekomendasi gambar 640 × 1138 px.">
+            <SectionCard
+              title="Kategori & Kartu Produk"
+              description="Tab kategori dan kartu slider 9:16. Rekomendasi gambar 640 × 1138 px."
+              aside={
+                <button
+                  type="button"
+                  onClick={() => {
+                    const group: LandingCategoryGroup = {
+                      id: newId('cat'),
+                      key: 'kategori_baru',
+                      title: 'KATEGORI BARU',
+                      heading: 'Judul Seksi Kategori Baru',
+                      description: 'Deskripsi kategori produk baru.',
+                      cards: [],
+                      isActive: true
+                    };
+                    updateList('categories', [...config.categories, group]);
+                    setOpenItem(group.id);
+                  }}
+                  className={btnPrimary}
+                >
+                  <Plus size={12} /> Tambah Kategori
+                </button>
+              }
+            >
               <div className="space-y-3">
                 {config.categories.map((group, gi) => (
                   <div key={group.id} className="rounded-xl border border-slate-200">

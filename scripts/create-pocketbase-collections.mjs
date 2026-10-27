@@ -603,10 +603,15 @@ async function main() {
   console.log(`   Dibuat : ${created}`);
   console.log(`   Sudah ada: ${skipped}`);
   console.log('==================================================================');
-  console.log(' CATATAN: Aturan akses (API Rules) collection masih kosong.');
-  console.log('   Buka Admin UI -> Settings -> API Rules, lalu isi:');
-  console.log('     listRule/viewRule/createRule/updateRule/deleteRule = "@request.auth.id != \"\""');
-  console.log('   (atau biarkan kosong bila Caddy + Basic Auth sudah melindungi)');
+  if (HARDEN) {
+    console.log(' Aturan akses (API Rules) sudah diperketat: baca/tulis wajib login,');
+    console.log(' create publik ditutup (kecuali koleksi yang memang publik).');
+  } else {
+    console.log(' CATATAN: Aturan akses (API Rules) collection masih kosong.');
+    console.log('   Jalankan ulang dengan --harden untuk memperketat:');
+    console.log('     listRule/viewRule/createRule/updateRule/deleteRule = "@request.auth.id != \"\""');
+    console.log('   (atau biarkan kosong bila Caddy + Basic Auth sudah melindungi)');
+  }
   console.log('==================================================================');
 }
 

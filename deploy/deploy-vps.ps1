@@ -396,6 +396,30 @@ function Remove-ObsoleteWrappers([string]$AppDir) {
   }
 }
 
+# File sisa versi lama yang masih memakai nama merek lama. Diarsipkan (bukan
+# dihapus) ke luar folder aplikasi agar build guard tidak memindainya lagi.
+function Move-ObsoleteBrandFiles([string]$AppDir, [string]$ArchiveRoot) {
+  $relativePaths = @(
+    'cek-sinkronisasi.ps1',
+    'deploy\run-deploy.ps1',
+    'src\components\KasUtamaScreen.tsx'
+  )
+  $found = @()
+  foreach ($relative in $relativePaths) {
+    if (Test-Path -LiteralPath (Join-Path $AppDir $relative)) { $found += $relative }
+  }
+  if ($found.Count -eq 0) { return }
+  $destination = Join-Path $ArchiveRoot "obsolete-$Stamp"
+  foreach ($relative in $found) {
+    $source = Join-Path $AppDir $relative
+    $target = Join-Path $destination $relative
+    New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
+    Move-Item -LiteralPath $source -Destination $target -Force
+    Write-Host "   Arsipkan file usang: $relative" -ForegroundColor DarkGray
+  }
+  Write-Ok "$($found.Count) file usang dipindahkan ke $destination"
+}
+
 # ----------------------------------------------------------- preflight
 Write-Host '==================================================================' -ForegroundColor DarkCyan
 Write-Host ' BEJO Digital Print - UNIVERSAL DEPLOY VPS WINDOWS' -ForegroundColor Cyan
@@ -591,6 +615,7 @@ if ($runningScriptBackup) {
 }
 
 Remove-ObsoleteWrappers $AppDir
+Move-ObsoleteBrandFiles $AppDir $BackupRoot
 
 # ----------------------------------------------------------- secrets prep
 # Langkah opsional: jadikan situs publik, isi kredensial admin PocketBase,

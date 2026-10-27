@@ -30,6 +30,8 @@ const SKIP_FILES = new Set([
   '.env.production',
   'package-lock.json',
   'scripts/check-brand.mjs',
+  // Dokumen runtime hasil deploy lama (berisi merek lama, bukan source).
+  'URL-INTERNET.txt',
   // Kebijakan ini perlu menyebut nama lama secara eksplisit.
   'AGENTS.md',
 ]);
@@ -86,6 +88,8 @@ function checkFile(fullPath) {
 function walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.name.startsWith('backup_pos_bejo_stiker_')) continue;
+    // Snapshot data/backup bukan source; isinya riwayat lama yang sah.
+    if (/^backup.*\.json$/i.test(entry.name)) continue;
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       if (!SKIP_DIRS.has(entry.name)) walk(fullPath);

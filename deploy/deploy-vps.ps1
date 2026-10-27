@@ -609,26 +609,48 @@ if (-not $SkipSourceUpdate) {
   }
 
   if ((Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath (Join-Path $AppDir '.git'))) {
-    $dirty = @(& git -C $AppDir status --porcelain --untracked-files=no 2>$null | Where-Object {
+    $gitQuiet = '-c', 'core.safecrlf=false', '-c', 'advice.detachedHead=false'
+    $remoteRef = "origin/$Branch"
+    & git -C $AppDir @gitQuiet fetch origin $Branch 2>$null | Out-Null
+    $fetchOk = ($LASTEXITCODE -eq 0)
+
+    $dirty = @(& git -C $AppDir @gitQuiet status --porcelain --untracked-files=no --ignore-cr-at-eol 2>$null | Where-Object {
       -not [string]::IsNullOrWhiteSpace($_) -and
       ($_.Substring(3).Trim('"') -notmatch '^(data|logs|backups|dist|node_modules)[/\\]')
     })
     if ($dirty.Count -gt 0) {
-      Write-Host ($dirty -join "`n") -ForegroundColor DarkYellow
-      $patchPath = Join-Path $BackupRoot "local-changes-$Stamp.patch"
-      try {
-        $patch = & git -C $AppDir diff --binary 2>$null
-        if ($LASTEXITCODE -eq 0 -and $patch) {
-          $patch | Set-Content -LiteralPath $patchPath -Encoding UTF8
+      # Worktree VPS ditulis ulang dari arsip source, jadi HEAD bisa tertinggal dan
+      # line-ending bisa berbeda. Bila isinya sebenarnya sama dengan remote, ini
+      # bukan perubahan lokal dan tidak perlu dicadangkan sebagai patch.
+      $realChanges = @()
+      if ($fetchOk) {
+        $realChanges = @(& git -C $AppDir @gitQuiet diff --name-only --ignore-cr-at-eol $remoteRef -- 2>$null | Where-Object {
+          -not [string]::IsNullOrWhiteSpace($_)
+        })
+      }
+
+      if ($realChanges.Count -eq 0) {
+        Write-Warn2 "$($dirty.Count) entri hanyalah HEAD tertinggal / beda line-ending, isi worktree = $remoteRef."
+        & git -C $AppDir @gitQuiet reset --hard $remoteRef 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) { Fail 'Gagal menyelaraskan HEAD repositori VPS ke remote.' }
+        Write-Ok 'HEAD repositori VPS diselaraskan ke source terbaru.'
+        $dirty = @()
+      } else {
+        Write-Host ($dirty -join "`n") -ForegroundColor DarkYellow
+        Write-Warn2 "Perbedaan nyata vs $remoteRef: $($realChanges -join ', ')"
+        $patchPath = Join-Path $BackupRoot "local-changes-$Stamp.patch"
+        & git -C $AppDir @gitQuiet diff --binary --ignore-cr-at-eol --output="$patchPath" 2>$null
+        if ((Test-Path -LiteralPath $patchPath) -and (Get-Item -LiteralPath $patchPath).Length -gt 0) {
           Write-Warn2 "Patch perubahan lokal disimpan: $patchPath"
+        } else {
+          Write-Warn2 'Patch perubahan lokal tidak dapat dibuat.'
+          Remove-Item -LiteralPath $patchPath -Force -ErrorAction SilentlyContinue
         }
-      } catch {
-        Write-Warn2 "Patch perubahan lokal tidak dapat dibuat: $($_.Exception.Message)"
+        if (-not $Force) {
+          Fail 'Ada perubahan lokal nyata pada file tracked. Commit/batalkan dulu, atau jalankan dengan -Force (patch tetap disimpan).'
+        }
+        Write-Warn2 'Perubahan lokal tracked akan ditimpa karena -Force.'
       }
-      if (-not $Force) {
-        Fail 'Ada perubahan lokal pada file tracked. Commit/batalkan dulu, atau jalankan dengan -Force (patch tetap disimpan).'
-      }
-      Write-Warn2 'Perubahan lokal tracked akan ditimpa karena -Force.'
     }
   }
 

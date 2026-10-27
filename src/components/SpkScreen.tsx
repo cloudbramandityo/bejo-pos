@@ -133,10 +133,12 @@ import {
   normalizeFolderPath,
   openFileFromSharedFolder,
   pickSharedFolder,
+  pickSharedFolderFiles,
   saveSharedFolderConfig,
   startSharedFolderCloudSync,
   verifySharedFolderFile,
-  type SharedFolderGrantStatus
+  type SharedFolderGrantStatus,
+  type SharedFolderPickResult
 } from '../utils/sharedFolderAccess';
 import {
   formatRupiah,
@@ -1064,9 +1066,19 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
 
   const handleOpenFile = async (fileAttachment?: SpkPrintFileAttachment, fallbackName?: string, localPath?: string) => {
     if (fileAttachment) {
-      // 1. Sumber kebenaran: berkas di folder bersama, jadi semua perangkat
-      //    membuka berkas yang sama persis dengan yang dilampirkan desainer.
+      // 1. File di folder bersama LAN: semua perangkat membuka berkas yang
+      //    sama persis (yang dilampirkan desainer), bukan path local perangkat
+      //    yang bikin operator "salah file". Bila folder belum disambungkan,
+      //    langsung bawa ke modal folder LAN (bukan coba buka yang gagal).
       if (fileAttachment.sharedCopy) {
+        if (!grantStatus?.granted || grantStatus?.needsPermission) {
+          setIsLanNetworkHubModalOpen(true);
+          showFileToast(
+            `Berkas "${fileAttachment.fileName}" ada di folder bersama. Buka modal LAN, sambungkan folder di perangkat ini, lalu klik "Buka dari Folder LAN".`,
+            'info'
+          );
+          return;
+        }
         const fromFolder = await openFileFromSharedFolder(fileAttachment);
         if (fromFolder.ok) {
           showFileToast(fromFolder.message, 'info');
@@ -1276,6 +1288,58 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
     }
   };
 
+  /**
+   * Memilih berkas dari folder bersama LAN (File System Access API Open File Picker)
+   * lalu meng-attachkannya ke SPK. Dipakai desainer/operator yang "memilih data dari
+   * folder LAN" untuk lampiran SPK. Berkas hasil pick memang berasal dari folder
+   * bersama, sehingga setelah terlampir statusnya benar-benar "Ada di folder bersama"
+   * dan user lain (operator printing) membukanya dari folder yang sama — tidak ada
+   * lagi salah file dalam SPK.
+   */
+  const handlePickFilesFromLanFolder = async (order?: SpkOrder) => {
+    if (grantStatus && (!grantStatus.granted || grantStatus.needsPermission)) {
+      setIsLanNetworkHubModalOpen(true);
+      showFileToast(
+        'Folder LAN belum tersambung di perangkat ini. Buka modal Folder File Asli (LAN), sambungkan folder, lalu pilih file dari folder bersama.',
+        'info'
+      );
+      return;
+    }
+    const res: SharedFolderPickResult = await pickSharedFolderFiles();
+    if (!res.ok) {
+      showFileToast(res.message, 'error');
+      return;
+    }
+    if (res.files.length === 0) {
+      showFileToast('Tidak ada berkas yang dipilih dari folder bersama.', 'info');
+      return;
+    }
+    const files = res.files;
+    if (order) {
+      await handleDetailModalAddPrintFiles(order, files);
+      return;
+    }
+    const attachments: SpkPrintFileAttachment[] = [];
+    const warnings: string[] = [];
+    for (const f of files) {
+      const result = await attachPrintFile(f);
+      attachments.push(result.attachment);
+      if (result.warning) warnings.push(result.warning);
+    }
+    setNewPrintFiles((prev) => {
+      const existingNames = new Set(prev.map((f) => f.fileName.toLowerCase()));
+      const toAdd = attachments.filter((f) => f.fileName && !existingNames.has(f.fileName.toLowerCase()));
+      return [...prev, ...toAdd];
+    });
+    const first = attachments[0];
+    if (first) setNewFileName(first.fileName);
+    if (warnings.length > 0) {
+      showFileToast(warnings[0], warnings[0].startsWith('Nama berkas') ? 'info' : 'error');
+    } else {
+      showFileToast(`${attachments.length} file dipilih dari folder bersama dan tersimpan ke folder LAN.`, 'success');
+    }
+  };
+
   // Sync orders with local storage events & auto-cleanup trigger
   useEffect(() => {
     const handleSync = (e: any) => {
@@ -1445,22 +1509,18 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
     const dateStr = now.toISOString().split('T')[0];
     const timeStr = now.toTimeString().split(' ')[0];
 
-    // Compute local file shortcut path: format (link folder file)(nama file)
+    // Hanya lampirkan file yang benar-benar dilampirkan & tersalin ke folder
+    // bersama. JANGAN pakai `newFileName` (nama kosong) sebagai "shortcut"
+    // palsu ke folder bersama: operator akan baca berkas di SPK yang tidak
+    // ada di folder (salah file).
     const resolvedPrintFiles: SpkPrintFileAttachment[] = [...newPrintFiles];
-    if (resolvedPrintFiles.length === 0 && newFileName.trim()) {
-      const computedPath = buildSharedFilePath(newFileName.trim());
-      resolvedPrintFiles.push({
-        id: `file_${Date.now()}`,
-        fileName: newFileName.trim(),
-        localPath: computedPath,
-        uploadedAt: Date.now(),
-        uploadedBy: currentUser?.name || 'Operator'
-      });
-    }
 
     const finalPrintFiles = resolvedPrintFiles.map((pf) => ({
       ...pf,
-      localPath: buildSharedFilePath(pf.fileName) || pf.localPath
+      // localPath asli (UNC/berbagi antar perangkat) yang sudah ditulis ke
+      // folder. Jangan re-konstruksi dari nama berkas saja.
+      localPath: pf.localPath,
+      sharedCopy: Boolean(pf.sharedCopy),
     }));
     const primaryPrintFile = finalPrintFiles[0] || undefined;
     const computedLocalPath = primaryPrintFile?.localPath;
@@ -3493,7 +3553,19 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                       <FileUp className="w-3.5 h-3.5 text-indigo-600" />
                       <span>Input File Cetak (Bisa Pilih Banyak File)</span>
                     </label>
-                    <span className="text-[10.5px] text-slate-500 font-normal">Tersimpan lokal & LAN</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handlePickFilesFromLanFolder()}
+                        disabled={isSharedFolderBusy}
+                        className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-semibold rounded-lg border border-indigo-200 hover:border-indigo-400 cursor-pointer flex items-center gap-1 transition-all shadow-2xs disabled:opacity-50 disabled:cursor-wait"
+                        title="Pilih file dari folder bersama LAN lalu lampirkan ke SPK"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5" />
+                        <span>+ Pilih dari Folder LAN</span>
+                      </button>
+                      <span className="text-[10.5px] text-slate-500 font-normal">Tersimpan lokal & LAN</span>
+                    </div>
                   </div>
 
                   {newPrintFiles.length > 0 ? (
@@ -4712,12 +4784,15 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                   if (selectedOrder.printFiles && selectedOrder.printFiles.length > 0) {
                     selectedOrder.printFiles.forEach((pf, i) => {
                       if (pf && pf.fileName) {
-                        const sCut = pf.localPath || buildSharedFilePath(pf.fileName);
+                        // Hanya tampilkan path folder bersama bila file benar-
+                        // benar tersalin ke folder; selain itu hanya nama file.
+                        const sCut = pf.localPath || (pf.sharedCopy ? buildSharedFilePath(pf.fileName) : '');
                         filesMap.set(pf.fileName.toLowerCase(), { fileObj: pf, fileName: pf.fileName, shortcut: sCut, forJob: 'Semua Produk' });
                       }
                     });
                   } else if (selectedOrder.printFile && selectedOrder.printFile.fileName) {
-                    const sCut = selectedOrder.printFile.localPath || selectedOrder.printFileShortcut || buildSharedFilePath(selectedOrder.printFile.fileName);
+                    const sCut = selectedOrder.printFile.localPath ||
+                      (selectedOrder.printFile?.sharedCopy ? selectedOrder.printFileShortcut : '');
                     filesMap.set(selectedOrder.printFile.fileName.toLowerCase(), { fileObj: selectedOrder.printFile, fileName: selectedOrder.printFile.fileName, shortcut: sCut, forJob: 'Order SPK' });
                   }
 
@@ -4745,21 +4820,33 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                     <div className="space-y-3">
                       <div className="flex items-center justify-between text-xs font-bold text-slate-700">
                         <span>Terlampir {filesList.length} File Cetak:</span>
-                        <label className="text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer flex items-center gap-1 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">
-                          <FileUp className="w-3.5 h-3.5" />
-                          <span>+ Upload File Tambahan (Bisa Banyak File)</span>
-                          <input
-                            type="file"
-                            multiple
-                            onChange={(e) => {
-                              if (e.target.files && e.target.files.length > 0) {
-                                handleDetailModalAddPrintFiles(selectedOrder, e.target.files);
-                              }
-                            }}
-                            accept=".pdf,.cdr,.psd,.ai,.eps,.tiff,.tif,.jpg,.jpeg,.png,.zip,.rar,.7z,.svg"
-                            className="hidden"
-                          />
-                        </label>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handlePickFilesFromLanFolder(selectedOrder)}
+                            disabled={isSharedFolderBusy}
+                            className="text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer flex items-center gap-1 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200 disabled:opacity-50 disabled:cursor-wait"
+                            title="Pilih file dari folder bersama LAN lalu lampirkan ke SPK ini"
+                          >
+                            <FolderOpen className="w-3.5 h-3.5" />
+                            <span>+ Pilih dari Folder LAN</span>
+                          </button>
+                          <label className="text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer flex items-center gap-1 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">
+                            <FileUp className="w-3.5 h-3.5" />
+                            <span>+ Upload File Tambahan (Bisa Banyak File)</span>
+                            <input
+                              type="file"
+                              multiple
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files.length > 0) {
+                                  handleDetailModalAddPrintFiles(selectedOrder, e.target.files);
+                                }
+                              }}
+                              accept=".pdf,.cdr,.psd,.ai,.eps,.tiff,.tif,.jpg,.jpeg,.png,.zip,.rar,.7z,.svg"
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
                       </div>
 
                       <div className="space-y-2.5 max-h-[350px] overflow-y-auto pr-1">
@@ -4898,6 +4985,16 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                           className="hidden"
                         />
                       </label>
+                      <button
+                        type="button"
+                        onClick={() => handlePickFilesFromLanFolder(selectedOrder)}
+                        disabled={isSharedFolderBusy}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 hover:border-indigo-400 cursor-pointer shadow-xs transition-all disabled:opacity-50 disabled:cursor-wait"
+                        title="Pilih file dari folder bersama LAN lalu lampirkan ke SPK ini"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5" />
+                        <span>+ Pilih dari Folder LAN</span>
+                      </button>
                     </div>
                   );
                 })()}

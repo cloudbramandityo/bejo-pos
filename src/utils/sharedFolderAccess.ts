@@ -371,6 +371,73 @@ export async function forgetSharedFolderGrant(): Promise<void> {
 }
 
 /**
+ * Hasil pemilihan berkas dari folder bersama lewat File System Access API.
+ * Dipakai saat user memilih data dari folder LAN untuk di-attach ke SPK.
+ */
+export interface SharedFolderPickResult {
+  ok: boolean;
+  files: File[];
+  folderName: string;
+  message: string;
+}
+
+/**
+ * Memilih berkas dari folder bersama yang sedang disetel & dihubungkan di perangkat
+ * ini, lewat Open File Picker (File System Access API). Berkas hasil pick memang
+ * berasal dari folder bersama, sehingga setelah di-attach statusnya benar-benar
+ * "ada di folder bersama" dan tidak ada lagi salah file antar user.
+ */
+export async function pickSharedFolderFiles(): Promise<SharedFolderPickResult> {
+  const win = window as unknown as {
+    showOpenFilePicker?: (
+      options?: {
+        types?: Array<{ description?: string; accept?: Record<string, string[]> }>;
+        excludeAcceptAllOption?: boolean;
+      }
+    ) => Promise<FileSystemFileHandle[]>;
+  };
+  const withPicker = win.showOpenFilePicker;
+  if (!withPicker) {
+    return {
+      ok: false,
+      files: [],
+      folderName: '',
+      message: 'Browser ini tidak mendukung pemilihan berkas dari folder. Gunakan Chrome atau Edge versi terbaru.'
+    };
+  }
+  try {
+    const handles = await withPicker({
+      types: [
+        {
+          description: 'Berkas Cetak Digital',
+          accept: {
+            'application/pdf': ['.pdf'],
+            'image/jpeg': ['.jpg', '.jpeg'],
+            'image/png': ['.png'],
+            'image/tiff': ['.tiff', '.tif'],
+            'image/webp': ['.webp'],
+            'image/gif': ['.gif'],
+            'application/octet-stream': ['.psd', '.ai', '.eps', '.cdr', '.zip', '.rar', '.7z', '.svg']
+          }
+        }
+      ],
+      excludeAcceptAllOption: true
+    });
+    const files: File[] = [];
+    for (const handle of handles) {
+      const file = await (handle as FileSystemFileHandle).getFile();
+      files.push(file);
+    }
+    return { ok: true, files, folderName: '', message: `${files.length} berkas dipilih dari folder bersama.` };
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      return { ok: false, files: [], folderName: '', message: 'Pemilihan berkas dibatalkan.' };
+    }
+    return { ok: false, files: [], folderName: '', message: err?.message || 'Berkas tidak dapat dipilih dari folder bersama.' };
+  }
+}
+
+/**
  * Minta ulang izin baca-tulis untuk folder yang sudah pernah dipilih di perangkat
  * ini, tanpa membuka dialog pilih folder. Harus dipanggil dari aksi klik user.
  */

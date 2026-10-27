@@ -1,13 +1,15 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "3.4.0",
+  "version": "3.5.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
     "prebuild": "node scripts/check-brand.mjs && node scripts/check-version.mjs",
     "check:brand": "node scripts/check-brand.mjs",
     "check:version": "node scripts/check-version.mjs",
+    "dev-password:set": "node scripts/set-dev-password.mjs --prompt --no-backup --min-length 10",
+    "dev-password:verify": "node scripts/set-dev-password.mjs --verify",
     "version:show": "node scripts/version.mjs --show",
     "version:bump": "node scripts/version.mjs",
     "version:major": "node scripts/version.mjs --major",

@@ -9,8 +9,13 @@
  *   # dari .env lama yang masih plaintext (migrasi otomatis)
  *   node scripts/set-dev-password.mjs --env .env --from-env
  *
- *   # password baru dari prompt PowerShell (dikirim lewat stdin, base64)
- *   $p = Read-Host -AsSecureString
+ *   # setel password TETAP (disarankan: sekali saja, 10+ karakter)
+ *   node scripts/set-dev-password.mjs --prompt
+ *
+ *   # cek password terhadap hash yang tersimpan (tanpa mengubah .env)
+ *   node scripts/set-dev-password.mjs --verify
+ *
+ *   # password dari stdin (dipakai deploy untuk rotasi darurat)
  *   ... | node scripts/set-dev-password.mjs --env .env --stdin --base64
  *
  *   # hanya membuat hash untuk ditempel manual (non-ASCII: tambahkan --base64)
@@ -40,12 +45,14 @@ function parseArgs(argv) {
     env: '',
     fromEnv: false,
     stdin: false,
+    prompt: false,
+    verify: false,
     base64: false,
     hashOnly: false,
     printHash: false,
     noBackup: false,
     username: '',
-    minLength: 12,
+    minLength: 10,
     allowWeak: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -53,6 +60,8 @@ function parseArgs(argv) {
     if (arg === '--env') options.env = argv[++i] || '';
     else if (arg === '--from-env') options.fromEnv = true;
     else if (arg === '--stdin') options.stdin = true;
+    else if (arg === '--prompt') options.prompt = true;
+    else if (arg === '--verify') options.verify = true;
     else if (arg === '--base64') options.base64 = true;
     else if (arg === '--hash') options.hashOnly = true;
     else if (arg === '--print-hash') options.printHash = true;
@@ -79,16 +88,19 @@ function printUsage() {
       'Pemakaian: node scripts/set-dev-password.mjs [opsi]',
       '',
       '  --env <path>        File .env yang diperbarui (default: .env)',
+      '  --prompt            Minta password sekali (input tersembunyi) lalu simpan hash',
+      '  --verify            Periksa password terhadap DEV_PASSWORD_HASH (tanpa mengubah .env)',
       '  --from-env          Ambil DEV_PASSWORD/JOURNAL_DEV_PASSWORD dari .env lalu hash',
       '  --stdin             Baca password dari stdin (satu baris)',
       '  --base64            Password di stdin di-encode base64 (aman untuk non-ASCII)',
       '  --hash              Cetak hash saja, tanpa mengubah .env',
       '  --print-hash        Cetak hash setelah disimpan',
-      '  --no-backup         Jangan buat backup .env (pemanggil sudah membackup)',
+      '  --no-backup         Jangan buat backup .env',
       '  --username <nama>   Set juga DEV_USERNAME',
-      '  --min-length <n>    Panjang minimum password (default 12)',
-      '  --allow-weak        Lewati batas panjang minimum untuk --stdin',
+      '  --min-length <n>    Panjang minimum password (default 10)',
+      '  --allow-weak        Lewati batas panjang minimum untuk --stdin/--prompt',
       '',
+      'Untuk password tetap: jalankan --prompt sekali, lalu jangan dirotasi lagi.',
       'Password tidak pernah dicetak. Hash scrypt aman disimpan di .env.',
     ].join('\n')
   );
@@ -221,13 +233,44 @@ function readStdinLine() {
   });
 }
 
+/** Input password tanpa echo; hanya berjalan pada terminal interaktif. */
+function promptHidden(question) {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      terminal: true,
+    });
+    let muted = false;
+    const writeOriginal = rl._writeToOutput.bind(rl);
+    rl._writeToOutput = (text) => {
+      if (!muted) writeOriginal(text);
+    };
+    rl.output.write(question);
+    muted = true;
+    rl.question('', (answer) => {
+      rl.close();
+      rl.output.write('\n');
+      resolve(answer);
+    });
+  });
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  if (options.fromEnv && options.stdin) {
-    fail('Pilih salah satu: --from-env atau --stdin.');
+  const sourceCount = [options.fromEnv, options.stdin, options.prompt].filter(Boolean).length;
+  if (sourceCount > 1) {
+    fail('Pilih salah satu sumber password: --prompt, --from-env, atau --stdin.');
   }
-  if (!options.fromEnv && !options.stdin) {
-    fail('Tentukan sumber password: --from-env atau --stdin. Lihat --help.');
+  if (options.verify && options.fromEnv) {
+    fail('--verify tidak memakai --from-env; gunakan --prompt atau --stdin.');
+  }
+  if (options.verify && options.hashOnly) {
+    fail('--verify tidak bisa digabung dengan --hash.');
+  }
+  if (sourceCount === 0) {
+    if (options.verify) options.prompt = true;
+    else fail('Tentukan sumber password: --prompt, --from-env, atau --stdin. Lihat --help.');
   }
   if (!options.env) options.env = '.env';
   const envPath = path.resolve(options.env);
@@ -254,7 +297,24 @@ async function main() {
       password = raw;
     }
     if (!password) fail('Password kosong dari stdin.');
-    if (!options.allowWeak && password.length < options.minLength) {
+    if (!options.allowWeak && !options.verify && password.length < options.minLength) {
+      fail(`Password minimal ${options.minLength} karakter.`);
+    }
+  } else if (options.prompt) {
+    if (!process.stdin.isTTY) {
+      fail('--prompt membutuhkan terminal interaktif. Jalankan langsung di PowerShell, bukan lewat pipe.');
+    }
+    const first = await promptHidden(
+      options.verify ? 'Password DEVELOPER: ' : 'Password DEVELOPER (input tersembunyi): '
+    );
+    if (!options.verify) {
+      const second = await promptHidden('Ulangi password DEVELOPER: ');
+      if (first !== second) fail('Konfirmasi password tidak sama; .env tidak diubah.');
+    }
+    password = first;
+    source = 'prompt';
+    if (!password) fail('Password kosong.');
+    if (!options.allowWeak && !options.verify && password.length < options.minLength) {
       fail(`Password minimal ${options.minLength} karakter.`);
     }
   } else {
@@ -271,6 +331,19 @@ async function main() {
         `[PERINGATAN] Password lama hanya ${password.length} karakter (< ${options.minLength}). Ganti setelah migrasi.`
       );
     }
+  }
+
+  if (options.verify) {
+    const { lines } = readEnvFile(envPath);
+    const stored = getValue(lines, 'DEV_PASSWORD_HASH');
+    if (!stored || !stored.startsWith(`${PREFIX}$`)) {
+      fail('DEV_PASSWORD_HASH belum disetel atau formatnya tidak dikenal di .env.');
+    }
+    if (!(await verifyHash(password, stored))) {
+      fail('Password TIDAK cocok dengan DEV_PASSWORD_HASH di .env.');
+    }
+    console.log('[OK] Password cocok dengan DEV_PASSWORD_HASH di .env.');
+    return;
   }
 
   const hash = await createHash(password);
@@ -304,6 +377,7 @@ async function main() {
   writeEnvFile(envPath, lines, eol);
 
   console.log(`[OK] DEV_PASSWORD_HASH tersimpan di ${path.basename(envPath)} (sumber: ${source}).`);
+  console.log('[PETUNJUK] Restart service aplikasi agar .env dibaca ulang (mis. Restart-Service BejoStikerPOS).');
   if (deprecated > 0) {
     console.log(`[OK] ${deprecated} baris password plaintext dinonaktifkan.`);
   }

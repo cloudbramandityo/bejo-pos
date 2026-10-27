@@ -15,7 +15,7 @@
     2. Unduh source terbaru dari GitHub (branch main) atau pakai source lokal
     3. Salin source tanpa menyentuh .env, data/, logs/, backups/, node_modules/, dist/
     3b. Bila diminta: setel PUBLIC_SITE, isi kredensial admin PocketBase,
-        rotasi password DEVELOPER (hash scrypt), dan hapus backup .env plaintext.
+        setel/rotasi password DEVELOPER (hash scrypt), dan hapus backup .env plaintext.
     4. Validasi .env keamanan (PUBLIC_SITE, REMOTE_ACCESS_PASS, kredensial developer, DSB.)
        PUBLIC_SITE=true  : landing publik terbuka, dashboard wajib login,
                            PB_ADMIN_* wajib, hardening PocketBase wajib.
@@ -48,15 +48,21 @@
                                  ALLOW_DEFAULT_STAFF_PASSWORDS=false ke .env
     -ConfigurePbAdmin            Tanya PB_ADMIN_EMAIL/PB_ADMIN_PASSWORD bila kosong
                                  (password tidak pernah dicetak)
-    -RotateDevPassword           Ganti password DEVELOPER dengan acak 10 karakter,
-                                 simpan hash scrypt, plaintext ke file terlindungi
-    -DevPasswordLength <n>       Panjang password DEVELOPER baru (default 10)
+    -SetDevPassword              Tanya password DEVELOPER stabil (minimal 10 karakter,
+                                 input tersembunyi) lalu simpan hash scrypt di .env
+    -RotateDevPassword           DARURAT saja: ganti password DEVELOPER dengan acak
+                                 (tanpa opsi ini password stabil di .env tidak disentuh)
+    -DevPasswordLength <n>       Panjang password DEVELOPER hasil rotasi (default 10)
     -PurgePlaintextEnvBackups    Hapus backup .env plaintext di backups/ (butuh -Force)
 
   Catatan keamanan:
     - Nilai rahasia tidak pernah dicetak ke konsol.
-    - Password DEVELOPER baru ditulis ke <AppDir>\secrets\developer-password-*.txt
-      dengan izin Administrators + SYSTEM. Simpan ke password manager lalu hapus.
+    - Password DEVELOPER bersifat STABIL: setel sekali dengan
+      "npm run dev-password:set" di <AppDir>, lalu deploy tidak mengubahnya.
+      Hanya hash scrypt yang tersimpan di .env (tanpa plaintext).
+    - Bila -RotateDevPassword dipakai (darurat), password baru ditulis ke
+      <AppDir>\secrets\developer-password-*.txt dengan izin Administrators + SYSTEM.
+      Simpan ke password manager lalu hapus.
     - Backup .env plaintext ditimpa byte acak sebelum dihapus.
 
   Exit code:
@@ -88,6 +94,7 @@ param(
   [switch]$KeepSourceArchive,
   [switch]$EnablePublicSite,
   [switch]$ConfigurePbAdmin,
+  [switch]$SetDevPassword,
   [switch]$RotateDevPassword,
   [int]$DevPasswordLength = 10,
   [switch]$PurgePlaintextEnvBackups
@@ -206,6 +213,40 @@ function Read-PlainSecret([string]$Prompt) {
   $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
   try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
   finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+}
+
+# Simpan password pilihan operator sebagai hash scrypt di .env. Plaintext
+# dikirim lewat stdin base64 (tidak terlihat di daftar proses) dan tidak ditulis
+# ke disk maupun dicetak.
+function Set-DevPasswordHash([string]$PlainPassword, [int]$MinLength) {
+  $setPassScript = Join-Path $AppDir 'scripts\set-dev-password.mjs'
+  if (-not (Test-Path -LiteralPath $setPassScript)) {
+    Fail "Skrip $setPassScript tidak ditemukan; pastikan source terbaru sudah tersalin."
+  }
+  $nodeExe = (Get-Command node).Source
+  $passwordBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($PlainPassword))
+  $hashExit = 0
+  $previousEap = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $passwordBase64 | & $nodeExe $setPassScript --env $envPath --stdin --base64 --min-length $MinLength --no-backup 2>&1 |
+      ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
+    $hashExit = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousEap
+    $passwordBase64 = $null
+  }
+  if ($hashExit -ne 0) { Fail 'Gagal menyimpan hash password DEVELOPER (lihat pesan di atas).' }
+
+  $newHash = Get-EnvValue $envPath 'DEV_PASSWORD_HASH'
+  if ([string]::IsNullOrWhiteSpace($newHash) -or $newHash -notmatch '^scrypt\$') {
+    Fail 'DEV_PASSWORD_HASH tidak terbentuk dengan format scrypt.'
+  }
+  foreach ($legacyKey in @('DEV_PASSWORD', 'JOURNAL_DEV_PASSWORD')) {
+    if (-not [string]::IsNullOrWhiteSpace((Get-EnvValue $envPath $legacyKey))) {
+      Write-Warn2 "$legacyKey masih aktif di .env; nonaktifkan manual."
+    }
+  }
 }
 
 function Protect-SecretFile([string]$Path) {
@@ -619,8 +660,11 @@ Move-ObsoleteBrandFiles $AppDir $BackupRoot
 
 # ----------------------------------------------------------- secrets prep
 # Langkah opsional: jadikan situs publik, isi kredensial admin PocketBase,
-# rotasi password DEVELOPER, dan bersihkan backup .env plaintext.
-if ($EnablePublicSite -or $ConfigurePbAdmin -or $RotateDevPassword -or $PurgePlaintextEnvBackups) {
+# setel/rotasi password DEVELOPER, dan bersihkan backup .env plaintext.
+if ($SetDevPassword -and $RotateDevPassword) {
+  Fail 'Gunakan salah satu: -SetDevPassword (password pilihan Anda) atau -RotateDevPassword (acak darurat).'
+}
+if ($EnablePublicSite -or $ConfigurePbAdmin -or $SetDevPassword -or $RotateDevPassword -or $PurgePlaintextEnvBackups) {
   Write-Step '1b/8 Siapkan rahasia produksi (nilai tidak dicetak)'
 }
 
@@ -729,6 +773,26 @@ if ($RotateDevPassword) {
   }
 }
 
+if ($SetDevPassword) {
+  $devPasswordMinLength = 10
+  $plainPassword = Read-PlainSecret "   Password DEVELOPER (minimal $devPasswordMinLength karakter, input tersembunyi)"
+  if ([string]::IsNullOrWhiteSpace($plainPassword)) { Fail 'Password DEVELOPER tidak boleh kosong.' }
+  if ($plainPassword.Length -lt $devPasswordMinLength) {
+    Fail "Password DEVELOPER minimal $devPasswordMinLength karakter (input $($plainPassword.Length) karakter)."
+  }
+  $confirmPassword = Read-PlainSecret '   Ulangi password DEVELOPER'
+  if ($plainPassword -cne $confirmPassword) { Fail 'Konfirmasi password tidak sama; .env tidak diubah.' }
+  try {
+    Set-DevPasswordHash $plainPassword $devPasswordMinLength
+    Write-Ok 'Password DEVELOPER tersimpan sebagai hash scrypt di .env (stabil, tanpa rotasi).'
+    Write-Host '   Nilai tidak dicetak dan tidak ditulis ke file; simpan di password manager.' -ForegroundColor DarkGray
+  } finally {
+    $plainPassword = $null
+    $confirmPassword = $null
+    [GC]::Collect()
+  }
+}
+
 if ($PurgePlaintextEnvBackups) {
   $envBackupDirs = @((Join-Path $AppDir 'backups'), $BackupRoot)
   [void](Remove-PlaintextEnvBackups -Directories $envBackupDirs -Confirmed ([bool]$Force))
@@ -753,6 +817,7 @@ if ([string]::IsNullOrWhiteSpace($developerPassword)) {
 }
 if ([string]::IsNullOrWhiteSpace($devPasswordHash) -and [string]::IsNullOrWhiteSpace($developerPassword)) {
   $missingEnv += 'DEV_PASSWORD_HASH (atau DEV_PASSWORD)'
+  Write-Warn2 "Setel password DEVELOPER sekali (stabil, tanpa rotasi): cd $AppDir; npm run dev-password:set"
 } elseif ([string]::IsNullOrWhiteSpace($devPasswordHash)) {
   Write-Warn2 'DEV_PASSWORD masih plaintext di .env. Jalankan "node scripts/set-dev-password.mjs --env .env --from-env" agar tersimpan sebagai hash scrypt.'
 }
@@ -1330,6 +1395,7 @@ if ($publicBase) {
   Write-Host '   Domain publik     : tidak tersedia'
 }
 if ($EnablePublicSite) { Write-Host '   Mode publik       : PUBLIC_SITE=true, ALLOW_DEFAULT_STAFF_PASSWORDS=false' }
+if ($SetDevPassword) { Write-Host '   Password DEVELOPER: disetel stabil (min 10 karakter, hash scrypt)' }
 if ($RotateDevPassword) { Write-Host "   Password DEVELOPER: dirotasi ($DevPasswordLength karakter, hash scrypt)" }
 if ($PurgePlaintextEnvBackups) { Write-Host "   Backup .env plain : $envBackupText" }
 if ($distBackup) { Write-Host "   Backup dist       : $distBackup" }
@@ -1339,10 +1405,20 @@ Write-Host ''
 
 if ($publicSite) {
   Write-Host ' LANGKAH WAJIB SETELAH DEPLOY' -ForegroundColor Yellow
-  Write-Host '   1. Login sebagai DEVELOPER memakai password baru dari file secrets.' -ForegroundColor Yellow
+  if ($RotateDevPassword) {
+    Write-Host '   1. Login sebagai DEVELOPER memakai password baru dari file secrets.' -ForegroundColor Yellow
+  } elseif ($SetDevPassword) {
+    Write-Host '   1. Login sebagai DEVELOPER memakai password yang baru Anda masukkan.' -ForegroundColor Yellow
+  } else {
+    Write-Host '   1. Login sebagai DEVELOPER memakai password stabil (hash scrypt di .env).' -ForegroundColor Yellow
+  }
   Write-Host '   2. Buka menu Pengguna dan ganti password SEMUA staf.' -ForegroundColor Yellow
   Write-Host '   3. Login publik menolak WEAK_PASSWORD sampai password default diganti.' -ForegroundColor Yellow
-  Write-Host '   4. Simpan password ke password manager lalu hapus file secrets.' -ForegroundColor Yellow
+  if ($RotateDevPassword) {
+    Write-Host '   4. Simpan password ke password manager lalu hapus file secrets.' -ForegroundColor Yellow
+  } else {
+    Write-Host '   4. Pastikan password DEVELOPER tersimpan di password manager.' -ForegroundColor Yellow
+  }
   Write-Host ''
 }
 

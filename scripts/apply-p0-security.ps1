@@ -182,6 +182,35 @@ function Restore-EnvVar([string]$Name, $Value) {
   }
 }
 
+# NSSM menyimpan target aplikasi di registry. Bila targetnya sudah tidak ada
+# (mis. C:\bejo-pos dihapus), restart hanya akan gagal dan menghentikan skrip;
+# deteksi lebih awal agar aman dijalankan di komputer lokal.
+function Get-ServiceAppTarget([string]$Name) {
+  $parameters = "HKLM:\SYSTEM\CurrentControlSet\Services\$Name\Parameters"
+  if (Test-Path -LiteralPath $parameters) {
+    $values = Get-ItemProperty -Path $parameters -ErrorAction SilentlyContinue
+    if ($values -and $values.AppParameters) { return [string]$values.AppParameters }
+  }
+  try {
+    $serviceInfo = Get-CimInstance Win32_Service -Filter ("Name='" + $Name + "'") -ErrorAction Stop
+    if ($serviceInfo -and $serviceInfo.PathName) { return [string]$serviceInfo.PathName }
+  } catch { }
+  return ''
+}
+
+function Test-ServiceTargetMissing([string]$Name) {
+  $target = Get-ServiceAppTarget $Name
+  if (-not $target) { return $false }
+  $candidates = @([regex]::Matches($target, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
+  $candidates += ($target -replace '"', '') -split '\s+'
+  foreach ($candidate in $candidates) {
+    if ($candidate -match '\.(cjs|js|exe)$' -and -not (Test-Path -LiteralPath $candidate)) {
+      return $true
+    }
+  }
+  return $false
+}
+
 # ----------------------------------------------------------- main
 Write-Host '==================================================================' -ForegroundColor DarkCyan
 Write-Host ' BEJO STIKER POS - APPLY P0 SECURITY UPDATE' -ForegroundColor Cyan
@@ -442,14 +471,20 @@ try {
 
   # ------------------------------------------------------- restart/check
   Write-Step '5/5 Restart service dan verifikasi route'
+  $restartDone = $false
   $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
   if ($SkipRestart) {
     Write-Warn2 'Restart service dilewati (-SkipRestart).'
   } elseif (-not $service) {
     Write-Warn2 "Service $ServiceName tidak ditemukan; restart dilewati (mode lokal)."
+  } elseif (Test-ServiceTargetMissing $ServiceName) {
+    Write-Warn2 "Service $ServiceName menunjuk ke file yang tidak ada: $(Get-ServiceAppTarget $ServiceName)"
+    Write-Warn2 'Restart dilewati. Service ini tampaknya sisa instalasi lama, bukan aplikasi yang sedang berjalan.'
+    Write-Warn2 'Lokal: jalankan ulang server manual (npm start). VPS: perbaiki path service lebih dulu.'
   } else {
     try {
       Restart-Service -Name $ServiceName -Force
+      $restartDone = $true
       Write-Ok "Service $ServiceName direstart."
     } catch {
       Fail "Gagal restart service $ServiceName : $($_.Exception.Message)"
@@ -483,8 +518,10 @@ try {
       } catch {
         try { $pbCode = [int]$_.Exception.Response.StatusCode } catch { $pbCode = 0 }
       }
-      if ($pbCode -in @(200, 503)) {
+      if ($pbCode -eq 200) {
         Write-Ok "Broker sesi PocketBase aktif (HTTP $pbCode)."
+      } elseif ($pbCode -eq 503) {
+        Write-Warn2 'Broker aktif, tetapi PB_SYNC_* kosong/ditolak PocketBase; sinkronisasi cloud tidak berjalan.'
       } elseif ($pbCode -eq 404) {
         Write-Warn2 'Route /api/pocketbase/session 404. Pastikan dist terbaru dan Caddy tidak mem-proxy prefix ini ke PocketBase.'
       } else {
@@ -502,10 +539,17 @@ try {
   Write-Host "   Service         : $(if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) { $ServiceName } else { 'tidak terdaftar (lokal)' })"
   Write-Host '   Langkah berikut :'
   Write-Host '     1. Rotate password DEVELOPER dan password akun sync PocketBase.'
-  Write-Host '     2. Commit + push source, lalu deploy VPS dengan:'
+  if (-not $restartDone) {
+    Write-Host '     2. Restart server yang sedang berjalan agar .env baru aktif (mis. npm start).' -ForegroundColor Yellow
+  }
+  Write-Host '     3. Commit + push source, lalu deploy VPS dengan:'
   Write-Host '        powershell -NoProfile -ExecutionPolicy Bypass -File C:\bejo-pos\deploy\deploy-vps.ps1 -Force'
   Write-Host '==================================================================' -ForegroundColor DarkCyan
-  Write-Ok 'APPLY P0 SELESAI.'
+  if ($restartDone) {
+    Write-Ok 'APPLY P0 SELESAI.'
+  } else {
+    Write-Ok 'APPLY P0 SELESAI (server perlu direstart manual).'
+  }
 } catch {
   Write-Host ''
   Write-Host "   [FAIL] $($_.Exception.Message)" -ForegroundColor Red

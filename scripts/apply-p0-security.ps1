@@ -9,9 +9,9 @@
   Skrip ini:
     1. Membackup .env ke backups\env-<stamp>.bak
     2. Menonaktifkan VITE_PB_SYNC_EMAIL / VITE_PB_SYNC_PASSWORD (deprecated)
-    3. Mengisi DEV_USERNAME, DEV_PASSWORD, APP_SESSION_SECRET,
-       REMOTE_ACCESS_PASS, PB_SYNC_EMAIL, PB_SYNC_PASSWORD,
-       POCKETBASE_UPSTREAM (prompt aman bila kosong)
+    3. Mengisi DEV_USERNAME, DEV_PASSWORD_HASH (scrypt, bukan plaintext),
+       APP_SESSION_SECRET, REMOTE_ACCESS_PASS, PB_SYNC_EMAIL,
+       PB_SYNC_PASSWORD, POCKETBASE_UPSTREAM (prompt aman bila kosong)
     4. Typecheck + build produksi
     5. Menjalankan hardening aturan PocketBase (--harden) bila admin tersedia
     6. Restart service (bila ada) + health check route baru
@@ -33,13 +33,15 @@
     -RequireHardening           Gagal bila hardening tidak bisa dijalankan
     -SkipRestart                Jangan restart service
     -AllowEmptyRemotePass       Izinkan REMOTE_ACCESS_PASS kosong (akses LAN saja)
-    -SkipDeveloperPassword      Jangan minta DEV_PASSWORD bila kosong
+    -SkipDeveloperPassword      Jangan minta password DEVELOPER bila hash/password kosong
     -SkipPbSyncCredentials      Jangan minta kredensial sync PocketBase
     -InstallDependencies        Jalankan npm ci / npm install sebelum build
     -NonInteractive             Jangan pernah meminta input (gagal bila wajib)
 
   CATATAN KEAMANAN:
     - Nilai rahasia tidak pernah dicetak ke layar.
+    - Password developer disimpan sebagai hash scrypt (DEV_PASSWORD_HASH);
+      plaintext lama otomatis dimigrasi lalu dinonaktifkan.
     - Jangan menyalin placeholder <...> apa adanya.
     - Setelah perubahan, wajib rotate password developer dan password akun
       sync PocketBase karena nilai lama pernah ikut ter-bundle ke browser.
@@ -250,6 +252,7 @@ try {
 
   if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Fail 'node tidak ditemukan di PATH.' }
   if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { Fail 'npm tidak ditemukan di PATH.' }
+  $nodePath = (Get-Command node).Source
   $npmPath = (Get-Command npm.cmd -ErrorAction SilentlyContinue).Source
   if (-not $npmPath) { $npmPath = (Get-Command npm).Source }
 
@@ -291,24 +294,58 @@ try {
       Write-Ok 'REMOTE_ACCESS_PASS sudah terisi.'
     }
 
-    $devPass = Get-EnvValue $envPath 'DEV_PASSWORD'
-    if ([string]::IsNullOrWhiteSpace($devPass)) {
-      $legacyDevPass = Get-EnvValue $envPath 'JOURNAL_DEV_PASSWORD'
+    $devSecretScript = Join-Path $AppDir 'scripts\set-dev-password.mjs'
+    if ([string]::IsNullOrWhiteSpace((Get-EnvValue $envPath 'DEV_PASSWORD_HASH'))) {
+      $legacyDevPass = Get-EnvValue $envPath 'DEV_PASSWORD'
+      if ([string]::IsNullOrWhiteSpace($legacyDevPass)) {
+        $legacyDevPass = Get-EnvValue $envPath 'JOURNAL_DEV_PASSWORD'
+      }
+
       if (-not [string]::IsNullOrWhiteSpace($legacyDevPass)) {
-        Set-EnvValue $envPath 'DEV_PASSWORD' $legacyDevPass
-        Write-Ok 'DEV_PASSWORD disamakan dengan JOURNAL_DEV_PASSWORD.'
-      } elseif ($SkipDeveloperPassword) {
-        Write-Warn2 'DEV_PASSWORD kosong: login DEVELOPER tidak akan berfungsi.'
-      } else {
-        $devPass = Read-SecretValue 'Masukkan password DEVELOPER baru (minimal 12 karakter):'
-        if ([string]::IsNullOrWhiteSpace($devPass)) {
-          Fail 'DEV_PASSWORD wajib diisi agar login DEVELOPER berfungsi. Gunakan -SkipDeveloperPassword untuk melewati.'
+        $legacyDevPass = $null
+        if (-not (Test-Path -LiteralPath $devSecretScript)) {
+          Fail "Skrip tidak ditemukan: $devSecretScript. Tidak bisa mengubah password developer menjadi hash."
         }
-        Set-EnvValue $envPath 'DEV_PASSWORD' $devPass
-        Write-Ok 'DEV_PASSWORD diisi (nilai tidak dicetak).'
+        & $nodePath $devSecretScript --env $envPath --from-env --no-backup
+        if ($LASTEXITCODE -ne 0) {
+          Fail 'Gagal mengubah DEV_PASSWORD menjadi hash scrypt. Password lama masih di .env.'
+        }
+        Write-Ok 'Password DEVELOPER lama diubah menjadi DEV_PASSWORD_HASH (scrypt).'
+      } elseif ($SkipDeveloperPassword) {
+        Write-Warn2 'Password DEVELOPER kosong: login DEVELOPER tidak akan berfungsi.'
+      } else {
+        if (-not (Test-Path -LiteralPath $devSecretScript)) {
+          Fail "Skrip tidak ditemukan: $devSecretScript. Tidak bisa membuat hash password developer."
+        }
+        $newDevPass = Read-SecretValue 'Masukkan password DEVELOPER baru (minimal 12 karakter):'
+        if ([string]::IsNullOrWhiteSpace($newDevPass)) {
+          Fail 'Password DEVELOPER wajib diisi agar login DEVELOPER berfungsi. Gunakan -SkipDeveloperPassword untuk melewati.'
+        }
+        if ($newDevPass.Length -lt 12) {
+          $newDevPass = $null
+          Fail 'Password DEVELOPER minimal 12 karakter.'
+        }
+
+        # Password dikirim sebagai base64 lewat stdin (bukan argumen) agar tidak
+        # terlihat di daftar proses dan tidak rusak oleh encoding PowerShell.
+        $encodedDevPass = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($newDevPass))
+        try {
+          $encodedDevPass | & $nodePath $devSecretScript --env $envPath --stdin --base64 --no-backup
+          $hashExit = $LASTEXITCODE
+        } finally {
+          $encodedDevPass = $null
+          $newDevPass = $null
+        }
+        if ($hashExit -ne 0) {
+          Fail 'Gagal menyimpan password DEVELOPER sebagai hash scrypt.'
+        }
+        Write-Ok 'DEV_PASSWORD_HASH dibuat (scrypt; nilai tidak dicetak).'
       }
     } else {
-      Write-Ok 'DEV_PASSWORD sudah terisi.'
+      Write-Ok 'DEV_PASSWORD_HASH sudah terisi (password developer tersimpan sebagai hash).'
+      if (-not [string]::IsNullOrWhiteSpace((Get-EnvValue $envPath 'DEV_PASSWORD'))) {
+        Write-Warn2 'DEV_PASSWORD plaintext masih aktif meski hash sudah ada. Hapus/komentari agar tidak ada salinan password.'
+      }
     }
 
     if ([string]::IsNullOrWhiteSpace((Get-EnvValue $envPath 'APP_SESSION_SECRET'))) {

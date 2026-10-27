@@ -15,6 +15,7 @@ import type { Express, Request, Response } from 'express';
 // melakukan interop dan `new PocketBase()` gagal di runtime.
 import PocketBase from 'pocketbase/cjs';
 import crypto from 'crypto';
+import { verifyPassword } from './passwordHash';
 
 const COOKIE_NAME = 'bejo_jurnal_session';
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
@@ -60,6 +61,7 @@ function journalConfig() {
     adminEmail,
     adminPassword,
     devUser: env('DEV_USERNAME') || env('JOURNAL_DEV_USER') || 'langgo',
+    devPasswordHash: env('DEV_PASSWORD_HASH'),
     devPassword: env('DEV_PASSWORD') || env('JOURNAL_DEV_PASSWORD'),
     sessionSecret:
       env('APP_SESSION_SECRET') || env('JOURNAL_SESSION_SECRET') || adminPassword,
@@ -644,7 +646,7 @@ export function registerJournalRoutes(app: Express): void {
         authenticated: Boolean(session),
         username: session?.sub || null,
         configured: {
-          developerLogin: Boolean(config.devPassword),
+          developerLogin: Boolean(config.devPasswordHash || config.devPassword),
           pocketbaseAdmin: Boolean(config.adminEmail && config.adminPassword),
           sessionSecret: Boolean(config.sessionSecret),
         },
@@ -660,8 +662,8 @@ export function registerJournalRoutes(app: Express): void {
       checkLoginRate(ip);
 
       const config = journalConfig();
-      if (!config.devPassword) {
-        throw new JournalError('JOURNAL_DEV_PASSWORD belum disetel di server.', 503);
+      if (!config.devPasswordHash && !config.devPassword) {
+        throw new JournalError('DEV_PASSWORD_HASH belum disetel di server.', 503);
       }
       if (!config.sessionSecret) {
         throw new JournalError(
@@ -673,7 +675,9 @@ export function registerJournalRoutes(app: Express): void {
       const username = String(req.body?.username || '').trim().toLowerCase();
       const password = String(req.body?.password || '');
       const usernameOk = username === config.devUser.toLowerCase();
-      const passwordOk = safeEqual(password, config.devPassword);
+      const passwordOk = config.devPasswordHash
+        ? await verifyPassword(password, config.devPasswordHash)
+        : safeEqual(password, config.devPassword);
       if (!usernameOk || !passwordOk) {
         console.warn(`[Jurnal] Login developer gagal dari ${ip}.`);
         throw new JournalError('Username atau password developer salah.', 401);

@@ -7,8 +7,9 @@
  * bertanda tangan HMAC ke browser.
  *
  * Variabel lingkungan:
- *   DEV_USERNAME / DEV_PASSWORD            (nama baru)
- *   JOURNAL_DEV_USER / JOURNAL_DEV_PASSWORD (nama lama, tetap didukung)
+ *   DEV_USERNAME / DEV_PASSWORD_HASH        (nama baru; password hanya hash scrypt)
+ *   DEV_PASSWORD / JOURNAL_DEV_PASSWORD     (plaintext lama, fallback migrasi)
+ *   JOURNAL_DEV_USER                        (nama lama, tetap didukung)
  *   APP_SESSION_SECRET / JOURNAL_SESSION_SECRET / PB_ADMIN_PASSWORD / REMOTE_ACCESS_PASS
  *
  * Bila tidak ada secret sama sekali, dipakai secret acak per proses (sesi tidak
@@ -20,6 +21,7 @@ import {
   clearJournalDeveloperSession,
   issueJournalDeveloperSession,
 } from './journalApi';
+import { verifyPassword } from './passwordHash';
 
 const COOKIE_NAME = 'bejo_dev_session';
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
@@ -49,8 +51,22 @@ function devUsername(): string {
   return env('DEV_USERNAME') || env('JOURNAL_DEV_USER') || 'langgo';
 }
 
-function devPassword(): string {
+function devPasswordHash(): string {
+  return env('DEV_PASSWORD_HASH');
+}
+
+function devPasswordPlain(): string {
   return env('DEV_PASSWORD') || env('JOURNAL_DEV_PASSWORD');
+}
+
+let legacyPasswordWarned = false;
+
+function warnLegacyPassword(): void {
+  if (legacyPasswordWarned || devPasswordHash() || !devPasswordPlain()) return;
+  legacyPasswordWarned = true;
+  console.warn(
+    '[Auth] DEV_PASSWORD masih plaintext di .env. Jalankan "node scripts/set-dev-password.mjs --env .env --from-env" agar tersimpan sebagai hash scrypt.'
+  );
 }
 
 let ephemeralSecret = '';
@@ -216,24 +232,28 @@ export function registerDevAuthRoutes(app: Express): void {
     });
   });
 
-  app.post('/api/auth/developer-login', (req, res) => {
+  app.post('/api/auth/developer-login', async (req, res) => {
     try {
       assertSameOrigin(req);
       const ip = clientIp(req);
       checkLoginRate(ip);
 
-      const password = devPassword();
-      if (!password) {
+      const passwordHash = devPasswordHash();
+      const plainPassword = devPasswordPlain();
+      if (!passwordHash && !plainPassword) {
         throw new DevAuthError(
-          'Login developer belum dikonfigurasi di server (DEV_PASSWORD / JOURNAL_DEV_PASSWORD).',
+          'Login developer belum dikonfigurasi di server (DEV_PASSWORD_HASH).',
           503
         );
       }
+      warnLegacyPassword();
 
       const username = String(req.body?.username || '').trim();
       const suppliedPassword = String(req.body?.password || '');
       const usernameOk = safeEqual(username.toLowerCase(), devUsername().toLowerCase());
-      const passwordOk = safeEqual(suppliedPassword, password);
+      const passwordOk = passwordHash
+        ? await verifyPassword(suppliedPassword, passwordHash)
+        : safeEqual(suppliedPassword, plainPassword);
 
       if (!usernameOk || !passwordOk) {
         console.warn(`[Auth] Login developer gagal dari ${ip}.`);

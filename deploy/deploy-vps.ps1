@@ -424,12 +424,19 @@ foreach ($key in $requiredKeys) {
   if ([string]::IsNullOrWhiteSpace($value)) { $missingEnv += $key }
 }
 
-# Login DEVELOPER kini diverifikasi server; password tidak lagi di bundle.
+# Login DEVELOPER diverifikasi server. Bentuk yang disarankan: DEV_PASSWORD_HASH
+# (scrypt). Plaintext DEV_PASSWORD/JOURNAL_DEV_PASSWORD masih diterima untuk
+# .env lama, tetapi deploy akan memperingatkan agar segera dimigrasi.
+$devPasswordHash = Get-EnvValue $envPath 'DEV_PASSWORD_HASH'
 $developerPassword = Get-EnvValue $envPath 'DEV_PASSWORD'
 if ([string]::IsNullOrWhiteSpace($developerPassword)) {
   $developerPassword = Get-EnvValue $envPath 'JOURNAL_DEV_PASSWORD'
 }
-if ([string]::IsNullOrWhiteSpace($developerPassword)) { $missingEnv += 'DEV_PASSWORD (atau JOURNAL_DEV_PASSWORD)' }
+if ([string]::IsNullOrWhiteSpace($devPasswordHash) -and [string]::IsNullOrWhiteSpace($developerPassword)) {
+  $missingEnv += 'DEV_PASSWORD_HASH (atau DEV_PASSWORD)'
+} elseif ([string]::IsNullOrWhiteSpace($devPasswordHash)) {
+  Write-Warn2 'DEV_PASSWORD masih plaintext di .env. Jalankan "node scripts/set-dev-password.mjs --env .env --from-env" agar tersimpan sebagai hash scrypt.'
+}
 
 # Kunci HMAC cookie sesi; tanpa ini sesi hilang setiap restart dan login web gagal.
 $sessionSecret = Get-EnvValue $envPath 'APP_SESSION_SECRET'
@@ -707,7 +714,7 @@ try {
   if ($journalSession.success) {
     Write-Ok 'Route Jurnal aktif.'
     if (-not $journalSession.configured.developerLogin -or -not $journalSession.configured.sessionSecret) {
-      Write-Warn2 'Sesi Jurnal belum lengkap; isi DEV_PASSWORD (atau JOURNAL_DEV_PASSWORD) dan APP_SESSION_SECRET di .env VPS.'
+      Write-Warn2 'Sesi Jurnal belum lengkap; isi DEV_PASSWORD_HASH (atau DEV_PASSWORD) dan APP_SESSION_SECRET di .env VPS.'
     }
   } else {
     Write-Warn2 'Route Jurnal merespons tanpa status success.'

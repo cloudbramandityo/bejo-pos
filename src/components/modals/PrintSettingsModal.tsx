@@ -41,7 +41,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
   onClose,
   settings,
   onSaveSettings,
-  storeName = 'BEJO STIKER',
+  storeName = 'BEJO Digital Print',
   storePhone = '0812-3456-7890',
   storeAddress = 'Jl. Raya Utama No. 45 (Sebelah Polsek)',
   storeBranch = 'Polsek Utama',

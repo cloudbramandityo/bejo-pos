@@ -23,7 +23,7 @@ function Section($title) {
 }
 
 Write-Host "===================================================================" -ForegroundColor Green
-Write-Host " BEJO STIKER POS - VPS WINDOWS STATUS CHECKER" -ForegroundColor Green
+Write-Host " BEJO Digital Print - VPS WINDOWS STATUS CHECKER" -ForegroundColor Green
 Write-Host " Domain: $Domain"
 Write-Host " Waktu: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 Write-Host "===================================================================" -ForegroundColor Green

@@ -38,7 +38,7 @@ export const TaxAttachmentsView: React.FC<TaxAttachmentsViewProps> = ({ currentR
     {
       id: 'doc-4',
       title: 'Lampiran 3: Form 1770 - III (Final PP 55 & Non-Objek)',
-      description: 'Rekapitulasi omzet UMKM Toko Bejo Stiker & penghasilan non-objek',
+      description: 'Rekapitulasi omzet UMKM BEJO Digital Print & penghasilan non-objek',
       status: 'TERSEDIA OTOMATIS',
       required: true,
     },

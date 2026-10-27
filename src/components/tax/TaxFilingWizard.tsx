@@ -389,7 +389,7 @@ export const TaxFilingWizard: React.FC<TaxFilingWizardProps> = ({
 
             {data.hasBusinessIncome && (
               <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/60 space-y-3">
-                <h4 className="font-bold text-amber-900">Penghasilan Usaha Toko Bejo Stiker</h4>
+                <h4 className="font-bold text-amber-900">Penghasilan Usaha BEJO Digital Print</h4>
                 <div>
                   <label className="block text-slate-700 font-semibold mb-1">Total Peredaran Bruto (Omzet) Setahun (Rp)</label>
                   <input

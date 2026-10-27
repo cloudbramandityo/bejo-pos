@@ -1,6 +1,6 @@
 <#
 =====================================================================
-  BEJO STIKER POS - FINISH DEPLOY (VPS Windows / Rumah Web)
+  BEJO Digital Print - FINISH DEPLOY (VPS Windows / Rumah Web)
 =====================================================================
   Menjalankan SEMUA langkah final setelah Node.js, NSSM, Caddy, dan
   PocketBase terpasang. Skrip ini idempoten - aman dijalankan berulang.
@@ -125,7 +125,7 @@ function Read-Secret($prompt, $current) {
 }
 
 # =============================================================== BANNER
-Write-Head "BEJO STIKER POS - FINISH DEPLOY"
+Write-Head "BEJO Digital Print - FINISH DEPLOY"
 Write-Host " Domain    : $Domain" -ForegroundColor White
 Write-Host " App dir   : $AppDir" -ForegroundColor White
 Write-Host " Waktu     : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor White

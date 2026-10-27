@@ -1,6 +1,6 @@
 <#
 =====================================================================
-  BEJO STIKER POS - Setup PocketBase di VPS Windows
+  BEJO Digital Print - Setup PocketBase di VPS Windows
 =====================================================================
   Jalankan di VPS (PowerShell Administrator):
       powershell -ExecutionPolicy Bypass -File C:\deploy\setup-pocketbase.ps1
@@ -35,7 +35,7 @@ $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIden
 if (-not $isAdmin) { Write-Fail "HARUS dijalankan sebagai Administrator!" }
 
 Write-Host "==================================================================" -ForegroundColor DarkCyan
-Write-Host " BEJO STIKER POS - SETUP POCKETBASE (Database Self-Hosted)" -ForegroundColor Cyan
+Write-Host " BEJO Digital Print - SETUP POCKETBASE (Database Self-Hosted)" -ForegroundColor Cyan
 Write-Host "==================================================================" -ForegroundColor DarkCyan
 
 # ---------------------------------------------------------------- 1. DOWNLOAD
@@ -84,7 +84,7 @@ if (-not (Test-Path $nssm)) {
     & $nssm remove $ServiceName confirm 2>&1 | Out-Null
     & $nssm install $ServiceName "$PB_DIR\pocketbase.exe" "serve --http=0.0.0.0:$PB_PORT --dir=$PB_DATA" | Out-Null
     & $nssm set $ServiceName DisplayName "PocketBase (Database + Realtime)" | Out-Null
-    & $nssm set $ServiceName Description "PocketBase - basis data & realtime Bejo Stiker POS" | Out-Null
+    & $nssm set $ServiceName Description "PocketBase - basis data & realtime BEJO Digital Print" | Out-Null
     & $nssm set $ServiceName AppDirectory $PB_DIR | Out-Null
     & $nssm set $ServiceName AppStdout "$PB_DIR\logs\stdout.log" | Out-Null
     & $nssm set $ServiceName AppStderr "$PB_DIR\logs\stderr.log" | Out-Null

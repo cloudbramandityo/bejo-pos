@@ -97,7 +97,7 @@ export function generateOfflineStickerSvg(prompt: string): string {
 
     <!-- Quality Seal Footer -->
     <text x="250" y="415" text-anchor="middle" fill="#ffffff" opacity="0.85" font-family="system-ui, sans-serif" font-weight="600" font-size="11">
-      ★ BEJO STIKER DIGITAL PRINTING & CUTTING ★
+      ★ BEJO Digital Print DIGITAL PRINTING & CUTTING ★
     </text>
   </g>
 </svg>
@@ -114,7 +114,7 @@ export function generateLocalBejoAiReply(userMessage: string, ctx: LocalAiContex
   const rawMsg = userMessage.trim();
   const callName = ctx.userCallName || 'Kak';
   const prefixTitle = callName.startsWith('Pak') ? callName : `Kak ${callName}`;
-  const storeName = ctx.storeName || 'BEJO STIKER';
+  const storeName = ctx.storeName || 'BEJO Digital Print';
   const style = ctx.personaStyle || 'CERIA';
 
   // Format tone based on persona style

@@ -1321,7 +1321,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 pt-1">
-                  Kinerja usaha Toko Bejo Stiker menunjukkan tren kenaikan stabil konsisten di atas 15% per tahun.
+                  Kinerja usaha BEJO Digital Print menunjukkan tren kenaikan stabil konsisten di atas 15% per tahun.
                 </p>
               </div>
             </div>

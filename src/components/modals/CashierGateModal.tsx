@@ -15,6 +15,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { CashierUser } from '../../types';
+import { APP_NAME } from '../../config/brand';
 import { formatRupiah, formatNumberInput, parseNumber, getFormattedDate, getFormattedTime } from '../../utils/formatters';
 import { StoreLogo } from '../StoreLogo';
 
@@ -35,7 +36,7 @@ export const CashierGateModal: React.FC<CashierGateModalProps> = ({
 
   const [selectedCashierName, setSelectedCashierName] = useState<string>('');
   const [selectedShiftName, setSelectedShiftName] = useState<string>('Shift 1');
-  const [storeName, setStoreName] = useState(defaultStoreName || 'BEJO Pelsek');
+  const [storeName, setStoreName] = useState(defaultStoreName || APP_NAME);
   const [startingCash, setStartingCash] = useState<string>('250.000');
   const [customCashierInput, setCustomCashierInput] = useState('');
   const [isCustomCashier, setIsCustomCashier] = useState(false);
@@ -112,7 +113,7 @@ export const CashierGateModal: React.FC<CashierGateModalProps> = ({
       finalCashierName,
       selectedShiftName.trim(),
       numStartingCash >= 0 ? numStartingCash : 0,
-      storeName.trim() || 'BEJO Pelsek'
+      storeName.trim() || APP_NAME
     );
   };
 
@@ -137,7 +138,7 @@ export const CashierGateModal: React.FC<CashierGateModalProps> = ({
               <div className="flex flex-wrap items-center gap-2 mb-1">
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 text-[11px] font-bold text-sky-200 backdrop-blur-xs">
                   <Sparkles className="w-3 h-3 text-amber-300" />
-                  POS Kasir Bejo Stiker
+                  POS Kasir {APP_NAME}
                 </div>
                 <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/30 text-[11px] font-bold text-emerald-200 border border-emerald-400/30">
                   <Clock className="w-3 h-3 text-emerald-300 animate-pulse" />

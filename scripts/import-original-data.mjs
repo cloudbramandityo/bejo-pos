@@ -1,6 +1,6 @@
 /**
  * =====================================================================
- *  BEJO STIKER POS - Import Data Original ke PocketBase
+ *  BEJO Digital Print - Import Data Original ke PocketBase
  * =====================================================================
  *  Menjalankan di PC atau VPS (Node 18+).
  *
@@ -154,7 +154,7 @@ const SETTINGS_DOCS = ['store_info', 'active_shift', 'database_init'];
 
 async function main() {
   console.log('==================================================================');
-  console.log('  BEJO STIKER POS - IMPORT DATA ORIGINAL KE POCKETBASE');
+  console.log('  BEJO Digital Print - IMPORT DATA ORIGINAL KE POCKETBASE');
   console.log('==================================================================');
   console.log(`Backup file: ${BACKUP_FILE}`);
   console.log(`  (sumber : ${BACKUP_FILE_SOURCE})`);

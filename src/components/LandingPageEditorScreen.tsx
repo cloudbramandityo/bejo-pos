@@ -1,5 +1,5 @@
 ﻿/**
- * BEJO STIKER POS & DIGITAL PRINTING
+ * BEJO Digital Print
  * Landing Page Developer CMS — tata letak ala WordPress Admin
  * (sidebar seksi kiri + editor + pratinjau langsung di kanan)
  *
@@ -8,6 +8,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { APP_NAME } from '../config/brand';
 import {
   Building2,
   Check,
@@ -809,7 +810,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                         <span className="h-4 w-4 shrink-0 rounded bg-slate-200" />
                       )}
                       <span className="truncate text-[11px] font-semibold text-slate-700">
-                        {config.brand.siteTitle || 'Bejo Stiker POS'}
+                        {config.brand.siteTitle || APP_NAME}
                       </span>
                     </span>
                     <Field
@@ -820,7 +821,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                         value={config.brand.siteTitle || ''}
                         onChange={(e) => patchSub('brand', { siteTitle: e.target.value })}
                         className={inputCls}
-                        placeholder="Contoh: BEJO STIKER & DIGITAL PRINTING"
+                        placeholder="Contoh: BEJO Digital Print"
                       />
                     </Field>
                   </div>
@@ -848,7 +849,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                       value={config.brand.metaDescription || ''}
                       onChange={(e) => patchSub('brand', { metaDescription: e.target.value })}
                       className={areaCls}
-                      placeholder="Contoh: BEJO STIKER & DIGITAL PRINTING adalah percetakan online untuk cetak kemasan custom, kartu nama, banner, dan souvenir bisnis dengan kirim ke seluruh Indonesia."
+                      placeholder="Contoh: BEJO Digital Print adalah percetakan online untuk cetak kemasan custom, kartu nama, banner, dan souvenir bisnis dengan kirim ke seluruh Indonesia."
                     />
                   </Field>
                   <div className="mt-1.5 flex items-center justify-between gap-2">

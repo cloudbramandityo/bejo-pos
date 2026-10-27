@@ -1,6 +1,6 @@
 /**
  * Backend Diagnostics & Automated Self-Repair Utility
- * Coded for Bejo Stiker POS System
+ * Coded for BEJO Digital Print System
  */
 import { BackendDiagnostics, BackendErrorItem, BackendFixReport } from '../types';
 import { testPocketBaseConnection, seedDatabaseIfEmpty, isPocketBaseUnavailable } from '../backend/pocketbaseBackend';

@@ -1,5 +1,5 @@
 /**
- * BEJO STIKER POS & DIGITAL PRINTING
+ * BEJO Digital Print
  * Marketing Module — Shopee Discovery Ads (Shopee Open Platform API)
  * Coded by Langgo Bramandityo.
  */
@@ -1399,7 +1399,7 @@ const ShopeeDetailPreview: React.FC<{ productName: string; price: number; imageU
         <Truck className="h-3.5 w-3.5 text-[#26AA99]" />
         <div className="flex-1">
           <p className="text-[9px] font-semibold text-slate-800">Gratis Ongkir</p>
-          <p className="text-[8px] text-slate-400">Estimasi tiba 2-4 hari · Bejo Stiker</p>
+          <p className="text-[8px] text-slate-400">Estimasi tiba 2-4 hari · BEJO Digital Print</p>
         </div>
         <ChevronRight className="h-3 w-3 text-slate-300" />
       </div>
@@ -1419,7 +1419,7 @@ const ShopeeDetailPreview: React.FC<{ productName: string; price: number; imageU
         </div>
         <div className="flex-1">
           <p className="flex items-center gap-1 text-[9px] font-bold text-slate-800">
-            Bejo Stiker
+            BEJO Digital Print
             <span className="rounded-sm bg-[#EE4D2D] px-1 py-0.5 text-[6px] text-white">Star+</span>
           </p>
           <p className="text-[8px] text-slate-400">Aktif 5 menit lalu · Kota Surabaya</p>

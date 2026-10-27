@@ -1,5 +1,5 @@
 /**
- * BEJO STIKER POS & DIGITAL PRINTING
+ * BEJO Digital Print
  * Landing Page Configuration Storage & Defaults (Dynamic & Adaptive CMS)
  * Struktur konten mengikuti referensi uprint.id.
  * Coded by Langgo Bramandityo.
@@ -28,7 +28,7 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
 
   hero: {
     badgeText: 'Percetakan Online Indonesia',
-    headline: 'PERCETAKAN ONLINE INDONESIA - BEJO STIKER',
+    headline: 'PERCETAKAN ONLINE INDONESIA - BEJO Digital Print',
     subheadline:
       'Layanan percetakan offset dan digital printing terpadu untuk cetak kemasan custom, kartu nama, brosur, flyer, buku, katalog, stiker, kalender, banner, hingga souvenir bisnis dengan pengiriman ke seluruh Indonesia.',
     primaryCtaText: 'Konsultasi Gratis',
@@ -37,13 +37,13 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
   },
 
   brand: {
-    name: 'bejo stiker',
+    name: 'BEJO Digital Print',
     tagline: 'percetakan online indonesia',
     logoUrl: undefined,
     faviconUrl: undefined,
-    siteTitle: 'BEJO STIKER & DIGITAL PRINTING',
+    siteTitle: 'BEJO Digital Print',
     metaDescription:
-      'BEJO STIKER & DIGITAL PRINTING: percetakan online kemasan custom, kartu nama, media promosi, banner, kalender, dan souvenir bisnis kirim seluruh Indonesia.'
+      'BEJO Digital Print: percetakan online kemasan custom, kartu nama, media promosi, banner, kalender, dan souvenir bisnis kirim seluruh Indonesia.'
   },
 
   slides: [
@@ -440,7 +440,7 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
 
   contact: {
     whatsappNumber: '6281234567890',
-    whatsappMessageTemplate: 'Halo Bejo Stiker! Saya ingin order / tanya info produk dan layanan berikut:',
+    whatsappMessageTemplate: 'Halo BEJO Digital Print! Saya ingin order / tanya info produk dan layanan berikut:',
     storeAddress: 'Jl. Raya Utama No. 88 (Dekat Polsek), Indonesia',
     phoneDisplay: '0812-3456-7890',
     operatingHours: 'Senin - Sabtu: 08.00 - 20.00 WIB | Minggu: 09.00 - 17.00 WIB',
@@ -453,14 +453,14 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
     eyebrow: 'Tentang Kami',
     title: 'Berkembang Bersama Dedikasi & Inovasi',
     intro:
-      'Seperti benih yang tumbuh menjadi pohon besar, BEJO STIKER memulai perjalanan dengan dasar yang kuat: stok lengkap, harga tangan pertama, dan kerja keras setiap hari untuk memenuhi kebutuhan cetak pelanggan.',
+      'Seperti benih yang tumbuh menjadi pohon besar, BEJO Digital Print memulai perjalanan dengan dasar yang kuat: stok lengkap, harga tangan pertama, dan kerja keras setiap hari untuk memenuhi kebutuhan cetak pelanggan.',
     paragraphs: [
-      'BEJO STIKER & DIGITAL PRINTING berdiri sebagai toko stiker dan workshop digital printing yang melayani variasi otomotif, bengkel, toko stiker, agen, hingga industri kreatif. Kami menyediakan material stiker terbaik dunia — Decofix, Oracal, Derek, 3M, Saicholite, Duratac, dan banyak lagi — siap eceran maupun grosir.',
+      'BEJO Digital Print berdiri sebagai toko stiker dan workshop digital printing yang melayani variasi otomotif, bengkel, toko stiker, agen, hingga industri kreatif. Kami menyediakan material stiker terbaik dunia — Decofix, Oracal, Derek, 3M, Saicholite, Duratac, dan banyak lagi — siap eceran maupun grosir.',
       'Produksi kami dikerjakan sendiri di workshop: mulai dari digital printing resolusi tinggi, laminasi, hingga laser cutting akrilik presisi mikro. Dengan mesin milik sendiri, kualitas dan waktu pengerjaan sepenuhnya terkendali.',
       'Kami percaya hubungan jangka panjang dibangun dengan konsistensi: hasil cetak sesuai permintaan, pengiriman tepat waktu, dan layanan purna jual yang responsif. Itulah alasan pelanggan terus kembali dan merekomendasikan kami.'
     ],
     imageUrl: undefined,
-    imageCaption: 'Workshop & Gudang BEJO STIKER',
+    imageCaption: 'Workshop & Gudang BEJO Digital Print',
     stats: [
       { value: '8+', label: 'Tahun Pengalaman' },
       { value: '40+', label: 'Merk & Warna Vinyl' },

@@ -1,6 +1,6 @@
 <#
 =====================================================================
-  BEJO STIKER POS - Bootstrap VPS WINDOWS (Rumah Web)
+  BEJO Digital Print - Bootstrap VPS WINDOWS (Rumah Web)
 =====================================================================
   Jalankan DI DALAM VPS lewat Remote Desktop (PowerShell sebagai Admin):
 
@@ -142,7 +142,7 @@ Write-Ok "Firewall: 80 & 443 terbuka, 3000 diblokir"
 Write-Step "6/7 Menyiapkan Caddyfile"
 $caddyfile = @"
 # =====================================================================
-#  BEJO STIKER POS - Caddy (Windows VPS)
+#  BEJO Digital Print - Caddy (Windows VPS)
 #  Diperbarui otomatis oleh deploy-vps.ps1
 # =====================================================================
 
@@ -205,8 +205,8 @@ $nodeExe = (Get-Command node).Source
 & $nssm stop $ServiceName 2>&1 | Out-Null
 & $nssm remove $ServiceName confirm 2>&1 | Out-Null
 & $nssm install $ServiceName $nodeExe "$AppDir\dist\server.cjs" | Out-Null
-& $nssm set $ServiceName DisplayName "Bejo Stiker POS (Node)" | Out-Null
-& $nssm set $ServiceName Description "Aplikasi POS Bejo Stiker - otomatis start & restart" | Out-Null
+& $nssm set $ServiceName DisplayName "BEJO Digital Print (Node)" | Out-Null
+& $nssm set $ServiceName Description "Aplikasi POS BEJO Digital Print - otomatis start & restart" | Out-Null
 & $nssm set $ServiceName AppDirectory $AppDir | Out-Null
 & $nssm set $ServiceName AppEnvironmentExtra "NODE_ENV=production" | Out-Null
 & $nssm set $ServiceName AppEnvironmentExtra "PORT=3000" | Out-Null

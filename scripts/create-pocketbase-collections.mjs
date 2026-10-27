@@ -1,6 +1,6 @@
 /**
  * =====================================================================
- *  BEJO STIKER POS - Membuat Koleksi PocketBase + Skema
+ *  BEJO Digital Print - Membuat Koleksi PocketBase + Skema
  * =====================================================================
  *  Menjalankan di PC (Node 18+):
  *
@@ -506,7 +506,7 @@ const COLLECTIONS = [
 
 async function main() {
   console.log('==================================================================');
-  console.log(' BEJO STIKER POS - PEMBUATAN KOLEKSI POCKETBASE');
+  console.log(' BEJO Digital Print - PEMBUATAN KOLEKSI POCKETBASE');
   console.log('==================================================================');
 
   const pb = new PocketBase(PB_URL);

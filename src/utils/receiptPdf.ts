@@ -14,7 +14,7 @@ export async function generateReceiptQRDataUrl(phone: string): Promise<string> {
     if (cleanPhone.startsWith('0')) {
       cleanPhone = '62' + cleanPhone.substring(1);
     }
-    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent('Halo Bejo Stiker, saya ingin konsultasi / order.')}`;
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent('Halo BEJO Digital Print, saya ingin konsultasi / order.')}`;
     return await QRCode.toDataURL(waUrl, {
       margin: 1,
       width: 256,
@@ -76,7 +76,7 @@ export async function exportReceiptToPDF(
   doc.setFont('courier', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(0, 0, 0);
-  doc.text((storeInfo.storeName || 'BEJO STIKER').toUpperCase(), pageWidth / 2, y, { align: 'center' });
+  doc.text((storeInfo.storeName || 'BEJO Digital Print').toUpperCase(), pageWidth / 2, y, { align: 'center' });
   y += 4;
 
   doc.setFont('courier', 'normal');

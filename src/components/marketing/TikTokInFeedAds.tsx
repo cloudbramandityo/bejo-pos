@@ -1,5 +1,5 @@
 /**
- * BEJO STIKER POS & DIGITAL PRINTING
+ * BEJO Digital Print
  * Marketing Module — TikTok In-Feed Ads (TikTok Marketing API)
  * Coded by Langgo Bramandityo.
  */
@@ -1124,7 +1124,7 @@ const TikTokLivePreview: React.FC<{ form: CampaignForm }> = ({ form }) => {
             )}
             <div className="mt-1.5 flex items-center gap-1 text-[9px] text-white/85">
               <Music2 className="h-3 w-3" />
-              <span className="truncate">Original sound · Bejo Stiker</span>
+              <span className="truncate">Original sound · BEJO Digital Print</span>
             </div>
             <button
               type="button"

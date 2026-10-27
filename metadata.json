@@ -1,6 +1,6 @@
 {
-  "name": "Bejo Stiker POS",
-  "description": "Sistem Point of Sales & Inventory Produk untuk toko Bejo Stiker.",
+  "name": "BEJO Digital Print",
+  "description": "Sistem Point of Sales & Inventory Produk untuk BEJO Digital Print.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

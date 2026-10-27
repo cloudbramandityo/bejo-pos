@@ -918,7 +918,7 @@ export interface LandingSocialLink {
 
 /** Identitas merek pada header & footer */
 export interface LandingBrandingConfig {
-  name: string; // teks logo jika gambar belum diunggah, mis. "bejo stiker"
+  name: string; // teks logo jika gambar belum diunggah, mis. "BEJO Digital Print"
   tagline: string; // mis. "percetakan online indonesia"
   logoUrl?: string; // rekomendasi 400 x 150 px (PNG transparan)
   faviconUrl?: string; // ikon tab browser, rekomendasi 64 x 64 px (PNG transparan)
@@ -1033,7 +1033,7 @@ export interface InvoiceBankAccount {
   id: string;
   bankName: string; // e.g. "BCA", "Mandiri", "BRI", "BNI"
   accountNumber: string; // e.g. "123-456-7890"
-  accountHolder: string; // e.g. "Bejo Stiker & Printing"
+  accountHolder: string; // e.g. "BEJO Digital Print"
   branch?: string;
   isDefault?: boolean;
 }

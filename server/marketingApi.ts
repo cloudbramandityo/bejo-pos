@@ -2,6 +2,7 @@ import type { Express, Request, Response } from 'express';
 import { createHmac } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
+import { APP_NAME } from '../src/config/brand';
 
 type Channel = 'Meta' | 'TikTok' | 'Shopee';
 
@@ -866,7 +867,7 @@ async function tiktokPublish(payload: any) {
     const displayName = (
       String(business?.tiktokOrganicHandle || '')
         .replace(/^@/, '')
-        .trim() || 'Bejo Stiker'
+        .trim() || APP_NAME
     ).slice(0, 40);
 
     const adRes = await tiktokRequest('/ad/create/', {

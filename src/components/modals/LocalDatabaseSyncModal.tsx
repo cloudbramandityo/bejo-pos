@@ -1,5 +1,5 @@
 /**
- * BEJO STIKER POS & Digital Printing
+ * BEJO Digital Print
  * Modal Pengaturan Database Lokal & Cloud Real-Time (Otomatis & Terintegrasi Penuh)
  * Coded by Langgo Bramandityo.
  */

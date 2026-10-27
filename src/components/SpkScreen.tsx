@@ -4736,7 +4736,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
         <div key={order.id} className="hidden">
           <div id={`thermal-spk-sheet-${order.id}`}>
             <div className="text-center pb-2">
-              <div className="font-extrabold text-sm uppercase">{storeInfo.storeName || 'BEJO STIKER POS'}</div>
+              <div className="font-extrabold text-sm uppercase">{storeInfo.storeName || 'BEJO Digital Print'}</div>
               <div className="text-[10px]">LEMBAR KERJA PRODUKSI DIGITAL PRINTING</div>
               <div className="font-mono text-xs font-bold mt-1">#{order.orderNumber}</div>
             </div>

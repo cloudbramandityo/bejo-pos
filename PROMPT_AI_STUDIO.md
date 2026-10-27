@@ -1,4 +1,4 @@
-# PROMPT UNTUK AI STUDIO — Modifikasi Tab Laporan + Redesain UI Laporan Keuangan (Bejo Stiker POS)
+# PROMPT UNTUK AI STUDIO — Modifikasi Tab Laporan + Redesain UI Laporan Keuangan (BEJO Digital Print)
 
 Tempelkan isi file ini (dari baris "MULAI PROMPT" sampai "SELESAI PROMPT") ke AI Studio.
 
@@ -7,7 +7,7 @@ Tempelkan isi file ini (dari baris "MULAI PROMPT" sampai "SELESAI PROMPT") ke AI
 ## MULAI PROMPT
 
 ### Konteks
-Repo: aplikasi React 19 + Vite + TypeScript "Bejo Stiker POS" (AI Studio applet).
+Repo: aplikasi React 19 + Vite + TypeScript "BEJO Digital Print" (AI Studio applet).
 Pekerjaan terdiri dari 2 bagian:
 - **BAGIAN A — Struktur Tab Laporan**: buat tab navigasi baru **"Laporan"** berisi DUA jenis laporan: (1) **Laporan Penjualan** (seluruh isi tab lama `transactions` dipindahkan apa adanya) dan (2) **Laporan Keuangan** (BARU).
 - **BAGIAN B — Redesain UI Laporan Keuangan**: tampilan diselaraskan dengan tab lain aplikasi (clean, profesional, seperti aplikasi pembukuan modern yang simple & minimalis) dan input data dibuat jauh lebih mudah (auto-save + form bergrup).
@@ -58,7 +58,7 @@ export interface FinancialSettings {
 }
 
 export const DEFAULT_FINANCIAL_SETTINGS: FinancialSettings = {
-  entityName: 'BEJO STIKER', periodLabel: '',
+  entityName: 'BEJO Digital Print', periodLabel: '',
   openingCapital: 0, ownerDrawings: 0,
   openingInventory: 0, closingInventory: 0,
   accountsPayable: 0, otherLiabilities: 0, accountsReceivable: 0,

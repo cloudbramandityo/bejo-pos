@@ -1,5 +1,5 @@
 # =====================================================================
-#  BEJO STIKER POS - Caddyfile (Linux / Ubuntu VPS)
+#  BEJO Digital Print - Caddyfile (Linux / Ubuntu VPS)
 #  Lokasi: /etc/caddy/Caddyfile
 #  Reload: sudo systemctl reload caddy
 #

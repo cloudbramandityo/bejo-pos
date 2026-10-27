@@ -86,7 +86,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
   stockTransactions = [],
   invoices = [],
   isStoreOnline = false,
-  storeName = 'BEJO STIKER POS',
+  storeName = 'BEJO Digital Print',
   onPrintReceipt,
   products = [],
   suppliers = [],

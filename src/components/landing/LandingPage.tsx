@@ -1,5 +1,5 @@
 /**
- * BEJO STIKER POS & DIGITAL PRINTING
+ * BEJO Digital Print
  * Public Landing Page — tampilan mengikuti referensi uprint.id
  *
  * Struktur: header (topbar + mega menu), hero slider gambar, judul H1,
@@ -9,6 +9,7 @@
  * Coded by Langgo Bramandityo.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { APP_NAME } from '../../config/brand';
 import {
   ArrowRight,
   ArrowUp,
@@ -779,7 +780,7 @@ const StatsSection: React.FC<{ stats: LandingPageConfig['stats']; about: Landing
   return (
     <section style={{ backgroundColor: CREAM }} className="py-14">
       <div className="mx-auto max-w-[1200px] px-4">
-        <SectionTitle className="mb-10">Mengapa Bejo Stiker?</SectionTitle>
+        <SectionTitle className="mb-10">Mengapa {APP_NAME}?</SectionTitle>
         <div className="grid items-center gap-10 md:grid-cols-2">
           <div className="relative overflow-hidden rounded-2xl bg-slate-900" style={{ aspectRatio: '16 / 9' }}>
             {about.imageUrl ? (

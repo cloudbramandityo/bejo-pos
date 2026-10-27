@@ -133,7 +133,7 @@ export const TaxIncomeView: React.FC<TaxIncomeViewProps> = ({
         )}
       </div>
 
-      {/* Section 2: Penghasilan Dari Usaha / Pekerjaan Bebas (Toko Bejo Stiker & Cetak Digital) */}
+      {/* Section 2: Penghasilan Dari Usaha / Pekerjaan Bebas (BEJO Digital Print & Cetak Digital) */}
       <div className="border border-slate-200 rounded-xl p-5 bg-slate-50/50 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">

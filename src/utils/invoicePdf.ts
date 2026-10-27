@@ -150,7 +150,7 @@ export function buildInvoicePdf(
   let y = margin - 1;
 
   const meta = resolveDocumentMeta(invoice, docType);
-  const storeName = asText(storeIdentity.storeName, 'BEJO STIKER');
+  const storeName = asText(storeIdentity.storeName, 'BEJO Digital Print');
   const customer = invoice.customer || ({} as Invoice['customer']);
   const items = Array.isArray(invoice.items) ? invoice.items : [];
   const schedules = Array.isArray(invoice.paymentSchedules) ? invoice.paymentSchedules : [];

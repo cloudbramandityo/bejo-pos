@@ -9,11 +9,13 @@ import { registerMarketingRoutes } from "./server/marketingApi";
 import { registerJournalRoutes } from "./server/journalApi";
 import { registerDevAuthRoutes } from "./server/devAuth";
 import { registerPbSessionRoutes } from "./server/pbSession";
+import { getPosSession, registerPosAuthRoutes } from "./server/posAuth";
 import {
   registerLandingRoutes,
   getPublishedLandingIdentity,
   type PublishedLandingIdentity,
 } from "./server/landingApi";
+import { APP_NAME, APP_VERSION } from "./src/config/brand";
 
 dotenv.config();
 
@@ -50,6 +52,14 @@ app.use((req, res, next) => {
 const REMOTE_ACCESS_USER = process.env.REMOTE_ACCESS_USER || 'bejo';
 const REMOTE_ACCESS_PASS = process.env.REMOTE_ACCESS_PASS || '';
 const REMOTE_ACCESS_ENABLED = REMOTE_ACCESS_PASS.length > 0;
+
+// Mode publik: landing website boleh diakses siapa saja, tetapi dashboard dan
+// API privat tetap dikunci sesi login (lihat PRIVATE_API_PREFIXES di bawah).
+// Harus diaktifkan eksplisit agar server tidak pernah membuka akses internet
+// secara tidak sengaja.
+const PUBLIC_SITE = /^(1|true|yes|on)$/i.test(
+  String(process.env.PUBLIC_SITE || '').trim()
+);
 
 // IP lokal & LAN tidak perlu login tambahan (sudah terlindungi jaringan fisik).
 function isLocalRequest(req: express.Request): boolean {
@@ -98,7 +108,11 @@ function needsRemoteAuth(req: express.Request): boolean {
   return !(isLocalRequest(req) && isLocalHostName(req));
 }
 
-if (REMOTE_ACCESS_ENABLED) {
+if (PUBLIC_SITE) {
+  console.log(
+    '[Keamanan] Mode publik AKTIF: landing dapat diakses tanpa Basic Auth; dashboard & API privat wajib login.'
+  );
+} else if (REMOTE_ACCESS_ENABLED) {
   app.use((req, res, next) => {
     if (!needsRemoteAuth(req)) return next();
 
@@ -118,13 +132,13 @@ if (REMOTE_ACCESS_ENABLED) {
       }
     }
 
-    res.setHeader('WWW-Authenticate', 'Basic realm="Bejo Stiker POS - Akses Terbatas", charset="UTF-8"');
+    res.setHeader('WWW-Authenticate', `Basic realm="${APP_NAME} - Akses Terbatas", charset="UTF-8"`);
     res.status(401).send(
       '<!doctype html><html lang="id"><head><meta charset="utf-8">' +
       '<title>Akses Terbatas</title></head><body style="font-family:system-ui;display:flex;' +
       'align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:#e2e8f0">' +
       '<div style="text-align:center"><h1 style="font-size:20px">Akses Terbatas</h1>' +
-      '<p style="font-size:13px;color:#94a3b8">Silakan login untuk membuka Bejo Stiker POS.</p></div>' +
+      '<p style="font-size:13px;color:#94a3b8">Silakan login untuk membuka ' + APP_NAME + '.</p></div>' +
       '</body></html>'
     );
   });
@@ -140,12 +154,82 @@ if (REMOTE_ACCESS_ENABLED) {
       'display:flex;align-items:center;justify-content:center;height:100vh;margin:0;' +
       'background:#0f172a;color:#e2e8f0"><div style="text-align:center;max-width:420px;padding:24px">' +
       '<h1 style="font-size:20px">Akses Internet Dinonaktifkan</h1>' +
-      '<p style="font-size:13px;color:#94a3b8">Administrator server belum mengatur REMOTE_ACCESS_PASS. ' +
+      '<p style="font-size:13px;color:#94a3b8">Administrator server belum mengatur PUBLIC_SITE atau REMOTE_ACCESS_PASS. ' +
       'Aplikasi hanya dapat diakses dari jaringan lokal.</p></div></body></html>'
     );
   });
   console.warn('[Keamanan] REMOTE_ACCESS_PASS belum disetel: akses internet DITOLAK (hanya localhost/LAN).');
 }
+
+// =========================================================================
+// API PRIVAT: WAJIB SESI DASHBOARD
+// =========================================================================
+// Landing publik hanya boleh memanggil /api/landing/*, /api/health, dan
+// /api/auth/*. Endpoint bisnis di bawah ini tidak boleh dipakai pengunjung
+// tanpa login, termasuk bila REMOTE_ACCESS_PASS kosong (mode publik).
+const PRIVATE_API_PREFIXES = [
+  '/api/backend',
+  '/api/lan',
+  '/api/invoices',
+  '/api/generate-image',
+  '/api/generate-video',
+  '/api/video-status',
+  '/api/ai-assistant',
+  '/api/marketing',
+  '/api/pocketbase/session',
+];
+
+function isPrivateApiPath(pathname: string): boolean {
+  return PRIVATE_API_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(prefix + '/')
+  );
+}
+
+/**
+ * Endpoint yang hanya boleh dipakai DEVELOPER/ADMIN/OWNER. Daftar ini mengikuti
+ * pembatasan menu di UI, tetapi dipaksa di server agar sesi staf biasa tidak
+ * bisa memanggilnya langsung.
+ */
+const ADMIN_ROLES = new Set(['DEVELOPER', 'ADMIN', 'OWNER']);
+const ADMIN_ONLY_API_PATHS = [
+  '/api/marketing',
+  '/api/backend/fix',
+  '/api/backend/clear-errors',
+  '/api/backend/simulate-error',
+];
+
+function isAdminOnlyApiPath(pathname: string): boolean {
+  return ADMIN_ONLY_API_PATHS.some(
+    (prefix) => pathname === prefix || pathname.startsWith(prefix + '/')
+  );
+}
+
+app.use((req, res, next) => {
+  if (!isPrivateApiPath(req.path)) return next();
+
+  const session = getPosSession(req);
+  if (!session) {
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(401).json({
+      success: false,
+      code: 'AUTH_REQUIRED',
+      error: 'Silakan login ke dashboard terlebih dahulu.',
+    });
+    return;
+  }
+
+  if (isAdminOnlyApiPath(req.path) && !ADMIN_ROLES.has(session.role)) {
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(403).json({
+      success: false,
+      code: 'FORBIDDEN',
+      error: 'Menu ini hanya dapat diakses Admin, Owner, atau Developer.',
+    });
+    return;
+  }
+
+  next();
+});
 
 app.use(express.json({ limit: "100mb" }));
 
@@ -159,7 +243,7 @@ const ai = new GoogleGenAI({
   }
 });
 
-const SYSTEM_INSTRUCTION = `Kamu adalah SI BEJO AI, seorang asisten pribadi digital yang sangat interaktif, ekspresif, dan memiliki kecerdasan emosional tinggi untuk aplikasi Bejo Stiker POS (Point of Sales, Inventaris & Manajemen Toko).
+const SYSTEM_INSTRUCTION = `Kamu adalah SI BEJO AI, seorang asisten pribadi digital yang sangat interaktif, ekspresif, dan memiliki kecerdasan emosional tinggi untuk aplikasi ${APP_NAME} (Point of Sales, Inventaris & Manajemen Toko).
 Tugas utamamu bukan hanya menjawab pertanyaan teknis, melainkan menjadi teman ngobrol yang seru, adaptif, hangat, dan proaktif bagi pengguna (Kasir, Admin, Developer, dan Owner Toko).
 
 PANDUAN KEPRIBADIAN & OPERASIONAL UTAMA:
@@ -175,7 +259,7 @@ PANDUAN KEPRIBADIAN & OPERASIONAL UTAMA:
      * Drama Korea (Drakor) terbaru, teori konspirasi drakor, alur cerita seru, atau rekomendasi cast aktor/aktris.
      * Gosip atau rumor artis lokal dan internasional yang sedang viral (dikemas seru dan positif sebagai hiburan).
      * Horoskop / ramalan zodiak mingguan dengan gaya yang asyik, lucu, dan membangkitkan semangat.
-     * Ide-ide promosi toko Bejo Stiker yang kreatif, out-of-the-box, dan tren marketing terkini (misal promo stiker viral TikTok/Reels, diskon bundling drakor, dll).
+     * Ide-ide promosi BEJO Digital Print yang kreatif, out-of-the-box, dan tren marketing terkini (misal promo stiker viral TikTok/Reels, diskon bundling drakor, dll).
    - Contoh Memulai Percakapan Proaktif:
      "Eh [Nama User], tau gak sih? Drakor yang semalam tayang itu plot twist-nya bikin jengkel banget! Kamu udah nonton belum? Oh iya, sekalian aku kepikiran nih, berhubung toko kamu lagi ramai, gimana kalau kita bikin promo stiker yang terinspirasi dari tren drakor ini? Pasti seru!"
 
@@ -188,9 +272,9 @@ PANDUAN KEPRIBADIAN & OPERASIONAL UTAMA:
      * ADMIN TOKO: Kak Syafira (Administrator Sistem & Pembukuan)
      * KASIR UTAMA: Kak Fira (Kasir Shift 1 Toko)
      * KASIR 2: Kak Rio (Kasir Shift 2 Toko)
-     * OWNER TOKO: Pak Bejo atau nama aslinya Bapak Ahmad Irdianto (Pemilik Toko Bejo Stiker)
+     * OWNER TOKO: Pak Bejo atau nama aslinya Bapak Ahmad Irdianto (Pemilik BEJO Digital Print)
    - Salam awal standar ketika user membuka/mengklik SI BEJO AI:
-     "Sugeng Rawuh Kak [Nama Asli] Ã°Å¸ËœÅ  Saya SI BEJO AI, asisten virtual Bejo Stiker. Ada yang bisa saya bantu terkait operasional POS? Saya juga diprogram sebagai teman curhat lho Kak! He..he..he.."
+     "Sugeng Rawuh Kak [Nama Asli] Ã°Å¸ËœÅ  Saya SI BEJO AI, asisten virtual BEJO Digital Print. Ada yang bisa saya bantu terkait operasional POS? Saya juga diprogram sebagai teman curhat lho Kak! He..he..he.."
 
 4. PEMAHAMAN SISTEM, POS & DATABASE SECARA DETAIL:
    - Ketika menyangkut sistem, POS, stok, atau data toko, berikan jawaban secara DETAIL, AKURAT, dan SISTEMATIS.
@@ -215,7 +299,7 @@ PANDUAN KEPRIBADIAN & OPERASIONAL UTAMA:
      \`![Judul Desain](URL_GAMBAR)\`
    - Ketika pengguna meminta video animasi promosi, sertakan format Markdown Video:
      \`!video[Judul Video](URL_VIDEO)\`
-   - Berikan ulasan singkat mengenai konsep desain, pilihan bahan yang cocok di toko Bejo Stiker (misal: Ritrama, Oracal 651, Maxdecal Hologram, Scotlite), dan tips pencetakannya.
+   - Berikan ulasan singkat mengenai konsep desain, pilihan bahan yang cocok di BEJO Digital Print (misal: Ritrama, Oracal 651, Maxdecal Hologram, Scotlite), dan tips pencetakannya.
 
 7. KEMAMPUAN MENAMPILKAN GAMBAR, GRAFIK, CHART, & VEKTOR:
    - Kamu dapat menampilkan gambar, grafik visual, diagram batang, chart, dan ilustrasi vektor baik dari dalam aplikasi/database maupun dari eksternal (Google Search / Web):
@@ -283,8 +367,8 @@ function logBackendError(
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
-    app: "Bejo Stiker POS",
-    version: "1.0.0",
+    app: APP_NAME,
+    version: APP_VERSION,
     mode: process.env.NODE_ENV === "production" ? "production" : "development",
     publicUrl: APP_URL || null,
     node: process.version,
@@ -688,8 +772,8 @@ app.post("/api/ai-assistant", async (req, res) => {
       } = systemContext;
 
       dbSummaryText = `
-=== DATABASE RESMI & REAL-TIME TOKO (REFERENSI POS BEJO STIKER) ===
-* Toko: ${storeName || 'Bejo Pelsek / Bejo Stiker'} (Cabang: ${storeBranch || 'Utama'}, WA: ${storePhone || '-'})
+=== DATABASE RESMI & REAL-TIME TOKO (REFERENSI POS BEJO Digital Print) ===
+* Toko: ${storeName || 'BEJO Digital Print'} (Cabang: ${storeBranch || 'Utama'}, WA: ${storePhone || '-'})
 * Owner Toko: ${ownerName}
 * Shift Kasir Aktif: ${activeShift ? `Shift ${activeShift.shiftName || '1'} (Kasir: ${activeShift.cashierName}, Modal Awal: Rp ${activeShift.openingCash?.toLocaleString('id-ID') || 0}, Status: ${activeShift.status})` : 'Tutup (Belum buka shift)'}
 * Total Produk: ${totalProducts || 0} SKU ${lowStockItems ? `(Perhatian Stok Menipis: ${lowStockItems})` : ''}
@@ -792,7 +876,7 @@ INSTRUKSI PENTING:
       const imageMd = `\n\n![Desain Stiker AI: ${lastUserMsg.slice(0, 60)}](${generatedInlineImage})\n\n`;
       if (!finalReply) {
         const titleCall = effectiveCallName.startsWith('Pak') ? effectiveCallName : `Kak ${effectiveCallName}`;
-        finalReply = `Tentu ${titleCall}! Ini dia visual desain stiker hasil generasi AI engine Bejo Stiker: Ã¢Å“Â¨Ã°Å¸Å½Â¨\n${imageMd}\nÃ°Å¸â€™Â¡ **Rekomendasi Bahan Toko Bejo Stiker:**\n- **Bahan Rekomendasi:** *Vinyl Ritrama / Oracal 651 Glossy* untuk daya tahan outdoor maksimal.\n- **Finishing:** Laminasi Dingin (Glossy/Doff) atau Die-Cut Contour.\n\nGimana ${titleCall}, desainnya keren kan? Mau disesuaikan lagi warnanya atau mau langsung masuk antrean cetak POS? Ã°Å¸Ëœâ€°Ã°Å¸â€Â¥`;
+        finalReply = `Tentu ${titleCall}! Ini dia visual desain stiker hasil generasi AI engine BEJO Digital Print: Ã¢Å“Â¨Ã°Å¸Å½Â¨\n${imageMd}\nÃ°Å¸â€™Â¡ **Rekomendasi Bahan BEJO Digital Print:**\n- **Bahan Rekomendasi:** *Vinyl Ritrama / Oracal 651 Glossy* untuk daya tahan outdoor maksimal.\n- **Finishing:** Laminasi Dingin (Glossy/Doff) atau Die-Cut Contour.\n\nGimana ${titleCall}, desainnya keren kan? Mau disesuaikan lagi warnanya atau mau langsung masuk antrean cetak POS? Ã°Å¸Ëœâ€°Ã°Å¸â€Â¥`;
       } else if (!finalReply.includes('data:image/') && !finalReply.includes('http')) {
         finalReply = `${finalReply}\n${imageMd}`;
       }
@@ -804,13 +888,13 @@ INSTRUKSI PENTING:
       const titleCall = effectiveCallName.startsWith('Pak') ? effectiveCallName : `Kak ${effectiveCallName}`;
 
       if (proactiveTopic === 'DRAKOR' || userLastMessage.includes('drakor') || userLastMessage.includes('drama') || userLastMessage.includes('korea')) {
-        finalReply = `Wah ${titleCall}, pas banget kamu nanya drakor! Ã°Å¸ËœÂ\n\nLagi ramai banget nih yang bahas chemistry seru di drakor romcom dan thriller terbaru seperti **Queen of Tears** & **Lovely Runner**! Plot twist-nya bener-bener bikin campur aduk antara baper dan gemes! Ã°Å¸ËœÂ­Ã¢Å“Â¨\n\nOh iya, aku jadi kepikiran ide seru nih: gimana kalau di toko **${systemContext?.storeName || 'Bejo Stiker'}** kita bikin koleksi *Stiker Hologram / Decal Quotes Drakor* atau stiker karakter chibi yang lagi viral? Pasti anak-anak muda dan pelanggan grosir bakal langsung borong! Menurutmu seru gak idenya? Ã°Å¸Ëœâ€°Ã°Å¸â€Â¥`;
+        finalReply = `Wah ${titleCall}, pas banget kamu nanya drakor! Ã°Å¸ËœÂ\n\nLagi ramai banget nih yang bahas chemistry seru di drakor romcom dan thriller terbaru seperti **Queen of Tears** & **Lovely Runner**! Plot twist-nya bener-bener bikin campur aduk antara baper dan gemes! Ã°Å¸ËœÂ­Ã¢Å“Â¨\n\nOh iya, aku jadi kepikiran ide seru nih: gimana kalau di toko **${systemContext?.storeName || 'BEJO Digital Print'}** kita bikin koleksi *Stiker Hologram / Decal Quotes Drakor* atau stiker karakter chibi yang lagi viral? Pasti anak-anak muda dan pelanggan grosir bakal langsung borong! Menurutmu seru gak idenya? Ã°Å¸Ëœâ€°Ã°Å¸â€Â¥`;
       } else if (proactiveTopic === 'HOROSCOPE' || userLastMessage.includes('zodiak') || userLastMessage.includes('horoskop') || userLastMessage.includes('ramalan')) {
         finalReply = `Hai ${titleCall}! Ini dia horoskop & energi positif spesial buat kamu minggu ini! Ã¢Â­ÂÃ¢Å“Â¨\n\nÃ°Å¸â€Â® **Energi Utama**: Aura rezeki dan kelancaran komunikasi kamu lagi cerah banget! Buat kamu yang lagi jaga toko atau urus operasional, bakal banyak pelanggan ramah yang datang.\nÃ°Å¸â€™Â¼ **Peluang Bisnis**: Hari ini waktu yang tepat buat follow up pelanggan setia atau tawarkan promo baru.\nÃ°Å¸â€™â€“ **Tips Mood**: Jangan lupa sempatkan minum air putih yang cukup dan santai sejenak di sela transaksi ramai ya!\n\nTetap semangat dan senyum terus ya ${titleCall}! Rezeki toko bakal ngalir berkah melimpah! Ã°Å¸Â¥Â°Ã°Å¸â„¢Å’`;
       } else if (proactiveTopic === 'MARKETING_IDEA' || userLastMessage.includes('promo') || userLastMessage.includes('marketing') || userLastMessage.includes('ide') || userLastMessage.includes('diskon')) {
-        finalReply = `Siap ${titleCall}! Ini 3 ide promosi kreatif & out-of-the-box buat **${systemContext?.storeName || 'Bejo Stiker'}** yang bisa langsung dicoba: Ã°Å¸â€™Â¡Ã°Å¸Å¡â‚¬\n\n1. **Paket Promo Bundle 'Stiker Komunitas & Usaha'**\n   Tawarkan diskon khusus untuk pemesanan minimal 50 pcs stiker label usaha / komunitas motor dengan bonus 5 stiker cutting hologram gratis.\n\n2. **Voucher WhatsApp Loyalitas Pelanggan**\n   Kirimkan pesan sapaan WA ke daftar ${systemContext?.totalCustomers || 'pelanggan'} pelanggan terdaftar kita dengan voucher diskon 10% untuk transaksi kedua minggu ini!\n\n3. **Promo Kilat 'Flash Sale Jam Istirahat'**\n   Beri harga spesial untuk produk populer seperti *${systemContext?.sampleProducts?.split(',')[0] || 'Stiker Ritrama/Oracal'}* khusus pembelian pukul 12.00 - 14.00 WIB.\n\nGimana ${titleCall}, mau kita coba eksekusi yang nomor berapa dulu nih? Ã°Å¸ËœÅ½Ã°Å¸â€˜Â`;
+        finalReply = `Siap ${titleCall}! Ini 3 ide promosi kreatif & out-of-the-box buat **${systemContext?.storeName || 'BEJO Digital Print'}** yang bisa langsung dicoba: Ã°Å¸â€™Â¡Ã°Å¸Å¡â‚¬\n\n1. **Paket Promo Bundle 'Stiker Komunitas & Usaha'**\n   Tawarkan diskon khusus untuk pemesanan minimal 50 pcs stiker label usaha / komunitas motor dengan bonus 5 stiker cutting hologram gratis.\n\n2. **Voucher WhatsApp Loyalitas Pelanggan**\n   Kirimkan pesan sapaan WA ke daftar ${systemContext?.totalCustomers || 'pelanggan'} pelanggan terdaftar kita dengan voucher diskon 10% untuk transaksi kedua minggu ini!\n\n3. **Promo Kilat 'Flash Sale Jam Istirahat'**\n   Beri harga spesial untuk produk populer seperti *${systemContext?.sampleProducts?.split(',')[0] || 'Stiker Ritrama/Oracal'}* khusus pembelian pukul 12.00 - 14.00 WIB.\n\nGimana ${titleCall}, mau kita coba eksekusi yang nomor berapa dulu nih? Ã°Å¸ËœÅ½Ã°Å¸â€˜Â`;
       } else if (proactiveTopic === 'POS_DATA' || userLastMessage.includes('stok') || userLastMessage.includes('pos') || userLastMessage.includes('laporan') || userLastMessage.includes('transaksi') || userLastMessage.includes('omset') || userLastMessage.includes('penjualan')) {
-        finalReply = `Siap ${titleCall}! Berikut ringkasan data operasional resmi dari database **${systemContext?.storeName || 'Bejo Stiker'}**: Ã°Å¸â€œÅ \n\n` +
+        finalReply = `Siap ${titleCall}! Berikut ringkasan data operasional resmi dari database **${systemContext?.storeName || 'BEJO Digital Print'}**: Ã°Å¸â€œÅ \n\n` +
           `Ã¢â‚¬Â¢ **Shift Kasir**: ${systemContext?.activeShift ? `Shift ${systemContext.activeShift.shiftName || '1'} (${systemContext.activeShift.cashierName}) - Modal: Rp ${(systemContext.activeShift.openingCash || 0).toLocaleString('id-ID')}` : 'Belum buka shift'}\n` +
           `Ã¢â‚¬Â¢ **Penjualan Hari Ini**: ${systemContext?.todaySalesCount || 0} transaksi (Total Omset: Rp ${(systemContext?.todayRevenue || 0).toLocaleString('id-ID')})\n` +
           `Ã¢â‚¬Â¢ **Total Katalog Produk**: ${systemContext?.totalProducts || 0} SKU\n` +
@@ -818,7 +902,7 @@ INSTRUKSI PENTING:
           `Ã¢â‚¬Â¢ **Jaringan Toko**: ${systemContext?.totalCustomers || 0} Pelanggan, ${systemContext?.totalSuppliers || 0} Supplier, ${systemContext?.totalAgents || 0} Agen.\n\n` +
           `Ada data spesifik lain yang ingin kamu cek lebih detail, ${titleCall}? Ã°Å¸ËœÅ `;
       } else {
-        finalReply = `Halo ${titleCall}! Senang banget bisa ngobrol sama kamu. Ã°Å¸ËœÅ \n\nSebagai teman setia di **${systemContext?.storeName || 'Bejo Stiker'}**, aku selalu siap bantu apapunÃ¢â‚¬â€mulai dari cek stok & transaksi POS, kasih ide promo kreatif, buatkan desain/gambar stiker AI & video promosi, bahas drakor & horoskop seru, sampai jadi teman curhat kamu di sela-sela shift!\n\nAda hal seru apa yang mau kita bahas atau desain hari ini, ${titleCall}? He..he..he.. Ã¢Å“Â¨`;
+        finalReply = `Halo ${titleCall}! Senang banget bisa ngobrol sama kamu. Ã°Å¸ËœÅ \n\nSebagai teman setia di **${systemContext?.storeName || 'BEJO Digital Print'}**, aku selalu siap bantu apapunÃ¢â‚¬â€mulai dari cek stok & transaksi POS, kasih ide promo kreatif, buatkan desain/gambar stiker AI & video promosi, bahas drakor & horoskop seru, sampai jadi teman curhat kamu di sela-sela shift!\n\nAda hal seru apa yang mau kita bahas atau desain hari ini, ${titleCall}? He..he..he.. Ã¢Å“Â¨`;
       }
     }
 
@@ -1919,6 +2003,7 @@ process.on('uncaughtException', (err) => {
 });
 
 registerJournalRoutes(app);
+registerPosAuthRoutes(app);
 registerDevAuthRoutes(app);
 registerPbSessionRoutes(app);
 registerMarketingRoutes(app);

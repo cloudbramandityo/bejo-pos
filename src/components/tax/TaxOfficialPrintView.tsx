@@ -121,7 +121,7 @@ Peredaran Bruto UMKM PP 55: ${formatRupiah(grossUmkmTotal)}
           meta: {
             title: 'SPT Tahunan PPh Orang Pribadi Formulir 1770',
             exportedAt: new Date().toISOString(),
-            app: 'AI Studio Build - Toko Bejo Stiker',
+            app: 'AI Studio Build - BEJO Digital Print',
             regulations: 'UU HPP No 7/2021 & PP 55/2022',
           },
           taxpayer,
@@ -975,7 +975,7 @@ Peredaran Bruto UMKM PP 55: ${formatRupiah(grossUmkmTotal)}
                   <tr className="bg-amber-50/40">
                     <td className="p-1.5 border-r border-slate-200 text-center font-mono font-bold">16</td>
                     <td className="p-1.5 border-r border-slate-200 font-bold">
-                      Penghasilan Usaha Peredaran Bruto Tertentu (PP No. 55 Th 2022 - UMKM Toko Bejo Stiker)
+                      Penghasilan Usaha Peredaran Bruto Tertentu (PP No. 55 Th 2022 - UMKM BEJO Digital Print)
                     </td>
                     <td className="p-1.5 border-r border-slate-200 text-right font-mono font-bold">
                       {formatRupiah(currentReturn.businessActivity?.umkmTaxableRevenue || 0)}
@@ -1182,7 +1182,7 @@ Peredaran Bruto UMKM PP 55: ${formatRupiah(grossUmkmTotal)}
               </div>
               <div className="text-right font-mono">
                 <div className="text-[10px] font-bold">TAHUN PAJAK {currentReturn.taxYear}</div>
-                <div className="text-[9px] text-amber-800 font-bold">UMKM TOKO BEJO STIKER</div>
+                <div className="text-[9px] text-amber-800 font-bold">UMKM BEJO Digital Print</div>
               </div>
             </div>
 

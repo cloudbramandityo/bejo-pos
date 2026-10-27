@@ -446,7 +446,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         {
           periodType: recapPeriodType,
           periodLabel: finalPeriodLabel,
-          storeName: storeInfo?.storeName || 'BEJO STIKER POS',
+          storeName: storeInfo?.storeName || 'BEJO Digital Print',
           products: products
         },
         filteredCetakTx
@@ -502,7 +502,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
 
     if (specificProduct) {
       const avail = getProductAvailabilityStatus(specificProduct);
-      defaultMsg = `Halo Admin Pusat Bejo Stiker,\nSaya ${agentName}.\n\nKak, mau cek donk produk ini ready stock ga ya?:\n• *Nama Produk:* ${specificProduct.name}\n• *Kode SKU:* ${specificProduct.code || '-'}\n• *Status Ketersediaan di POS:* ${avail.text}\n\nApakah stok siap diambil sekarang? Lek Amin mau titip dibawaain apa :) Terima kasih!`;
+      defaultMsg = `Halo Admin Pusat BEJO Digital Print,\nSaya ${agentName}.\n\nKak, mau cek donk produk ini ready stock ga ya?:\n• *Nama Produk:* ${specificProduct.name}\n• *Kode SKU:* ${specificProduct.code || '-'}\n• *Status Ketersediaan di POS:* ${avail.text}\n\nApakah stok siap diambil sekarang? Lek Amin mau titip dibawaain apa :) Terima kasih!`;
       setChatTemplateKey('stok_produk');
     } else if (presetType === 'order_cart' && orderItems.length > 0) {
       const itemsList = orderItems
@@ -536,7 +536,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   };
 
   const handleSendWhatsApp = () => {
-    let textToSend = chatMessage.trim() || `Halo Admin Pusat Bejo Stiker, saya ${displayAgentName}.`;
+    let textToSend = chatMessage.trim() || `Halo Admin Pusat BEJO Digital Print, saya ${displayAgentName}.`;
     if (!textToSend.includes('(Dikirim pada:')) {
       textToSend = `${textToSend}${getRealTimeTimestamp()}`;
     }
@@ -2834,7 +2834,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                 {/* Receipt Header */}
                 <div className="text-center pb-3 border-b border-dashed border-slate-300">
                   <div className="font-extrabold text-sm tracking-widest uppercase text-black">
-                    {storeInfo?.storeName || 'BEJO STIKER POS'}
+                    {storeInfo?.storeName || 'BEJO Digital Print'}
                   </div>
                   <div className="text-[10px] text-slate-600 uppercase font-sans">
                     {storeInfo?.address || 'Jl. Raya Percetakan No. 1, Yogyakarta'}
@@ -3108,7 +3108,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
                 <div>
                   <div className="text-[10px] text-slate-500 font-medium">Tujuan Penerima Chat:</div>
-                  <div className="text-xs font-bold text-slate-900">Admin Pusat (BEJO STIKER)</div>
+                  <div className="text-xs font-bold text-slate-900">Admin Pusat (BEJO Digital Print)</div>
                 </div>
                 <div className="text-right">
                   <div className="text-[10px] text-slate-500 font-medium">Nomor WhatsApp:</div>

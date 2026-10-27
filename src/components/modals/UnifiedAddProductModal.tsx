@@ -1,5 +1,5 @@
 /**
- * Unified Add Product Modal for Bejo Stiker POS System
+ * Unified Add Product Modal for BEJO Digital Print System
  * Single-entry point for Adding Materials, Digital Printing, Laser Cutting, Supplies & Paket
  * Coded by Langgo Bramandityo.
  */

@@ -153,7 +153,7 @@ export const TaxDashboard: React.FC<TaxDashboardProps> = ({
                 </h3>
 
                 <p className="text-xs text-slate-600 font-medium">
-                  {taxpayer.kluDescription || 'Perdagangan Eceran Hasil Percetakan dan Penerbitan'} • <strong className="text-slate-800">Toko Bejo Stiker</strong>
+                  {taxpayer.kluDescription || 'Perdagangan Eceran Hasil Percetakan dan Penerbitan'} • <strong className="text-slate-800">BEJO Digital Print</strong>
                 </p>
               </div>
             </div>

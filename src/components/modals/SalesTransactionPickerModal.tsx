@@ -18,6 +18,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { Transaction } from '../../types';
+import { APP_NAME } from '../../config/brand';
 import { getStoredTransactions, getStoredSpkOrders } from '../../utils/storage';
 import { getStoredInvoices, convertInvoicesToTransactions } from '../../utils/invoiceStorage';
 import { groupOpenAccountOrders } from '../../utils/openAccountStorage';
@@ -88,7 +89,7 @@ export const SalesTransactionPickerModal: React.FC<SalesTransactionPickerModalPr
           date: group.latestDate || '',
           time: '12:00',
           timestamp: Date.now() + 100000,
-          storeName: 'BEJO Pelsek',
+          storeName: APP_NAME,
           cashierName: 'Pipeline Open Account',
           customer: {
             id: group.customerId,

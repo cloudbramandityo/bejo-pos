@@ -14,6 +14,7 @@
  */
 import type { Express, Request, Response } from 'express';
 import PocketBase from 'pocketbase/cjs';
+import { requirePosSession } from './posAuth';
 
 const TOKEN_TTL_MS = 10 * 60_000;
 
@@ -114,5 +115,7 @@ async function handleSessionRequest(req: Request, res: Response): Promise<void> 
 export function registerPbSessionRoutes(app: Express): void {
   // SENGAJA bukan di bawah /api/pb/* karena prefix tersebut diproxy Caddy
   // langsung ke PocketBase dan tidak melewati Express.
-  app.post('/api/pocketbase/session', handleSessionRequest);
+  // Token akun sinkronisasi hanya boleh diterima pengguna dashboard yang sudah
+  // login; pengunjung publik tidak boleh mendapat akses koleksi aplikasi.
+  app.post('/api/pocketbase/session', requirePosSession, handleSessionRequest);
 }

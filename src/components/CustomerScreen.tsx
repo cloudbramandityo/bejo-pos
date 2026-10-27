@@ -1727,7 +1727,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                         </div>
                         <div className="min-w-0 flex-1">
                           <h4 className="font-black text-sm text-slate-900 truncate">
-                            {prof.storeName || 'BEJO STIKER'}
+                            {prof.storeName || 'BEJO Digital Print'}
                           </h4>
                           <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
                             <Store className="w-3 h-3 text-slate-400 shrink-0" />
@@ -1937,7 +1937,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                   type="text"
                   value={storeForm.storeName}
                   onChange={(e) => setStoreForm({ ...storeForm, storeName: e.target.value })}
-                  placeholder="misal: BEJO Pelsek atau BEJO STIKER"
+                  placeholder="misal: BEJO Digital Print"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
                   required
                 />
@@ -2697,7 +2697,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
 
                   {printSettingsForm.showStoreHeader && (
                     <div className="text-center pb-2.5 border-b border-dashed border-black">
-                      <div className="font-extrabold text-sm tracking-widest uppercase">{storeForm.storeName || 'BEJO STIKER'}</div>
+                      <div className="font-extrabold text-sm tracking-widest uppercase">{storeForm.storeName || 'BEJO Digital Print'}</div>
                       <div className="text-[10px] text-slate-700 uppercase font-sans">{storeForm.branch || 'Polsek Utama'}</div>
                       <div className="text-[9.5px] text-slate-600 font-sans mt-0.5">{storeForm.address || 'Jl. Raya Utama No. 45'}</div>
                       <div className="text-[9.5px] text-slate-700 font-sans">WA: {storeForm.phone || '0812-3456-7890'}</div>
@@ -4458,7 +4458,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
                         <span className="text-slate-500">Nama Toko:</span>
-                        <div className="font-bold text-slate-900">{restorePendingPayload.storeName || 'BEJO Stiker'}</div>
+                        <div className="font-bold text-slate-900">{restorePendingPayload.storeName || 'BEJO Digital Print'}</div>
                       </div>
                       <div>
                         <span className="text-slate-500">Waktu Cadangan:</span>

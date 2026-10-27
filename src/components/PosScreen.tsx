@@ -37,6 +37,7 @@ import {
   SpkOrder
 } from '../types';
 import { StoreLogo } from './StoreLogo';
+import { APP_NAME } from '../config/brand';
 import {
   saveSpkOrderCloud
 } from '../backend/pocketbaseBackend';
@@ -803,7 +804,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         shiftId: isBackdated ? undefined : activeShift.id,
         isBackdated: isBackdated ? true : undefined,
         cashierName: activeShift.cashierName,
-        storeName: activeShift.storeName || storeName || 'BEJO Pelsek',
+        storeName: activeShift.storeName || storeName || APP_NAME,
         date: txDateStr,
         time: currentTime,
         timestamp: txTimestamp,
@@ -993,7 +994,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                   <div className="flex items-center gap-2">
                     <span className="text-slate-400 w-10">Toko</span>
                     <span className="text-slate-400">:</span>
-                    <span className="font-bold text-slate-900">{activeShift?.storeName || storeName || 'BEJO Pelsek'}</span>
+                    <span className="font-bold text-slate-900">{activeShift?.storeName || storeName || APP_NAME}</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
                     <span className="text-slate-400 w-10">Waktu</span>

@@ -1,5 +1,5 @@
 /**
- * BEJO STIKER POS & DIGITAL PRINTING
+ * BEJO Digital Print
  * Marketing Module — Panel Iklan Resmi WhatsApp Status (Meta Marketing API)
  * Coded by Langgo Bramandityo.
  */
@@ -1425,7 +1425,7 @@ const LiveAdPreview: React.FC<{ form: CampaignForm }> = ({ form }) => {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1">
                 <p className="truncate text-[11px] font-bold text-white">
-                  {isWhatsApp ? 'Bejo Stiker' : 'bejostiker'}
+                  {isWhatsApp ? 'BEJO Digital Print' : 'bejostiker'}
                 </p>
                 {!isWhatsApp && <CheckCircle2 className="h-3 w-3 text-white" />}
               </div>

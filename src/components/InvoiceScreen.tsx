@@ -2255,7 +2255,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                   value={identityForm.storeName}
                   onChange={e => setIdentityForm(prev => ({ ...prev, storeName: e.target.value }))}
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                  placeholder="e.g. BEJO STIKER & DIGITAL PRINTING"
+                  placeholder="e.g. BEJO Digital Print"
                 />
               </div>
 

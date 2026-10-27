@@ -1,6 +1,6 @@
 <#
 =====================================================================
-  BEJO STIKER POS - UNIVERSAL DEPLOY VPS WINDOWS
+  BEJO Digital Print - UNIVERSAL DEPLOY VPS WINDOWS
 =====================================================================
   Satu-satunya skrip deploy produksi untuk VPS Windows yang sudah live.
   Kebijakan: jangan membuat skrip deploy baru. Setiap kebutuhan deploy
@@ -13,7 +13,10 @@
     1. Preflight: admin, folder aplikasi, service, Node/npm, .env, PocketBase, Caddy
     2. Unduh source terbaru dari GitHub (branch main) atau pakai source lokal
     3. Salin source tanpa menyentuh .env, data/, logs/, backups/, node_modules/, dist/
-    4. Validasi .env keamanan (REMOTE_ACCESS_PASS, kredensial developer, DSB.)
+    4. Validasi .env keamanan (PUBLIC_SITE, REMOTE_ACCESS_PASS, kredensial developer, DSB.)
+       PUBLIC_SITE=true  : landing publik terbuka, dashboard wajib login,
+                           PB_ADMIN_* wajib, hardening PocketBase wajib.
+       PUBLIC_SITE=false : Basic Auth REMOTE_ACCESS_PASS (atau LAN-only).
     5. Perketat aturan akses koleksi PocketBase (--harden)
     6. Backup dist dan Caddyfile, lalu pasang Caddyfile (batas body 110MB)
     7. npm ci + build produksi
@@ -221,7 +224,7 @@ function Remove-ObsoleteWrappers([string]$AppDir) {
 
 # ----------------------------------------------------------- preflight
 Write-Host '==================================================================' -ForegroundColor DarkCyan
-Write-Host ' BEJO STIKER POS - UNIVERSAL DEPLOY VPS WINDOWS' -ForegroundColor Cyan
+Write-Host ' BEJO Digital Print - UNIVERSAL DEPLOY VPS WINDOWS' -ForegroundColor Cyan
 Write-Host " Waktu: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor DarkGray
 Write-Host '==================================================================' -ForegroundColor DarkCyan
 
@@ -460,18 +463,39 @@ foreach ($legacyKey in @('VITE_PB_SYNC_EMAIL', 'VITE_PB_SYNC_PASSWORD')) {
   }
 }
 
-# Server menolak SEMUA akses internet (403) bila REMOTE_ACCESS_PASS kosong.
-# Karena Test-PublicEndpoint menganggap 403 sebagai "terjangkau", deploy harus
-# berhenti lebih dulu agar tidak melaporkan sukses padahal situs tidak bisa dibuka.
+# Server menolak SEMUA akses internet (403) bila PUBLIC_SITE bukan true dan
+# REMOTE_ACCESS_PASS kosong. Karena Test-PublicEndpoint menganggap 401/403
+# sebagai "terjangkau", deploy harus berhenti lebih dulu agar tidak melaporkan
+# sukses padahal situs tidak bisa dibuka.
 $remoteAccessPass = Get-EnvValue $envPath 'REMOTE_ACCESS_PASS'
-if ([string]::IsNullOrWhiteSpace($remoteAccessPass)) {
+$publicSiteRaw = Get-EnvValue $envPath 'PUBLIC_SITE'
+$publicSite = (-not [string]::IsNullOrWhiteSpace($publicSiteRaw)) -and (@('1', 'true', 'yes', 'on') -contains $publicSiteRaw.Trim().ToLower())
+$pbAdminEmail = Get-EnvValue $envPath 'PB_ADMIN_EMAIL'
+$pbAdminPassword = Get-EnvValue $envPath 'PB_ADMIN_PASSWORD'
+$pbAdminReady = (-not [string]::IsNullOrWhiteSpace($pbAdminEmail)) -and (-not [string]::IsNullOrWhiteSpace($pbAdminPassword))
+
+if ($publicSite) {
+  # Login staf diverifikasi server memakai akun superuser PocketBase. Tanpa
+  # kredensial admin, dashboard tidak bisa dipakai walau landing terbuka.
+  if (-not $pbAdminReady) {
+    Fail 'PUBLIC_SITE=true membutuhkan PB_ADMIN_EMAIL dan PB_ADMIN_PASSWORD di .env agar login staf dapat diverifikasi server.'
+  }
+  if (-not [string]::IsNullOrWhiteSpace($remoteAccessPass)) {
+    Write-Warn2 'PUBLIC_SITE=true: Basic Auth dilewati. REMOTE_ACCESS_PASS masih terisi tetapi tidak dipakai untuk landing publik.'
+  }
+  Write-Ok 'PUBLIC_SITE=true: landing terbuka untuk publik; dashboard & API privat wajib login.'
+  $allowDefault = Get-EnvValue $envPath 'ALLOW_DEFAULT_STAFF_PASSWORDS'
+  if (-not [string]::IsNullOrWhiteSpace($allowDefault) -and (@('1', 'true', 'yes', 'on') -contains $allowDefault.Trim().ToLower())) {
+    Write-Warn2 'ALLOW_DEFAULT_STAFF_PASSWORDS=true: password default (admin123, kasir123, dst.) masih diterima. Segera ganti password staf.'
+  }
+} elseif ([string]::IsNullOrWhiteSpace($remoteAccessPass)) {
   if ($AllowLanOnly) {
     Write-Warn2 'REMOTE_ACCESS_PASS kosong: aplikasi hanya bisa diakses dari lokal/LAN (internet ditolak 403).'
   } else {
-    Fail 'REMOTE_ACCESS_PASS kosong. Akses dari internet akan ditolak (403). Isi password kuat di .env, atau jalankan dengan -AllowLanOnly bila memang ingin LAN-only.'
+    Fail 'REMOTE_ACCESS_PASS kosong dan PUBLIC_SITE bukan true. Akses dari internet akan ditolak (403). Isi REMOTE_ACCESS_PASS, set PUBLIC_SITE=true, atau jalankan dengan -AllowLanOnly.'
   }
 } else {
-  Write-Ok 'REMOTE_ACCESS_PASS terisi; akses internet diizinkan.'
+  Write-Ok 'REMOTE_ACCESS_PASS terisi; akses internet diizinkan dengan Basic Auth.'
 }
 
 $marketingKeys = @(
@@ -494,6 +518,9 @@ if ($missingMarketing.Count -gt 0) {
 Write-Step '3/8 Perketat aturan akses PocketBase'
 $pbHardeningStatus = 'dilewati'
 if ($SkipPbHardening) {
+  if ($publicSite) {
+    Fail 'PUBLIC_SITE=true mewajibkan hardening aturan koleksi PocketBase. Jalankan deploy tanpa -SkipPbHardening.'
+  }
   Write-Warn2 'Hardening PocketBase dilewati (-SkipPbHardening).'
 } else {
   $pbAdminEmail = Get-EnvValue $envPath 'PB_ADMIN_EMAIL'
@@ -881,6 +908,11 @@ if ($SkipPublicCheck) {
       Write-Warn2 "Halaman utama belum terjangkau (HTTP $($publicRoot.Code))."
     }
 
+    if ($publicSite -and $publicRoot.Ok -and ($publicRoot.Code -eq 401 -or $publicRoot.Code -eq 403)) {
+      Write-Warn2 'PUBLIC_SITE=true tetapi halaman utama masih meminta Basic Auth / menolak publik. Periksa isi .env dan status service.'
+      $publicOk = $false
+    }
+
     # Identitas website (logo, favicon, judul) hanya live bila landing sudah
     # dipublish dan HTML publik memuat tag identitas dari server.
     try {
@@ -958,7 +990,7 @@ Write-Host "   Service aplikasi  : $appStatus"
 Write-Host "   Caddy             : $caddyStatusText"
 Write-Host "   PocketBase        : $pbStatusText"
 Write-Host "   Aturan PB         : $pbHardeningStatus"
-Write-Host "   Akses internet    : $(if ($lanOnlyMode) { 'LAN-only (403 dari internet)' } elseif ([string]::IsNullOrWhiteSpace($remoteAccessPass)) { 'tanpa password (hanya lokal/LAN)' } else { 'dengan password REMOTE_ACCESS_PASS' })"
+Write-Host "   Akses internet    : $(if ($publicSite) { 'PUBLIK (landing terbuka, dashboard wajib login)' } elseif ($lanOnlyMode) { 'LAN-only (403 dari internet)' } elseif ([string]::IsNullOrWhiteSpace($remoteAccessPass)) { 'tanpa password (hanya lokal/LAN)' } else { 'dengan password REMOTE_ACCESS_PASS' })"
 Write-Host "   Health lokal      : $(if (Test-AppHealth $localHealthUrl 5) { 'OK' } else { 'GAGAL' }) ($localHealthUrl)"
 if ($publicBase) {
   Write-Host "   Domain publik     : $publicBase (HTTP $publicCode)"

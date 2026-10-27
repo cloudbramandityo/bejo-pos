@@ -40,7 +40,7 @@ import {
   saveStoredLandingConfig,
   saveStoredLandingDraft
 } from './utils/landingPageStorage';
-import { getDeveloperSession, logoutDeveloper } from './lib/devAuth';
+import { getAccountSession, logoutAccount } from './lib/posAuth';
 
 import {
   Product,
@@ -142,6 +142,7 @@ import {
 } from './utils/financialStorage';
 import {
   testPocketBaseConnection,
+  refreshPocketBaseAuth,
   seedDatabaseIfEmpty,
   subscribeProducts,
   saveProductCloud,
@@ -387,11 +388,12 @@ export default function App() {
     return 'spk';
   });
 
-  // Sesi DEVELOPER hanya dianggap sah bila cookie HttpOnly di server masih valid.
+  // Sesi dashboard hanya sah bila cookie HttpOnly di server masih valid.
+  // Berlaku untuk semua akun (developer & staf), bukan hanya developer.
   useEffect(() => {
-    if (currentUserRef.current?.role !== 'DEVELOPER') return;
+    if (!currentUserRef.current) return;
     let cancelled = false;
-    getDeveloperSession()
+    getAccountSession()
       .then((session) => {
         if (cancelled || session.authenticated) return;
         currentUserRef.current = null;
@@ -1198,14 +1200,20 @@ export default function App() {
     recordActivityLog(
       'LOGIN',
       `Login Ke Sistem (${user.role})`,
-      `Pengguna @${user.username} (${user.name}) berhasil masuk ke aplikasi POS BEJO STIKER`,
+      `Pengguna @${user.username} (${user.name}) berhasil masuk ke aplikasi POS BEJO Digital Print`,
       updatedUser
     );
+
+    // Cookie sesi server sudah terpasang. Ambil token PocketBase setelah itu,
+    // lalu muat ulang agar semua langganan realtime dimulai dengan sesi sah.
+    void refreshPocketBaseAuth().finally(() => {
+      window.setTimeout(() => window.location.reload(), 250);
+    });
   };
 
   const handleLogout = () => {
     currentUserRef.current = null; // Clear ref immediately to prevent race condition re-logins from PocketBase snapshot listener
-    logoutDeveloper().catch(() => {});
+    logoutAccount().catch(() => {});
     if (currentUser) {
       const offlineUser: AppUser = {
         ...currentUser,
@@ -2187,7 +2195,7 @@ export default function App() {
       return (
         <LandingPage
           config={landingConfig}
-          storeName={storeInfo.storeName || 'BEJO STIKER & DIGITAL PRINTING'}
+          storeName={storeInfo.storeName || 'BEJO Digital Print'}
           logoUrl={storeInfo.logoUrl}
           currentUser={null}
           onOpenLogin={() => setIsShowingLoginModal(true)}
@@ -2199,7 +2207,7 @@ export default function App() {
       <LoginScreen
         users={users}
         onLoginSuccess={handleLoginSuccess}
-        storeName={storeInfo.storeName || 'BEJO STIKER POS'}
+        storeName={storeInfo.storeName || 'BEJO Digital Print'}
         onBackToLanding={landingConfig.isPublished ? () => setIsShowingLoginModal(false) : undefined}
       />
     );
@@ -2212,7 +2220,7 @@ export default function App() {
     return (
       <LandingPage
         config={landingConfig}
-        storeName={storeInfo.storeName || 'BEJO STIKER & DIGITAL PRINTING'}
+        storeName={storeInfo.storeName || 'BEJO Digital Print'}
         logoUrl={storeInfo.logoUrl}
         currentUser={currentUser}
         onOpenLogin={() => {}}

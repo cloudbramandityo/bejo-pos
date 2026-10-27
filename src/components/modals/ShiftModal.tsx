@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Clock, DollarSign, AlertCircle, CheckCircle2, UserCheck, FileSpreadsheet, Receipt, Wallet, ShoppingBag } from 'lucide-react';
 import { Shift, Transaction } from '../../types';
+import { APP_NAME } from '../../config/brand';
 import {
   formatRupiah,
   formatNumberInput,
@@ -42,7 +43,7 @@ export const ShiftModal: React.FC<ShiftModalProps> = ({
 }) => {
   // Open shift state
   const [cashierName, setCashierName] = useState('FIRA');
-  const [storeName, setStoreName] = useState(defaultStoreName || 'BEJO Pelsek');
+  const [storeName, setStoreName] = useState(defaultStoreName || APP_NAME);
   const [startingCash, setStartingCash] = useState<string>('250.000');
 
   // Real-time clock ticker for shift duration calculation
@@ -92,7 +93,7 @@ export const ShiftModal: React.FC<ShiftModalProps> = ({
       return;
     }
     const numStartingCash = parseNumber(startingCash);
-    onOpenShift(cashierName.trim(), numStartingCash, storeName.trim() || 'BEJO Stiker');
+    onOpenShift(cashierName.trim(), numStartingCash, storeName.trim() || APP_NAME);
     onClose();
   };
 

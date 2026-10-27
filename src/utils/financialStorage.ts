@@ -38,7 +38,7 @@ export interface FinancialSettings {
 }
 
 export const DEFAULT_FINANCIAL_SETTINGS: FinancialSettings = {
-  entityName: 'BEJO STIKER',
+  entityName: 'BEJO Digital Print',
   periodLabel: '',
   openingCapital: 0,
   ownerDrawings: 0,

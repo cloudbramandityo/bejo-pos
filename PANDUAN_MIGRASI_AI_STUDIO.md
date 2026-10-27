@@ -1,5 +1,5 @@
 # PANDUAN MIGRASI KEMBALI KE AI STUDIO
-## Bejo Stiker POS — Redesain Landing Page + Tab Laporan
+## BEJO Digital Print — Redesain Landing Page + Tab Laporan
 
 Dokumen ini menjelaskan cara memindahkan kembali (migrasi) seluruh pekerjaan yang sudah dilakukan di lingkungan lokal (`D:\DOCUMENTS\Default Project`) ke **Google AI Studio**, baik untuk melanjutkan pengembangan di sana maupun menyinkronkan dua arah.
 
@@ -126,7 +126,7 @@ Tempelkan teks di bawah (dari `MULAI PROMPT` sampai `SELESAI PROMPT`) ke AI Stud
 ## MULAI PROMPT
 
 ### Konteks
-Repo: aplikasi React 19 + Vite + TypeScript "Bejo Stiker POS" (AI Studio applet).
+Repo: aplikasi React 19 + Vite + TypeScript "BEJO Digital Print" (AI Studio applet).
 Ada 2 pekerjaan besar yang harus diterapkan ulang, dan sudah selesai di lingkungan lokal:
 - BAGIAN A — Tab "Laporan" (key tetap 'transactions') berisi 2 sub-tab: Laporan Penjualan (isi tab lama apa adanya) + Laporan Keuangan (baru, PSAK No.1/2015).
 - BAGIAN B — Landing Page publik: dari 1 halaman dengan anchor-scroll menjadi SITUS MULTI-HALAMAN (Beranda, Tentang Kami, Produk & Layanan, Klien, Kontak) meniru struktur subur.co.id, plus editor CMS gaya WordPress, hero image slider, dan lightbox foto produk.

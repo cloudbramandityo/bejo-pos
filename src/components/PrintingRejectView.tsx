@@ -1,5 +1,5 @@
 /**
- * BEJO STIKER POS & Digital Printing
+ * BEJO Digital Print
  * Personal Printing Reject Management (Catatan Personal Gagal Produksi)
  * Coded by Langgo Bramandityo.
  */

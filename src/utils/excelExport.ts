@@ -91,7 +91,7 @@ export function exportTransactionsToExcel(
   const totalDiskon = transactions.reduce((sum, t) => sum + t.discount, 0);
 
   const summaryData = [
-    { 'Metrik': 'Toko', 'Nilai': 'Bejo Stiker' },
+    { 'Metrik': 'Toko', 'Nilai': 'BEJO Digital Print' },
     { 'Metrik': 'Jumlah Transaksi', 'Nilai': transactions.length },
     { 'Metrik': 'Total Omzet Penjualan', 'Nilai': totalOmzet },
     { 'Metrik': 'Total PPN Dipungut', 'Nilai': totalPajak },
@@ -381,7 +381,7 @@ export function exportStockTransactionsToExcel(
 export function exportSingleStockTransactionToExcel(
   stockTransaction: StockTransaction,
   type: 'PEMBELIAN' | 'PENGAMBILAN',
-  storeName = 'BEJO STIKER POS',
+  storeName = 'BEJO Digital Print',
   products?: Product[]
 ) {
   const norm = normalizeStockTransaction(stockTransaction);

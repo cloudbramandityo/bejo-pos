@@ -1,5 +1,5 @@
 # AKSES APLIKASI DARI INTERNET
-## Bejo Stiker POS — Cloudflare Tunnel + Proteksi Login
+## BEJO Digital Print — Cloudflare Tunnel + Proteksi Login
 
 > ⚠️ **Sudah tidak berlaku untuk VPS produksi.** Skrip `jalankan-online.*`, `server-always-on.ps1`, `tunnel-always-on.ps1`, `pasang-always-on.ps1`, dan `restart-always-on.ps1` sudah dihapus. VPS Windows live memakai Windows Service (NSSM: `BejoStikerPOS`, `PocketBase`, `Caddy`) dan deploy dengan `deploy\deploy-vps.ps1`. Dokumen ini disimpan hanya sebagai catatan historis akses sementara.
 

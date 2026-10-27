@@ -1,4 +1,4 @@
-# MIGRASI KE VPS — BEJO STIKER POS
+# MIGRASI KE VPS — BEJO Digital Print
 
 > 📌 **PANDUAN UTAMA (VPS WINDOWS — Rumah Web):** **[MIGRASI-VPS-2-ARAH.md](./MIGRASI-VPS-2-ARAH.md)**
 > Dipecah jelas antara **sisi Dashboard VPS (panel Rumah Web)** dan **sisi Aplikasi (PC Anda)**, lengkap dengan perintah, urutan, checklist, dan troubleshooting.

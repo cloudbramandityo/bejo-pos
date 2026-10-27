@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { getStoredStoreInfo, getStoredDefaultLogo } from '../utils/storage';
 
-const DEFAULT_BEJO_STORE_LOGO = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%231e295d"/><stop offset="50%" stop-color="%230f172a"/><stop offset="100%" stop-color="%230284c7"/></linearGradient><linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%23f59e0b"/><stop offset="100%" stop-color="%23fbbf24"/></linearGradient></defs><rect width="200" height="200" rx="30" fill="url(%23bg)"/><circle cx="100" cy="85" r="48" fill="none" stroke="url(%23gold)" stroke-width="5" stroke-dasharray="6 4"/><text x="100" y="98" text-anchor="middle" fill="%23ffffff" font-family="system-ui, sans-serif" font-weight="900" font-size="38" letter-spacing="1">BJ</text><rect x="30" y="145" width="140" height="26" rx="13" fill="url(%23gold)"/><text x="100" y="163" text-anchor="middle" fill="%230f172a" font-family="system-ui, sans-serif" font-weight="900" font-size="12" letter-spacing="1">BEJO STIKER</text></svg>';
+const DEFAULT_BEJO_STORE_LOGO = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%231e295d"/><stop offset="50%" stop-color="%230f172a"/><stop offset="100%" stop-color="%230284c7"/></linearGradient><linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%23f59e0b"/><stop offset="100%" stop-color="%23fbbf24"/></linearGradient></defs><rect width="200" height="200" rx="30" fill="url(%23bg)"/><circle cx="100" cy="85" r="48" fill="none" stroke="url(%23gold)" stroke-width="5" stroke-dasharray="6 4"/><text x="100" y="98" text-anchor="middle" fill="%23ffffff" font-family="system-ui, sans-serif" font-weight="900" font-size="38" letter-spacing="1">BJ</text><rect x="30" y="145" width="140" height="26" rx="13" fill="url(%23gold)"/><text x="100" y="163" text-anchor="middle" fill="%230f172a" font-family="system-ui, sans-serif" font-weight="900" font-size="12" letter-spacing="1">BEJO Digital Print</text></svg>';
 
 interface StoreLogoProps {
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
@@ -22,7 +22,7 @@ export const StoreLogo: React.FC<StoreLogoProps> = ({
   className = '',
   rounded = 'rounded-xl',
   showText = false,
-  storeName = 'BEJO STIKER',
+  storeName = 'BEJO Digital Print',
   subtitle,
   customLogoUrl,
   variant = 'icon',

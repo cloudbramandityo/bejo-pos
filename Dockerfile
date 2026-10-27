@@ -1,5 +1,5 @@
 # =====================================================================
-#  BEJO STIKER POS - Image produksi (Docker / Cloud Run / VPS)
+#  BEJO Digital Print - Image produksi (Docker / Cloud Run / VPS)
 #  Build:  docker build -t bejo-pos:latest .
 #  Run  :  docker run -d -p 3000:3000 --env-file .env bejo-pos:latest
 # =====================================================================

@@ -1,10 +1,16 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "0.0.0",
+  "version": "3.2.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
+    "prebuild": "node scripts/check-brand.mjs && node scripts/check-version.mjs",
+    "check:brand": "node scripts/check-brand.mjs",
+    "check:version": "node scripts/check-version.mjs",
+    "version:show": "node scripts/version.mjs --show",
+    "version:bump": "node scripts/version.mjs",
+    "version:major": "node scripts/version.mjs --major",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "preview": "vite preview",

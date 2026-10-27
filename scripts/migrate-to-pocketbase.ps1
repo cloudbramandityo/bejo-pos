@@ -1,6 +1,6 @@
 <#
 ======================================================================
-  BEJO STIKER POS - Auto Migration: Firebase/Firestore -> PocketBase
+  BEJO Digital Print - Auto Migration: Firebase/Firestore -> PocketBase
 ======================================================================
   Menjalankan migrasi TOTAL dari Firebase ke PocketBase untuk seluruh
   file di aplikasi (src/**/*.ts, src/**/*.tsx, server.ts, .env).
@@ -38,7 +38,7 @@ function Write-Warn { param($t) Write-Host "   [!] $t" -ForegroundColor Yellow }
 function Write-Fail { param($t) Write-Host "   [FAIL] $t" -ForegroundColor Red; exit 1 }
 
 Write-Host "==================================================================" -ForegroundColor DarkCyan
-Write-Host " BEJO STIKER POS - MIGRASI FIREBASE -> POCKETBASE" -ForegroundColor Cyan
+Write-Host " BEJO Digital Print - MIGRASI FIREBASE -> POCKETBASE" -ForegroundColor Cyan
 Write-Host "==================================================================" -ForegroundColor DarkCyan
 
 # ---------------------------------------------------------------- 1. BACKUP

@@ -1,5 +1,5 @@
 /**
- * BEJO STIKER POS & DIGITAL PRINTING
+ * BEJO Digital Print
  * Backend PocketBase (menggantikan Firebase/Firestore sepenuhnya).
  *
  * API modul ini SAMA PERSA dengan modul `firebase` sebelumnya, sehingga
@@ -124,9 +124,41 @@ export const isFirestoreQuotaExceeded = isPocketBaseUnavailable;
  */
 export let authReady: Promise<void> = Promise.resolve();
 
+/**
+ * true hanya setelah server mengonfirmasi cookie sesi dashboard. Pengunjung
+ * landing publik tidak boleh memakai token akun sinkronisasi sama sekali.
+ */
+export let hasDashboardSession = false;
+
+async function fetchDashboardSession(): Promise<boolean> {
+  const response = await fetch('/api/auth/me', {
+    credentials: 'same-origin',
+    cache: 'no-store',
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.success) {
+    throw new Error(
+      data?.error || `Gagal memeriksa sesi dashboard (HTTP ${response.status}).`
+    );
+  }
+  return Boolean(data.authenticated);
+}
+
 async function performAuth(): Promise<void> {
   const pb = getPB();
   try {
+    const authenticated = await fetchDashboardSession();
+    if (!authenticated) {
+      hasDashboardSession = false;
+      isCloudUnavailable = false;
+      // Token lama (mis. dari sesi sebelumnya) tidak boleh dipakai lagi.
+      pb.authStore.clear();
+      console.log('[PocketBase] Belum login dashboard: sinkronisasi cloud ditunda.');
+      return;
+    }
+
+    hasDashboardSession = true;
+
     if (pb.authStore.isValid) {
       try {
         await pb.collection('users').authRefresh();
@@ -160,6 +192,18 @@ async function performAuth(): Promise<void> {
     }, 15000);
     throw err;
   }
+}
+
+/** Dipanggil setelah login agar token PocketBase dibuat untuk sesi baru. */
+export async function refreshPocketBaseAuth(): Promise<boolean> {
+  const pb = getPB();
+  pb.authStore.clear();
+  try {
+    await performAuth();
+  } catch {
+    return false;
+  }
+  return hasDashboardSession;
 }
 
 authReady = performAuth().catch(() => {});
@@ -638,8 +682,10 @@ function createSafeSubscription(
       // Coba pulihkan, lalu ulangi.
       authReady
         .then(() => {
+          if (cancelled) return;
+          if (!hasDashboardSession) return;
           isCloudUnavailable = false;
-          if (!cancelled) trySetup();
+          trySetup();
         })
         .catch(() => {
           setTimeout(trySetup, 15000);
@@ -650,6 +696,9 @@ function createSafeSubscription(
       authReady
         .then(() => {
           if (cancelled) return;
+          // Pengunjung landing publik tidak punya sesi dashboard; jangan
+          // mencoba membaca koleksi aplikasi sampai login berhasil.
+          if (!hasDashboardSession) return;
           unsub = setupListener(onError);
         })
         .catch((err) => onError(err));
@@ -1676,7 +1725,7 @@ async function runSeed(): Promise<void> {
       return;
     }
 
-    console.log('Seeding initial Bejo Stiker data to PocketBase...');
+    console.log('Seeding initial BEJO Digital Print data to PocketBase...');
 
     // Tandai sedang seeding (pengaman untuk tab/perangkat lain)
     await upsertRecord('settings', 'database_init', {

@@ -1,5 +1,5 @@
 /**
- * BEJO STIKER POS & Digital Printing
+ * BEJO Digital Print
  * Hybrid Local-First & Cloud Real-Time Database Engine
  * Coded by Langgo Bramandityo.
  * 

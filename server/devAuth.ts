@@ -47,7 +47,7 @@ function env(name: string): string {
   return String(process.env[name] || '').trim();
 }
 
-function devUsername(): string {
+export function getDevUsername(): string {
   return env('DEV_USERNAME') || env('JOURNAL_DEV_USER') || 'langgo';
 }
 
@@ -72,7 +72,7 @@ function warnLegacyPassword(): void {
 let ephemeralSecret = '';
 let ephemeralWarned = false;
 
-function sessionSecret(): string {
+export function getSessionSecret(): string {
   const configured =
     env('APP_SESSION_SECRET') ||
     env('JOURNAL_SESSION_SECRET') ||
@@ -134,7 +134,7 @@ function clearDevSessionCookie(req: Request, res: Response): void {
 
 function signSession(payload: DevSessionPayload): string {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const signature = crypto.createHmac('sha256', sessionSecret()).update(body).digest('base64url');
+  const signature = crypto.createHmac('sha256', getSessionSecret()).update(body).digest('base64url');
   return `${body}.${signature}`;
 }
 
@@ -145,7 +145,7 @@ function readSession(req: Request): DevSessionPayload | null {
 
   const body = token.slice(0, separator);
   const signature = token.slice(separator + 1);
-  const expected = crypto.createHmac('sha256', sessionSecret()).update(body).digest('base64url');
+  const expected = crypto.createHmac('sha256', getSessionSecret()).update(body).digest('base64url');
   if (!safeEqual(signature, expected)) return null;
 
   try {
@@ -156,6 +156,58 @@ function readSession(req: Request): DevSessionPayload | null {
   } catch {
     return null;
   }
+}
+
+export type DevCredentialResult = 'ok' | 'invalid' | 'not-configured';
+
+/**
+ * Verifikasi kredensial developer tanpa efek samping (tanpa cookie/rate limit).
+ * Dipakai juga oleh login dashboard agar satu pintu masuk untuk semua akun.
+ */
+export async function verifyDevCredentials(
+  username: string,
+  password: string
+): Promise<DevCredentialResult> {
+  const passwordHash = devPasswordHash();
+  const plainPassword = devPasswordPlain();
+  if (!passwordHash && !plainPassword) return 'not-configured';
+  warnLegacyPassword();
+
+  const usernameOk = safeEqual(
+    username.trim().toLowerCase(),
+    getDevUsername().toLowerCase()
+  );
+  const passwordOk = passwordHash
+    ? await verifyPassword(password, passwordHash)
+    : safeEqual(password, plainPassword);
+  return usernameOk && passwordOk ? 'ok' : 'invalid';
+}
+
+export interface IssuedDevSession {
+  username: string;
+  expiresAt: string;
+  journalSession: unknown;
+}
+
+/** Terbitkan cookie sesi developer + Jurnal sekaligus. */
+export function issueDevSession(req: Request, res: Response): IssuedDevSession {
+  const exp = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
+  setDevSessionCookie(
+    req,
+    res,
+    signSession({ sub: getDevUsername(), role: 'DEVELOPER', exp })
+  );
+  const journalSession = issueJournalDeveloperSession(req, res, getDevUsername());
+  return {
+    username: getDevUsername(),
+    expiresAt: new Date(exp * 1000).toISOString(),
+    journalSession,
+  };
+}
+
+export function clearDevSession(req: Request, res: Response): void {
+  clearDevSessionCookie(req, res);
+  clearJournalDeveloperSession(req, res);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -238,41 +290,27 @@ export function registerDevAuthRoutes(app: Express): void {
       const ip = clientIp(req);
       checkLoginRate(ip);
 
-      const passwordHash = devPasswordHash();
-      const plainPassword = devPasswordPlain();
-      if (!passwordHash && !plainPassword) {
+      const username = String(req.body?.username || '').trim();
+      const suppliedPassword = String(req.body?.password || '');
+      const result = await verifyDevCredentials(username, suppliedPassword);
+      if (result === 'not-configured') {
         throw new DevAuthError(
           'Login developer belum dikonfigurasi di server (DEV_PASSWORD_HASH).',
           503
         );
       }
-      warnLegacyPassword();
-
-      const username = String(req.body?.username || '').trim();
-      const suppliedPassword = String(req.body?.password || '');
-      const usernameOk = safeEqual(username.toLowerCase(), devUsername().toLowerCase());
-      const passwordOk = passwordHash
-        ? await verifyPassword(suppliedPassword, passwordHash)
-        : safeEqual(suppliedPassword, plainPassword);
-
-      if (!usernameOk || !passwordOk) {
+      if (result !== 'ok') {
         console.warn(`[Auth] Login developer gagal dari ${ip}.`);
         throw new DevAuthError('Username atau password developer salah.', 401);
       }
 
       loginAttempts.delete(ip);
-      const exp = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
-      setDevSessionCookie(req, res, signSession({ sub: devUsername(), role: 'DEVELOPER', exp }));
-
-      // Modul Jurnal memakai cookie terpisah; buat sekalian agar tidak perlu
-      // login kedua di UI.
-      const journalSession = issueJournalDeveloperSession(req, res, devUsername());
-
+      const issued = issueDevSession(req, res);
       res.json({
         success: true,
-        username: devUsername(),
-        expiresAt: new Date(exp * 1000).toISOString(),
-        journalSession,
+        username: issued.username,
+        expiresAt: issued.expiresAt,
+        journalSession: issued.journalSession,
       });
     } catch (error) {
       sendError(res, error);
@@ -282,8 +320,7 @@ export function registerDevAuthRoutes(app: Express): void {
   app.post('/api/auth/logout', (req, res) => {
     try {
       assertSameOrigin(req);
-      clearDevSessionCookie(req, res);
-      clearJournalDeveloperSession(req, res);
+      clearDevSession(req, res);
       res.json({ success: true });
     } catch (error) {
       sendError(res, error);

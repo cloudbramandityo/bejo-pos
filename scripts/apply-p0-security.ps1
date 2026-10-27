@@ -1,6 +1,6 @@
 <#
 =====================================================================
-  BEJO STIKER POS - APPLY P0 SECURITY UPDATE
+  BEJO Digital Print - APPLY P0 SECURITY UPDATE
 =====================================================================
   Menyiapkan seluruh perubahan P0 (auth developer, broker PocketBase,
   fail-closed akses internet, hardening aturan PocketBase) di komputer
@@ -229,7 +229,7 @@ function Test-ServiceTargetMissing([string]$Name) {
 
 # ----------------------------------------------------------- main
 Write-Host '==================================================================' -ForegroundColor DarkCyan
-Write-Host ' BEJO STIKER POS - APPLY P0 SECURITY UPDATE' -ForegroundColor Cyan
+Write-Host ' BEJO Digital Print - APPLY P0 SECURITY UPDATE' -ForegroundColor Cyan
 Write-Host " Waktu: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor DarkGray
 Write-Host '==================================================================' -ForegroundColor DarkCyan
 
@@ -278,9 +278,20 @@ try {
       Write-Ok 'DEV_USERNAME sudah terisi.'
     }
 
+    $publicSiteRaw = Get-EnvValue $envPath 'PUBLIC_SITE'
+    $publicSite = (-not [string]::IsNullOrWhiteSpace($publicSiteRaw)) -and (@('1', 'true', 'yes', 'on') -contains $publicSiteRaw.Trim().ToLower())
+    if ($publicSite) {
+      # Mode publik: landing terbuka, tetapi koleksi PocketBase wajib dikunci
+      # dan login staf diverifikasi server memakai akun superuser.
+      $RequireHardening = $true
+      Write-Ok 'PUBLIC_SITE=true: landing publik terbuka; dashboard wajib login dan hardening PocketBase diwajibkan.'
+    }
+
     $remotePass = Get-EnvValue $envPath 'REMOTE_ACCESS_PASS'
     if ([string]::IsNullOrWhiteSpace($remotePass)) {
-      if ($AllowEmptyRemotePass) {
+      if ($publicSite) {
+        Write-Ok 'REMOTE_ACCESS_PASS kosong: tidak dipakai pada mode publik.'
+      } elseif ($AllowEmptyRemotePass) {
         Write-Warn2 'REMOTE_ACCESS_PASS kosong: akses internet akan DITOLAK (hanya LAN/localhost).'
       } else {
         $remotePass = Read-SecretValue 'Masukkan REMOTE_ACCESS_PASS (Basic Auth untuk akses internet):'
@@ -291,7 +302,11 @@ try {
         Write-Ok 'REMOTE_ACCESS_PASS diisi (nilai tidak dicetak).'
       }
     } else {
-      Write-Ok 'REMOTE_ACCESS_PASS sudah terisi.'
+      if ($publicSite) {
+        Write-Warn2 'PUBLIC_SITE=true: REMOTE_ACCESS_PASS terisi tetapi Basic Auth dilewati untuk landing publik.'
+      } else {
+        Write-Ok 'REMOTE_ACCESS_PASS sudah terisi.'
+      }
     }
 
     $devSecretScript = Join-Path $AppDir 'scripts\set-dev-password.mjs'

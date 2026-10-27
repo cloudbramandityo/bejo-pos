@@ -226,7 +226,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
 
   const getWelcomeGreeting = (callName: string) => {
     const title = callName.startsWith('Pak') ? callName : `Kak ${callName || 'Fira'}`;
-    return `Sugeng Rawuh ${title} 😊 Saya SI BEJO AI, asisten virtual Bejo Stiker. Ada yang bisa saya bantu terkait operasional POS? Saya juga diprogram sebagai teman curhat lho ${callName.startsWith('Pak') ? 'Pak' : 'Kak'}! He..he..he..`;
+    return `Sugeng Rawuh ${title} 😊 Saya SI BEJO AI, asisten virtual BEJO Digital Print. Ada yang bisa saya bantu terkait operasional POS? Saya juga diprogram sebagai teman curhat lho ${callName.startsWith('Pak') ? 'Pak' : 'Kak'}! He..he..he..`;
   };
 
   const getFormattedTime = () => {
@@ -243,7 +243,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
       {
         id: 'msg_welcome_sys',
         role: 'assistant',
-        content: `👋 Selamat datang di Chat Internal Bejo Stiker! Kamu bisa ngobrol langsung dengan tim, atau gunakan @mention anggota tim untuk memberi notifikasi. Tag @SiBejoAI jika ingin bantuan AI ya!`,
+        content: `👋 Selamat datang di Chat Internal BEJO Digital Print! Kamu bisa ngobrol langsung dengan tim, atau gunakan @mention anggota tim untuk memberi notifikasi. Tag @SiBejoAI jika ingin bantuan AI ya!`,
         timestamp: getFormattedTime(),
         createdAt: Date.now() - 60000,
         senderName: 'SI BEJO AI',
@@ -490,7 +490,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
       // ignore
     }
     return [
-      'Master Developer & Arsitek sistem POS Bejo Stiker',
+      'Master Developer & Arsitek sistem POS BEJO Digital Print',
       'Kasir & Admin toko yang ramah, teliti dan responsif'
     ];
   });
@@ -771,7 +771,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
     const lowStockNames = lowStock.slice(0, 8).map((p) => `${p.name} (sisa ${p.stock} ${p.unit || 'unit'})`).join(', ');
 
     return {
-      storeName: storeInfo?.storeName || 'BEJO STIKER',
+      storeName: storeInfo?.storeName || 'BEJO Digital Print',
       storeBranch: storeInfo?.branch || 'Cabang Polsek',
       storePhone: storeInfo?.phone || '0819-1834-4716',
       storeAddress: storeInfo?.address || 'Jl. Raya Diwek (Belakang Polsek Diwek), Jomabang',
@@ -882,7 +882,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
       if (isTaggedAi) {
         setIsLoading(true);
         const localContext: LocalAiContext = {
-          storeName: storeInfo?.storeName || 'BEJO STIKER',
+          storeName: storeInfo?.storeName || 'BEJO Digital Print',
           userCallName: aiSettings.customCallName || userCallName,
           userRole,
           activeShift,
@@ -959,7 +959,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
       setIsLoading(true);
 
       const localContext: LocalAiContext = {
-        storeName: storeInfo?.storeName || 'BEJO STIKER',
+        storeName: storeInfo?.storeName || 'BEJO Digital Print',
         userCallName: aiSettings.customCallName || userCallName,
         userRole,
         activeShift,

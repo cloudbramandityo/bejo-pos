@@ -1,6 +1,6 @@
 /**
  * =====================================================================
- *  BEJO STIKER POS - Migrasi Data: Firestore -> PocketBase
+ *  BEJO Digital Print - Migrasi Data: Firestore -> PocketBase
  * =====================================================================
  *  Menjalankan di PC (Node 18+):
  *
@@ -125,7 +125,7 @@ function stripInternal(data) {
 // ---------------------------------------------------------------- MAIN
 async function main() {
   console.log('==================================================================');
-  console.log(' BEJO STIKER POS - MIGRASI DATA FIRESTORE -> POCKETBASE');
+  console.log(' BEJO Digital Print - MIGRASI DATA FIRESTORE -> POCKETBASE');
   console.log('==================================================================');
   if (DRY_RUN) console.log('   MODE: DRY RUN (tidak ada data yang ditulis)');
 

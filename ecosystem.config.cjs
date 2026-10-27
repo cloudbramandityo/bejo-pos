@@ -1,6 +1,6 @@
 /**
  * =====================================================================
- *  BEJO STIKER POS - PM2 process config
+ *  BEJO Digital Print - PM2 process config
  *  Dijalankan di VPS:  pm2 start ecosystem.config.cjs
  *  Autosave + startup:  pm2 save && pm2 startup
  * =====================================================================

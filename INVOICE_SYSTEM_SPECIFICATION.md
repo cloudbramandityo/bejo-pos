@@ -1,11 +1,11 @@
 # DOKUMEN SPESIFIKASI TEKNIS SISTEM
 ## Modul Penerbitan Proforma Invoice (PI) & Invoice Komersial (INV)
-### Aplikasi Point of Sale (POS) & Manajemen Toko Bejo Stiker
+### Aplikasi Point of Sale (POS) & Manajemen BEJO Digital Print
 
 ---
 
 ## 1. PENDAHULUAN & TUJUAN SISTEM
-Modul Proforma Invoice (PI) dan Invoice Komersial (INV) dirancang untuk memfasilitasi transaksi bernilai menengah hingga besar (B2B, instansi pemerintah, korporasi swasta, komunitas, dan pelanggan retail grosir) pada aplikasi POS Bejo Stiker.
+Modul Proforma Invoice (PI) dan Invoice Komersial (INV) dirancang untuk memfasilitasi transaksi bernilai menengah hingga besar (B2B, instansi pemerintah, korporasi swasta, komunitas, dan pelanggan retail grosir) pada aplikasi POS BEJO Digital Print.
 
 Dokumen ini membagi siklus penagihan menjadi dua tahap hukum dan akuntansi:
 1. **Proforma Invoice (PI)**: Dokumen penawaran harga dan komitmen sementara yang mengikat secara komersial untuk pembayaran uang muka (Down Payment / DP) atau pemesanan sebelum produksi dimulai.
@@ -147,7 +147,7 @@ Menyimpan konfigurasi kop surat, logo, nomor rekening, dan stempel toko.
 | Kolom | Tipe Data | Constraint | Keterangan |
 |---|---|---|---|
 | `id` | VARCHAR(32) | PRIMARY KEY DEFAULT 'primary' | ID tunggal konfigurasi |
-| `store_name` | VARCHAR(150)| NOT NULL | Nama resmi toko (e.g. "BEJO STIKER & DIGITAL PRINTING") |
+| `store_name` | VARCHAR(150)| NOT NULL | Nama resmi toko (e.g. "BEJO Digital Print") |
 | `address` | TEXT | NOT NULL | Alamat fisik toko lengkap |
 | `phone` | VARCHAR(50) | NOT NULL | No. Telepon / WhatsApp kantor |
 | `email` | VARCHAR(100)| NULL | Email resmi toko |

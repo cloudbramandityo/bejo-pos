@@ -1,7 +1,7 @@
 /**
  * Coded by Langgo Bramandityo. Please guys, jangan diutak-atik coding-nya ya. Thanks!
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   User,
   KeyRound,
@@ -12,8 +12,13 @@ import {
 } from 'lucide-react';
 import { AppUser } from '../types';
 import { StoreLogo } from './StoreLogo';
-import { getPermanentDeveloperUser } from '../utils/authSecurity';
-import { DeveloperAuthError, loginDeveloper, logoutDeveloper } from '../lib/devAuth';
+import {
+  getSiteMode,
+  loginAccount,
+  PosAuthError,
+  type SiteMode,
+} from '../lib/posAuth';
+import { APP_NAME, APP_VERSION } from '../config/brand';
 
 interface LoginScreenProps {
   users: AppUser[];
@@ -25,7 +30,7 @@ interface LoginScreenProps {
 export const LoginScreen: React.FC<LoginScreenProps> = ({
   users,
   onLoginSuccess,
-  storeName = 'BEJO STIKER POS',
+  storeName = 'BEJO Digital Print',
   onBackToLanding,
 }) => {
   const [username, setUsername] = useState('');
@@ -33,6 +38,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [siteMode, setSiteMode] = useState<SiteMode | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSiteMode()
+      .then((mode) => {
+        if (!cancelled) setSiteMode(mode);
+      })
+      .catch(() => {
+        // Mode publik dianggap aman secara default: tanpa konfirmasi server,
+        // login lokal (password tersimpan di browser) tidak diizinkan.
+        if (!cancelled) setSiteMode({ publicSite: true, mode: 'public', staffLoginReady: false, developerLoginReady: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,40 +71,56 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     setIsLoading(true);
 
     try {
-      const knownUser = users.find(
-        (u) => u.username.toLowerCase() === cleanUsername.toLowerCase()
-      );
+      // Verifikasi utama selalu di server. Password tidak pernah dibandingkan
+      // di browser pada mode publik.
+      const result = await loginAccount(cleanUsername, cleanPassword);
+      const account = result.user;
+      onLoginSuccess({
+        id: account.id,
+        username: account.username,
+        password: '••••••••',
+        name: account.name,
+        role: account.role as AppUser['role'],
+        phone: account.phone || '',
+        spkRoleCategory: account.spkRoleCategory as AppUser['spkRoleCategory'],
+        isActive: account.isActive !== false,
+        createdAt: account.createdAt || '',
+      });
+      return;
+    } catch (error) {
+      const isPosError = error instanceof PosAuthError;
+      const status = isPosError ? error.status : 0;
 
-      // 1. Akun operasional (Admin / Kasir / Agen / SPK)
-      if (knownUser) {
-        if (knownUser.password !== cleanPassword) {
-          setErrorMsg('Username atau Password salah! Periksa kembali data login Anda.');
+      // Fallback lokal HANYA untuk instalasi LAN/privat (bukan mode publik),
+      // saat server atau PocketBase sedang tidak dapat memeriksa akun.
+      const allowLegacyFallback = siteMode !== null && !siteMode.publicSite;
+      const serverUnavailable =
+        status === 0 ||
+        (!isPosError && error instanceof TypeError) ||
+        (isPosError && error.status === 503);
+
+      if (allowLegacyFallback && serverUnavailable) {
+        const knownUser = users.find(
+          (u) => u.username.toLowerCase() === cleanUsername.toLowerCase()
+        );
+        if (knownUser && knownUser.password === cleanPassword) {
+          if (knownUser.isActive === false) {
+            setErrorMsg('Akun ini sedang dinonaktifkan. Hubungi Developer / Administrator.');
+          } else {
+            onLoginSuccess(knownUser);
+          }
           return;
         }
-        if (knownUser.isActive === false) {
-          setErrorMsg('Akun ini sedang dinonaktifkan. Hubungi Developer / Administrator.');
-          return;
-        }
-
-        // Akun non-developer tidak boleh mewarisi sesi developer/Jurnal sebelumnya.
-        await logoutDeveloper().catch(() => {});
-        onLoginSuccess(knownUser);
-        return;
       }
 
-      // 2. Bukan akun operasional: verifikasi kredensial DEVELOPER di server.
-      try {
-        const session = await loginDeveloper(cleanUsername, cleanPassword);
-        onLoginSuccess(getPermanentDeveloperUser(session.username));
-      } catch (error) {
-        if (
-          error instanceof DeveloperAuthError &&
-          (error.status === 429 || error.status === 503)
-        ) {
-          setErrorMsg(error.message);
-        } else {
-          setErrorMsg('Username atau Password salah! Periksa kembali data login Anda.');
-        }
+      if (status === 401) {
+        setErrorMsg('Username atau Password salah! Periksa kembali data login Anda.');
+      } else if (status === 403 || status === 429) {
+        setErrorMsg(isPosError ? error.message : 'Login ditolak oleh server.');
+      } else if (isPosError) {
+        setErrorMsg(error.message);
+      } else {
+        setErrorMsg('Login gagal. Periksa koneksi ke server.');
       }
     } finally {
       setIsLoading(false);
@@ -103,7 +141,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             />
           </div>
           <h1 className="text-lg font-black tracking-tight uppercase text-slate-900">
-            {storeName}
+            {APP_NAME}
           </h1>
           <p className="text-xs text-slate-500 font-semibold mt-0.5">
             Sistem Point of Sales & Manajemen Operasional
@@ -195,7 +233,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
         {/* Footer */}
         <div className="bg-slate-50 border-t border-slate-200 px-6 py-2.5 text-center text-[11px] text-slate-500 font-mono">
-          Coded by Langgo Bramandityo • Bejo Stiker POS v1.0
+          Coded by Langgo Bramandityo • {APP_NAME} v{APP_VERSION}
         </div>
       </div>
     </div>

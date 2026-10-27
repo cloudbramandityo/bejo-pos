@@ -148,7 +148,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
   periodType,
   selectedMonth,
   selectedYear,
-  storeName = 'BEJO STIKER POS',
+  storeName = 'BEJO Digital Print',
   onPeriodTypeChange,
 }) => {
   const [activeTabSub, setActiveTabSub] = useState<'ringkasan' | 'arus_alur' | 'grafik_analisis'>('ringkasan');
@@ -1019,7 +1019,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
             <div>
               <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-blue-600" />
-                Grafik Finansial BEJO STIKER
+                Grafik Finansial BEJO Digital Print
               </h3>
               <p className="text-xs text-slate-500">
                 Penjualan Kasir POS, Pembelian Bahan, dan Pengambilan Agen ({periodLabelText}).

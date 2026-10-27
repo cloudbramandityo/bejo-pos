@@ -1,6 +1,6 @@
 /**
  * Backend Diagnostics & System Health Control Modal
- * Coded for Bejo Stiker POS System
+ * Coded for BEJO Digital Print System
  */
 import React, { useState, useEffect } from 'react';
 import {

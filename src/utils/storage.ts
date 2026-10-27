@@ -214,7 +214,7 @@ export interface StoreInfo {
 }
 
 export const DEFAULT_STORE_INFO: StoreInfo = {
-  storeName: 'BEJO STIKER',
+  storeName: 'BEJO Digital Print',
   appTitle: 'Point of Sales',
   branch: 'Pelsek',
   address: 'Jl. Raya Utama No. 45 (Sebelah Polsek), Kota',

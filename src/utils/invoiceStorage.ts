@@ -1096,7 +1096,7 @@ export function convertInvoicesToTransactions(invoices: Invoice[]): Transaction[
       shiftId: 'shift_invoice',
       shiftName: 'B2B / Invoice',
       cashierName: inv.issuedBy || 'Admin Invoice',
-      storeName: 'BEJO STIKER POS',
+      storeName: 'BEJO Digital Print',
       date: inv.issueDate || new Date(createdAtEpoch).toISOString().slice(0, 10),
       time: timeStr,
       timestamp: createdAtEpoch,

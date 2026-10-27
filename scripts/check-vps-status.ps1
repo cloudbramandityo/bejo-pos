@@ -1,9 +1,9 @@
 <# 
 =======================================================================
-  BEJO STIKER POS - VPS Windows Status Checker (Rumah Web)
+  BEJO Digital Print - VPS Windows Status Checker (Rumah Web)
 =======================================================================
   Memeriksa status keseluruhan setup VPS Windows untuk deployment
-  Bejo Stiker POS dengan PocketBase (self-hosted database + realtime).
+  BEJO Digital Print dengan PocketBase (self-hosted database + realtime).
 
   Jalankan di VPS (PowerShell Administrator):
       powershell -ExecutionPolicy Bypass -File C:\bejo-pos\scripts\check-vps-status.ps1
@@ -53,7 +53,7 @@ function Add-Result {
 function Write-Header { param($t) Write-Host ""; Write-Host "============================================================" -ForegroundColor DarkCyan; Write-Host " $t" -ForegroundColor Cyan; Write-Host "============================================================" -ForegroundColor DarkCyan }
 
 Write-Host "===================================================================" -ForegroundColor Green
-Write-Host " BEJO STIKER POS - VPS WINDOWS STATUS CHECKER" -ForegroundColor Green
+Write-Host " BEJO Digital Print - VPS WINDOWS STATUS CHECKER" -ForegroundColor Green
 Write-Host " Domain: $Domain" -ForegroundColor White
 Write-Host " Waktu:  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor White
 Write-Host "===================================================================" -ForegroundColor Green
@@ -162,7 +162,7 @@ foreach ($f in $folders) {
 Write-Header "D. SERVICE WINDOWS (NSSM)"
 
 $services = @(
-    @{ Name = "BejoStikerPOS"; DisplayName = "Bejo Stiker POS App"; Exe = "node.exe"; Args = "$AppDir\dist\server.cjs" },
+    @{ Name = "BejoStikerPOS"; DisplayName = "BEJO Digital Print App"; Exe = "node.exe"; Args = "$AppDir\dist\server.cjs" },
     @{ Name = "Caddy"; DisplayName = "Caddy Reverse Proxy"; Exe = "$CaddyDir\caddy.exe"; Args = "run --config $CaddyDir\Caddyfile" },
     @{ Name = "PocketBase"; DisplayName = "PocketBase Database"; Exe = "$PB_DIR\pocketbase.exe"; Args = "serve --http=127.0.0.1:8090 --dir=$PB_DATA" }
 )

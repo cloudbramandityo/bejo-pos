@@ -130,7 +130,7 @@ export const LaporanKeuanganScreen: React.FC<LaporanKeuanganScreenProps> = ({
   const [fromDate, setFromDate] = useState<string>(() => prevMonthRange().from);
   const [toDate, setToDate] = useState<string>(() => prevMonthRange().to);
 
-  const entityName = settings.entityName || storeName || 'BEJO STIKER';
+  const entityName = settings.entityName || storeName || 'BEJO Digital Print';
 
   // ==== Simpan otomatis (auto-save) setiap kali draft berubah ====
   useEffect(() => {

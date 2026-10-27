@@ -170,11 +170,11 @@ export function generateBackupPayload(): PosBackupPayload {
   const isoString = now.toISOString();
 
   return {
-    app: 'BEJO STIKER POS & INVENTORY',
+    app: 'BEJO Digital Print & INVENTORY',
     version: '2.1.0',
     exportedAt: isoString,
     timestamp: now.getTime(),
-    storeName: storeInfo?.storeName || 'BEJO Stiker',
+    storeName: storeInfo?.storeName || 'BEJO Digital Print',
     summary: {
       totalProducts: products.length,
       totalCustomers: customers.length,

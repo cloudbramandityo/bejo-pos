@@ -1,5 +1,5 @@
 /**
- * BEJO STIKER POS & DIGITAL PRINTING
+ * BEJO Digital Print
  * Navbar aplikasi — dirapikan agar tidak menumpuk & nyaman dipakai di desktop & smartphone.
  *
  * Desktop  : 2 baris (identitas/status di atas, strip tab di bawah)
@@ -37,6 +37,7 @@ import {
 import { Shift, AppUser } from '../types';
 import { DeveloperJokerIcon } from './DeveloperJokerIcon';
 import { StoreLogo } from './StoreLogo';
+import { APP_VERSION } from '../config/brand';
 
 type TabId =
   | 'pos'
@@ -476,6 +477,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                     Keluar / Ganti Akun
                   </button>
                 </div>
+
+                <div className="border-t border-slate-100 px-3.5 py-2 text-[10px] font-semibold text-slate-400">
+                  Versi aplikasi v{APP_VERSION}
+                </div>
               </div>
             </>
           )}
@@ -640,6 +645,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <LogOut className="w-[18px] h-[18px] shrink-0" />
                 <span className="text-[13px] font-semibold">Keluar / Ganti Akun</span>
               </button>
+
+              <p className="pt-2 text-center text-[10px] font-semibold text-slate-400">
+                Versi aplikasi v{APP_VERSION}
+              </p>
             </div>
           </div>
         </div>

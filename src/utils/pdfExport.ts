@@ -32,7 +32,7 @@ export function exportTransactionsToPDF(
     format: 'a4',
   });
 
-  const storeTitle = (options.storeName || 'BEJO STIKER POS').toUpperCase();
+  const storeTitle = (options.storeName || 'BEJO Digital Print').toUpperCase();
   const periodText = `${options.reportTitle || 'LAPORAN PENJUALAN'} ${options.periodType} - ${options.periodLabel}`;
   const shiftText = options.shiftFilter && options.shiftFilter !== 'ALL' ? `Filter Shift: ${options.shiftFilter}` : 'Semua Shift';
 
@@ -187,7 +187,7 @@ export function exportTransactionsToPDF(
     doc.setFontSize(7.5);
     doc.setTextColor(148, 163, 184);
     doc.text(
-      `Halaman ${i} dari ${pageCount} - Dicetak dari Sistem POS ${options.storeName || 'Bejo Stiker'}`,
+      `Halaman ${i} dari ${pageCount} - Dicetak dari Sistem POS ${options.storeName || 'BEJO Digital Print'}`,
       14,
       202
     );
@@ -224,7 +224,7 @@ export function exportStockTransactionsToPDF(
   const isPembelian = type === 'PEMBELIAN';
   const titleLabel = isPembelian ? 'PEMBELIAN BAHAN' : 'PENGAMBILAN BAHAN & CETAK AGEN';
   const partyHeader = isPembelian ? 'Supplier / Distributor' : 'Penerima / Agen';
-  const storeTitle = (options.storeName || 'BEJO STIKER POS').toUpperCase();
+  const storeTitle = (options.storeName || 'BEJO Digital Print').toUpperCase();
   const periodText = `LAPORAN REKAP ${titleLabel} (PER TRANSAKSI) ${options.periodType} - ${options.periodLabel}`;
 
   const productMap = new Map<string, Product>();
@@ -475,7 +475,7 @@ export function exportStockTransactionsToPDF(
     doc.setFontSize(7.5);
     doc.setTextColor(148, 163, 184);
     doc.text(
-      `Halaman ${i} dari ${pageCount} - Dicetak dari Sistem POS ${options.storeName || 'Bejo Stiker'}`,
+      `Halaman ${i} dari ${pageCount} - Dicetak dari Sistem POS ${options.storeName || 'BEJO Digital Print'}`,
       14,
       202
     );
@@ -495,7 +495,7 @@ export function exportSingleStockTransactionToPDF(
   const docTitle = isPembelian ? 'FAKTUR PEMBELIAN BAHAN' : 'NOTA PENGAMBILAN BAHAN';
   const partyLabel = isPembelian ? 'Supplier / Distributor' : 'Penerima / Agen';
   const priceHeader = isPembelian ? 'Harga Kulak (HPP)' : 'Harga Agen / Meter';
-  const storeTitle = (options?.storeName || 'BEJO STIKER POS').toUpperCase();
+  const storeTitle = (options?.storeName || 'BEJO Digital Print').toUpperCase();
 
   const productMap = new Map<string, Product>();
   const productByNameMap = new Map<string, Product>();
@@ -755,7 +755,7 @@ export function exportSingleStockTransactionToPDF(
     doc.setFontSize(7.5);
     doc.setTextColor(148, 163, 184);
     doc.text(
-      `Halaman ${i} dari ${pageCount} - Dokumen Resmi ${options?.storeName || 'BEJO STIKER POS'}`,
+      `Halaman ${i} dari ${pageCount} - Dokumen Resmi ${options?.storeName || 'BEJO Digital Print'}`,
       14,
       287
     );

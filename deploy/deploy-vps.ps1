@@ -5,6 +5,7 @@
   Satu-satunya skrip deploy produksi untuk VPS Windows yang sudah live.
   Kebijakan: jangan membuat skrip deploy baru. Setiap kebutuhan deploy
   baru ditambahkan sebagai opsi/setting di skrip ini.
+  Marker: SECRETS-ROTATION-V1
   Jalankan DI DALAM VPS lewat RDP sebagai Administrator:
 
       powershell -NoProfile -ExecutionPolicy Bypass -File C:\bejo-pos\deploy\deploy-vps.ps1 -Force
@@ -13,6 +14,8 @@
     1. Preflight: admin, folder aplikasi, service, Node/npm, .env, PocketBase, Caddy
     2. Unduh source terbaru dari GitHub (branch main) atau pakai source lokal
     3. Salin source tanpa menyentuh .env, data/, logs/, backups/, node_modules/, dist/
+    3b. Bila diminta: setel PUBLIC_SITE, isi kredensial admin PocketBase,
+        rotasi password DEVELOPER (hash scrypt), dan hapus backup .env plaintext.
     4. Validasi .env keamanan (PUBLIC_SITE, REMOTE_ACCESS_PASS, kredensial developer, DSB.)
        PUBLIC_SITE=true  : landing publik terbuka, dashboard wajib login,
                            PB_ADMIN_* wajib, hardening PocketBase wajib.
@@ -41,6 +44,20 @@
     -SkipMarketingCheck          Lewati pemeriksaan endpoint Marketing
     -RequireMarketing            Exit code 2 bila kanal Marketing belum LIVE
     -KeepSourceArchive           Simpan arsip source di %TEMP%
+    -EnablePublicSite            Tulis PUBLIC_SITE=true dan
+                                 ALLOW_DEFAULT_STAFF_PASSWORDS=false ke .env
+    -ConfigurePbAdmin            Tanya PB_ADMIN_EMAIL/PB_ADMIN_PASSWORD bila kosong
+                                 (password tidak pernah dicetak)
+    -RotateDevPassword           Ganti password DEVELOPER dengan acak 10 karakter,
+                                 simpan hash scrypt, plaintext ke file terlindungi
+    -DevPasswordLength <n>       Panjang password DEVELOPER baru (default 10)
+    -PurgePlaintextEnvBackups    Hapus backup .env plaintext di backups/ (butuh -Force)
+
+  Catatan keamanan:
+    - Nilai rahasia tidak pernah dicetak ke konsol.
+    - Password DEVELOPER baru ditulis ke <AppDir>\secrets\developer-password-*.txt
+      dengan izin Administrators + SYSTEM. Simpan ke password manager lalu hapus.
+    - Backup .env plaintext ditimpa byte acak sebelum dihapus.
 
   Exit code:
     0 sukses
@@ -68,7 +85,12 @@ param(
   [switch]$SkipMarketingCheck,
   [switch]$RequireMarketing,
   [switch]$Force,
-  [switch]$KeepSourceArchive
+  [switch]$KeepSourceArchive,
+  [switch]$EnablePublicSite,
+  [switch]$ConfigurePbAdmin,
+  [switch]$RotateDevPassword,
+  [int]$DevPasswordLength = 10,
+  [switch]$PurgePlaintextEnvBackups
 )
 
 $ErrorActionPreference = 'Stop'
@@ -97,7 +119,8 @@ function Get-EnvValue([string]$Path, [string]$Key) {
     if ($trim.Substring(0, $eq).Trim() -eq $Key) {
       $value = $trim.Substring($eq + 1).Trim()
       if ($value.Length -ge 2 -and $value.StartsWith('"') -and $value.EndsWith('"')) {
-        $value = $value.Substring(1, $value.Length - 2)
+        # Samakan dengan dotenv: \" dan \\ di dalam tanda kutip ganda di-unescape.
+        $value = [regex]::Replace($value.Substring(1, $value.Length - 2), '\\(["\\])', '$1')
       } elseif ($value.Length -ge 2 -and $value.StartsWith("'") -and $value.EndsWith("'")) {
         $value = $value.Substring(1, $value.Length - 2)
       }
@@ -106,6 +129,157 @@ function Get-EnvValue([string]$Path, [string]$Key) {
   }
   return $null
 }
+
+# ----------------------------------------------------------- secrets helpers
+# Nilai rahasia tidak pernah dicetak. Semua penulisan .env bersifat atomik
+# (tulis ke file sementara lalu ganti) agar file tidak korup saat gagal.
+function ConvertTo-EnvLiteral([string]$Value) {
+  if ($Value -match '^[A-Za-z0-9._/:@+-]*$') { return $Value }
+  # Kutip tunggal = nilai literal (dotenv & Get-EnvValue membacanya apa adanya).
+  if (-not $Value.Contains("'")) { return "'" + $Value + "'" }
+  $escaped = $Value.Replace('\', '\\').Replace('"', '\"')
+  return '"' + $escaped + '"'
+}
+
+function Set-EnvValue([string]$Path, [string]$Key, [string]$Value) {
+  if ($Value -match "[`r`n]") { Fail 'Nilai .env tidak boleh mengandung baris baru.' }
+  $raw = [System.IO.File]::ReadAllText($Path)
+  if ($raw.Length -gt 0 -and $raw[0] -eq [char]0xFEFF) { $raw = $raw.Substring(1) }
+  $eol = if ($raw.Contains("`r`n")) { "`r`n" } else { "`n" }
+  $lines = [System.Collections.Generic.List[string]]($raw -split "`r?`n")
+  $pattern = '^\s*' + [regex]::Escape($Key) + '\s*='
+  $entry = $Key + '=' + (ConvertTo-EnvLiteral $Value)
+  $replaced = $false
+  for ($i = 0; $i -lt $lines.Count; $i++) {
+    if ($lines[$i] -match $pattern) { $lines[$i] = $entry; $replaced = $true; break }
+  }
+  if (-not $replaced) {
+    if ($lines.Count -gt 0 -and $lines[$lines.Count - 1] -eq '') { $lines.Insert($lines.Count - 1, $entry) }
+    else { $lines.Add($entry) }
+  }
+  $temp = "$Path.$PID.tmp"
+  try {
+    [System.IO.File]::WriteAllText($temp, ($lines -join $eol), (New-Object System.Text.UTF8Encoding($false)))
+    Move-Item -LiteralPath $temp -Destination $Path -Force
+  } finally {
+    if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue }
+  }
+}
+
+function Get-RandomPick([string]$Chars, $Rng) {
+  $buffer = New-Object byte[] 4
+  $Rng.GetBytes($buffer)
+  $index = [int]([BitConverter]::ToUInt32($buffer, 0) % [uint32]$Chars.Length)
+  return $Chars[$index]
+}
+
+function New-RandomPassword([int]$Length = 10) {
+  $upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+  $lower = 'abcdefghijkmnopqrstuvwxyz'
+  $digits = '23456789'
+  $all = $upper + $lower + $digits
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $chars = New-Object System.Collections.Generic.List[char]
+    $chars.Add([char](Get-RandomPick $upper $rng))
+    $chars.Add([char](Get-RandomPick $lower $rng))
+    $chars.Add([char](Get-RandomPick $digits $rng))
+    while ($chars.Count -lt $Length) { $chars.Add([char](Get-RandomPick $all $rng)) }
+    for ($i = $chars.Count - 1; $i -gt 0; $i--) {
+      $buffer = New-Object byte[] 4
+      $rng.GetBytes($buffer)
+      $j = [int]([BitConverter]::ToUInt32($buffer, 0) % [uint32]($i + 1))
+      $tmp = $chars[$i]; $chars[$i] = $chars[$j]; $chars[$j] = $tmp
+    }
+    return -join $chars
+  } finally {
+    $rng.Dispose()
+  }
+}
+
+function Read-PlainSecret([string]$Prompt) {
+  try {
+    $secure = Read-Host -Prompt $Prompt -AsSecureString
+  } catch {
+    Fail 'Input password membutuhkan konsol interaktif. Jalankan lewat RDP, bukan dari pipe/tugas otomatis.'
+  }
+  $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+  try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+  finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+}
+
+function Protect-SecretFile([string]$Path) {
+  $icacls = Get-Command icacls.exe -ErrorAction SilentlyContinue
+  if (-not $icacls) {
+    Write-Warn2 'icacls tidak ditemukan; atur izin file rahasia secara manual.'
+    return
+  }
+  # Pengguna yang menjalankan deploy tetap bisa membuka file (Explorer tidak selalu elevated).
+  $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+  & icacls.exe $Path /inheritance:r /grant:r "${identity}:(F)" '*S-1-5-32-544:(F)' '*S-1-5-18:(F)' | Out-Null
+}
+
+function Test-EnvBackupName([string]$Name) {
+  $n = $Name.ToLowerInvariant()
+  if ($n -in @('.env.example', 'env.example')) { return $false }
+  if ($n -match '^\.env($|[._-])') { return $true }
+  if ($n -match '^env([._-]|$)' -and $n -match '\.(bak|backup|old|txt|copy|save|env)$') { return $true }
+  if ($n -match '(^|[-_.])env([._-]|$)' -and $n -match '\.(bak|backup|old|copy|save)$') { return $true }
+  return $false
+}
+
+function Remove-SecretFile([string]$Path) {
+  try {
+    $length = (Get-Item -LiteralPath $Path).Length
+    if ($length -gt 0) {
+      $chunkSize = [Math]::Min($length, 1048576)
+      $buffer = New-Object byte[] $chunkSize
+      $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+      try { $rng.GetBytes($buffer) } finally { $rng.Dispose() }
+      $stream = [System.IO.File]::Open($Path, 'Open', 'Write', 'None')
+      try {
+        for ($written = 0; $written -lt $length; $written += $chunkSize) {
+          $stream.Write($buffer, 0, [Math]::Min($chunkSize, $length - $written))
+        }
+        $stream.Flush($true)
+      } finally { $stream.Dispose() }
+    }
+    Remove-Item -LiteralPath $Path -Force
+    return $true
+  } catch {
+    Write-Warn2 "Gagal menghapus $Path : $($_.Exception.Message)"
+    return $false
+  }
+}
+
+function Remove-PlaintextEnvBackups([string[]]$Directories, [bool]$Confirmed) {
+  $found = New-Object System.Collections.Generic.List[string]
+  foreach ($dir in $Directories) {
+    if (-not $dir -or -not (Test-Path -LiteralPath $dir)) { continue }
+    Get-ChildItem -LiteralPath $dir -File -Recurse -ErrorAction SilentlyContinue |
+      Where-Object { Test-EnvBackupName $_.Name } |
+      ForEach-Object { $found.Add($_.FullName) }
+  }
+  if ($found.Count -eq 0) {
+    Write-Ok 'Tidak ada backup .env plaintext di folder backup.'
+    return 0
+  }
+  if (-not $Confirmed) {
+    Write-Warn2 "Ditemukan $($found.Count) backup .env plaintext. Tidak dihapus karena -Force tidak diberikan:"
+    $found | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkYellow }
+    return 0
+  }
+  $removed = 0
+  foreach ($path in $found) {
+    if (Remove-SecretFile $path) {
+      $removed++
+      Write-Host "   Hapus: $path" -ForegroundColor DarkGray
+    }
+  }
+  Write-Ok "$removed backup .env plaintext ditimpa byte acak lalu dihapus."
+  return $removed
+}
+
 
 function Test-AppHealth([string]$Url, [int]$TimeoutSec = 5) {
   try {
@@ -401,9 +575,9 @@ if (-not $SkipSourceUpdate) {
   $deployedScript = Join-Path $AppDir 'deploy\deploy-vps.ps1'
   if ($runningScriptBackup -and (Test-Path -LiteralPath $deployedScript)) {
     $deployedText = Get-Content -LiteralPath $deployedScript -Raw
-    if ($deployedText -notmatch 'UNIVERSAL DEPLOY VPS WINDOWS') {
+    if ($deployedText -notmatch 'UNIVERSAL DEPLOY VPS WINDOWS' -or $deployedText -notmatch 'SECRETS-ROTATION-V1') {
       Copy-Item -LiteralPath $runningScriptBackup -Destination $deployedScript -Force
-      Write-Warn2 'Source GitHub masih berisi skrip deploy lama; versi universal yang berjalan dipertahankan.'
+      Write-Warn2 'Source GitHub belum memuat versi skrip deploy yang sedang berjalan; versi lokal dipertahankan.'
     }
   }
 
@@ -417,6 +591,123 @@ if ($runningScriptBackup) {
 }
 
 Remove-ObsoleteWrappers $AppDir
+
+# ----------------------------------------------------------- secrets prep
+# Langkah opsional: jadikan situs publik, isi kredensial admin PocketBase,
+# rotasi password DEVELOPER, dan bersihkan backup .env plaintext.
+if ($EnablePublicSite -or $ConfigurePbAdmin -or $RotateDevPassword -or $PurgePlaintextEnvBackups) {
+  Write-Step '1b/8 Siapkan rahasia produksi (nilai tidak dicetak)'
+}
+
+if ($EnablePublicSite) {
+  Set-EnvValue $envPath 'PUBLIC_SITE' 'true'
+  Set-EnvValue $envPath 'ALLOW_DEFAULT_STAFF_PASSWORDS' 'false'
+  Write-Ok 'PUBLIC_SITE=true dan ALLOW_DEFAULT_STAFF_PASSWORDS=false ditulis ke .env.'
+
+  $sessionSecret = Get-EnvValue $envPath 'APP_SESSION_SECRET'
+  if ([string]::IsNullOrWhiteSpace($sessionSecret)) {
+    $secretBytes = New-Object byte[] 48
+    $secretRng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $secretRng.GetBytes($secretBytes) } finally { $secretRng.Dispose() }
+    $sessionSecret = [Convert]::ToBase64String($secretBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+    Set-EnvValue $envPath 'APP_SESSION_SECRET' $sessionSecret
+    Write-Ok 'APP_SESSION_SECRET dibuat otomatis (48 karakter, tidak dicetak).'
+    $sessionSecret = $null
+    $secretBytes = $null
+  } else {
+    Write-Ok 'APP_SESSION_SECRET sudah terisi (nilai tidak dicetak).'
+  }
+}
+
+if ($ConfigurePbAdmin -or $EnablePublicSite) {
+  $pbAdminEmailValue = Get-EnvValue $envPath 'PB_ADMIN_EMAIL'
+  $pbAdminPassValue = Get-EnvValue $envPath 'PB_ADMIN_PASSWORD'
+  $pbAdminIncomplete = [string]::IsNullOrWhiteSpace($pbAdminEmailValue) -or [string]::IsNullOrWhiteSpace($pbAdminPassValue)
+  if ($pbAdminIncomplete) {
+    if (-not $ConfigurePbAdmin) {
+      Fail 'PB_ADMIN_EMAIL/PB_ADMIN_PASSWORD kosong. Jalankan ulang dengan -ConfigurePbAdmin agar nilainya ditanyakan (tidak dicetak).'
+    }
+    if ([string]::IsNullOrWhiteSpace($pbAdminEmailValue)) {
+      $pbAdminEmailValue = Read-Host -Prompt '   PB_ADMIN_EMAIL (superuser PocketBase)'
+      if ([string]::IsNullOrWhiteSpace($pbAdminEmailValue)) { Fail 'PB_ADMIN_EMAIL tidak boleh kosong.' }
+      Set-EnvValue $envPath 'PB_ADMIN_EMAIL' $pbAdminEmailValue.Trim()
+      Write-Ok 'PB_ADMIN_EMAIL disimpan.'
+    }
+    if ([string]::IsNullOrWhiteSpace($pbAdminPassValue)) {
+      $pbAdminPassValue = Read-PlainSecret '   PB_ADMIN_PASSWORD (input tersembunyi)'
+      if ([string]::IsNullOrWhiteSpace($pbAdminPassValue)) { Fail 'PB_ADMIN_PASSWORD tidak boleh kosong.' }
+      Set-EnvValue $envPath 'PB_ADMIN_PASSWORD' $pbAdminPassValue
+      Write-Ok 'PB_ADMIN_PASSWORD disimpan (nilai tidak dicetak).'
+    }
+  } else {
+    Write-Ok 'PB_ADMIN_EMAIL dan PB_ADMIN_PASSWORD sudah terisi (nilai tidak dicetak).'
+  }
+  $pbAdminEmailValue = $null
+  $pbAdminPassValue = $null
+}
+
+if ($RotateDevPassword) {
+  if ($DevPasswordLength -lt 8) { Fail '-DevPasswordLength minimal 8 karakter.' }
+  $setPassScript = Join-Path $AppDir 'scripts\set-dev-password.mjs'
+  if (-not (Test-Path -LiteralPath $setPassScript)) {
+    Fail "Skrip $setPassScript tidak ditemukan; pastikan source terbaru sudah tersalin."
+  }
+  $nodeExe = (Get-Command node).Source
+  $plainPassword = New-RandomPassword $DevPasswordLength
+  try {
+    $passwordBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($plainPassword))
+    $hashExit = 0
+    $previousEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+      # Password dikirim lewat stdin (base64) agar tidak terlihat di daftar proses.
+      $passwordBase64 | & $nodeExe $setPassScript --env $envPath --stdin --base64 --min-length $DevPasswordLength --no-backup 2>&1 |
+        ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
+      $hashExit = $LASTEXITCODE
+    } finally {
+      $ErrorActionPreference = $previousEap
+    }
+    if ($hashExit -ne 0) { Fail 'Gagal menyimpan hash password DEVELOPER (lihat pesan di atas).' }
+
+    $newHash = Get-EnvValue $envPath 'DEV_PASSWORD_HASH'
+    if ([string]::IsNullOrWhiteSpace($newHash) -or $newHash -notmatch '^scrypt\$') {
+      Fail 'DEV_PASSWORD_HASH tidak terbentuk dengan format scrypt.'
+    }
+    foreach ($legacyKey in @('DEV_PASSWORD', 'JOURNAL_DEV_PASSWORD')) {
+      if (-not [string]::IsNullOrWhiteSpace((Get-EnvValue $envPath $legacyKey))) {
+        Write-Warn2 "$legacyKey masih aktif di .env; nonaktifkan manual."
+      }
+    }
+
+    $secretDir = Join-Path $AppDir 'secrets'
+    New-Item -ItemType Directory -Path $secretDir -Force | Out-Null
+    $secretFile = Join-Path $secretDir "developer-password-$Stamp.txt"
+    $secretText = @(
+      'BEJO Digital Print - password DEVELOPER hasil rotasi',
+      "Waktu   : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')",
+      "Panjang : $DevPasswordLength karakter",
+      'Catatan : simpan ke password manager, lalu hapus file ini.',
+      '',
+      $plainPassword,
+      ''
+    ) -join "`r`n"
+    [System.IO.File]::WriteAllText($secretFile, $secretText, (New-Object System.Text.UTF8Encoding($false)))
+    Protect-SecretFile $secretFile
+    Write-Ok 'Password DEVELOPER baru tersimpan sebagai hash scrypt di .env.'
+    Write-Ok "Plaintext hanya ada di file terlindungi: $secretFile"
+    Write-Warn2 'Buka file lewat RDP, simpan ke password manager, lalu hapus file tersebut.'
+  } finally {
+    $plainPassword = $null
+    $passwordBase64 = $null
+    $secretText = $null
+    [GC]::Collect()
+  }
+}
+
+if ($PurgePlaintextEnvBackups) {
+  $envBackupDirs = @((Join-Path $AppDir 'backups'), $BackupRoot)
+  [void](Remove-PlaintextEnvBackups -Directories $envBackupDirs -Confirmed ([bool]$Force))
+}
 
 # ----------------------------------------------------------- env check
 Write-Step '2/8 Validasi konfigurasi .env'
@@ -982,6 +1273,22 @@ if ($caddySvc) { $caddyStatusText = [string]$caddySvc.Status }
 $pbStatusText = 'tidak terdaftar'
 if ($pbService) { $pbStatusText = [string](Get-Service -Name 'PocketBase' -ErrorAction SilentlyContinue).Status }
 
+# Pemeriksaan akhir: pastikan tidak ada backup .env plaintext tertinggal.
+if ($PurgePlaintextEnvBackups) {
+  $remainingEnvBackups = @()
+  foreach ($dir in @((Join-Path $AppDir 'backups'), $BackupRoot)) {
+    if (-not (Test-Path -LiteralPath $dir)) { continue }
+    $remainingEnvBackups += @(
+      Get-ChildItem -LiteralPath $dir -File -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { Test-EnvBackupName $_.Name } |
+        ForEach-Object { $_.FullName }
+    )
+  }
+  $envBackupText = if ($remainingEnvBackups.Count -eq 0) { 'tidak ada' } else { "$($remainingEnvBackups.Count) tersisa" }
+} else {
+  $envBackupText = 'pembersihan tidak diminta'
+}
+
 Write-Host ''
 Write-Host '==================================================================' -ForegroundColor DarkCyan
 Write-Host ' RINGKASAN DEPLOY' -ForegroundColor Cyan
@@ -997,10 +1304,22 @@ if ($publicBase) {
 } else {
   Write-Host '   Domain publik     : tidak tersedia'
 }
+if ($EnablePublicSite) { Write-Host '   Mode publik       : PUBLIC_SITE=true, ALLOW_DEFAULT_STAFF_PASSWORDS=false' }
+if ($RotateDevPassword) { Write-Host "   Password DEVELOPER: dirotasi ($DevPasswordLength karakter, hash scrypt)" }
+if ($PurgePlaintextEnvBackups) { Write-Host "   Backup .env plain : $envBackupText" }
 if ($distBackup) { Write-Host "   Backup dist       : $distBackup" }
 Write-Host "   Log aplikasi      : $AppDir\logs\stderr.log"
 Write-Host '==================================================================' -ForegroundColor DarkCyan
 Write-Host ''
+
+if ($publicSite) {
+  Write-Host ' LANGKAH WAJIB SETELAH DEPLOY' -ForegroundColor Yellow
+  Write-Host '   1. Login sebagai DEVELOPER memakai password baru dari file secrets.' -ForegroundColor Yellow
+  Write-Host '   2. Buka menu Pengguna dan ganti password SEMUA staf.' -ForegroundColor Yellow
+  Write-Host '   3. Login publik menolak WEAK_PASSWORD sampai password default diganti.' -ForegroundColor Yellow
+  Write-Host '   4. Simpan password ke password manager lalu hapus file secrets.' -ForegroundColor Yellow
+  Write-Host ''
+}
 
 if ($exitCode -eq 0) {
   Write-Ok 'DEPLOY SELESAI DAN TERVERIFIKASI.'

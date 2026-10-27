@@ -3,6 +3,8 @@ node_modules/
 dist/
 backups/
 .env
+# File password hasil rotasi (plaintext sementara, jangan di-commit)
+secrets/
 *.log
 # Token OAuth hasil refresh (rahasia, jangan di-commit)
 data/shopee-tokens.json

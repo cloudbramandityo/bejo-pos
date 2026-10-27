@@ -397,7 +397,45 @@ export async function restoreBackupToCloud(
   }
   addArray('Mutasi Stok', data.stockTransactions, saveStockTransactionCloud);
   addArray('Kasir', data.cashiers, saveCashierCloud);
-  addArray('Pengguna', data.users, saveUserCloud);
+  if (Array.isArray(data.users) && data.users.length > 0) {
+    tasks.push({
+      label: 'Pengguna',
+      records: data.users.map((u: any) => {
+        const sanitized: any = { ...u };
+        // Pastikan username valid
+        if (typeof sanitized.username === 'string') {
+          sanitized.username = sanitized.username.trim().toLowerCase();
+        }
+        // Pastikan password minimal 8 karakter jika ada
+        if (typeof sanitized.password === 'string') {
+          if (sanitized.password.length < 8) {
+            // Jangan kirim password kosong/tidak valid, biarkan server handle
+            // atau ganti dengan placeholder - tapi lebih baik hapus agar server minta password
+            delete sanitized.password;
+            delete sanitized.appPassword;
+          } else if (/^\u2022+$/.test(sanitized.password)) {
+            // Mask password, hapus agar tidak mengubah
+            delete sanitized.password;
+            delete sanitized.appPassword;
+          }
+        } else {
+          delete sanitized.password;
+          delete sanitized.appPassword;
+        }
+        // Pastikan role valid
+        if (typeof sanitized.role === 'string') {
+          sanitized.role = sanitized.role.trim().toUpperCase();
+          if (sanitized.role === 'DEVELOPER') sanitized.role = 'ADMIN';
+        }
+        // Pastikan name ada
+        if (!sanitized.name || String(sanitized.name).trim().length < 3) {
+          sanitized.name = sanitized.username || sanitized.id || 'User';
+        }
+        return sanitized;
+      }),
+      save: saveUserCloud,
+    });
+  }
   addArray('Log Aktivitas', data.activityLogs, saveActivityLogCloud);
   addArray('SPK', data.spkOrders, saveSpkOrderCloud);
   addArray('Mesin', data.machines, saveMachineCloud);

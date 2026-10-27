@@ -1,4 +1,3 @@
-import { getDeveloperAccess } from '../utils/authSecurity';
 import type { JournalSettings } from '../utils/journalStorage';
 
 export type JurnalHalaman = 'kas_utama' | 'debit' | 'kredit';
@@ -70,50 +69,14 @@ export async function getJournalSession(): Promise<JournalSessionInfo> {
   };
 }
 
-export async function openJournalSession(
-  username: string,
-  password: string
-): Promise<{ username: string; expiresAt: string }> {
-  const data = await request<{ success: true; username: string; expiresAt: string }>(
-    '/api/journal/session',
-    {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    }
-  );
-  return { username: data.username, expiresAt: data.expiresAt };
-}
-
 export async function ensureJournalSession(): Promise<JournalSessionInfo> {
   const info = await getJournalSession();
   if (info.authenticated) return info;
 
-  if (!info.configured.developerLogin) {
-    throw new JournalApiError(
-      'JOURNAL_DEV_PASSWORD belum disetel di server. Lengkapi .env VPS lalu restart layanan.',
-      503
-    );
-  }
-  if (!info.configured.sessionSecret) {
-    throw new JournalApiError(
-      'JOURNAL_SESSION_SECRET (atau PB_ADMIN_PASSWORD) belum disetel di server.',
-      503
-    );
-  }
-
-  const access = getDeveloperAccess();
-  try {
-    const session = await openJournalSession(access.username, access.password);
-    return { ...info, authenticated: true, username: session.username };
-  } catch (error) {
-    if (error instanceof JournalApiError && error.status === 401) {
-      throw new JournalApiError(
-        'Kredensial DEVELOPER di server belum cocok dengan akun aplikasi. Periksa JOURNAL_DEV_USER / JOURNAL_DEV_PASSWORD di .env VPS.',
-        401
-      );
-    }
-    throw error;
-  }
+  throw new JournalApiError(
+    'Sesi DEVELOPER tidak aktif. Login ulang sebagai DEVELOPER untuk membuka modul Jurnal.',
+    401
+  );
 }
 
 export async function withJournalSession<T>(action: () => Promise<T>): Promise<T> {
@@ -126,10 +89,6 @@ export async function withJournalSession<T>(action: () => Promise<T>): Promise<T
     }
     throw error;
   }
-}
-
-export async function closeJournalSession(): Promise<void> {
-  await request('/api/journal/session', { method: 'DELETE' });
 }
 
 export async function loadJournalConfig(): Promise<JournalConfigResponse> {

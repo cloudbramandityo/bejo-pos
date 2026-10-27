@@ -751,8 +751,8 @@ export const ShiftScreen: React.FC<ShiftScreenProps> = ({
       <CashierModal
         isOpen={isCashierModalOpen}
         onClose={() => setIsCashierModalOpen(false)}
-        cashier={editingCashier}
-        onSave={onSaveCashier}
+        cashierToEdit={editingCashier}
+        onSaveCashier={onSaveCashier}
       />
     </div>
   );

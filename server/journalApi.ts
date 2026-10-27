@@ -59,9 +59,10 @@ function journalConfig() {
     pbUrl: env('POCKETBASE_UPSTREAM') || 'http://127.0.0.1:8090',
     adminEmail,
     adminPassword,
-    devUser: env('JOURNAL_DEV_USER') || 'langgo',
-    devPassword: env('JOURNAL_DEV_PASSWORD'),
-    sessionSecret: env('JOURNAL_SESSION_SECRET') || adminPassword || env('REMOTE_ACCESS_PASS'),
+    devUser: env('DEV_USERNAME') || env('JOURNAL_DEV_USER') || 'langgo',
+    devPassword: env('DEV_PASSWORD') || env('JOURNAL_DEV_PASSWORD'),
+    sessionSecret:
+      env('APP_SESSION_SECRET') || env('JOURNAL_SESSION_SECRET') || adminPassword,
   };
 }
 
@@ -91,7 +92,8 @@ function isHttps(req: Request): boolean {
 
 function setSessionCookie(req: Request, res: Response, token: string): void {
   const secure = isHttps(req) ? '; Secure' : '';
-  res.setHeader(
+  // append (bukan setHeader) agar tidak menimpa cookie sesi developer.
+  res.append(
     'Set-Cookie',
     `${COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL_SECONDS}${secure}`
   );
@@ -99,10 +101,31 @@ function setSessionCookie(req: Request, res: Response, token: string): void {
 
 function clearSessionCookie(req: Request, res: Response): void {
   const secure = isHttps(req) ? '; Secure' : '';
-  res.setHeader(
+  res.append(
     'Set-Cookie',
     `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`
   );
+}
+
+/**
+ * Membuat cookie sesi Jurnal tanpa login kedua.
+ * Dipanggil modul auth developer setelah kredensial diverifikasi server.
+ * Mengembalikan false bila secret Jurnal belum dikonfigurasi.
+ */
+export function issueJournalDeveloperSession(
+  req: Request,
+  res: Response,
+  username: string
+): boolean {
+  const config = journalConfig();
+  if (!config.sessionSecret) return false;
+  const exp = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
+  setSessionCookie(req, res, signSession({ sub: username, role: 'DEVELOPER', exp }, config.sessionSecret));
+  return true;
+}
+
+export function clearJournalDeveloperSession(req: Request, res: Response): void {
+  clearSessionCookie(req, res);
 }
 
 function signSession(payload: SessionPayload, secret: string): string {
@@ -148,8 +171,18 @@ function requireDeveloper(req: Request): SessionPayload {
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 
 function clientIp(req: Request): string {
-  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  return forwarded || req.socket.remoteAddress || 'unknown';
+  const socketIp = String(req.socket.remoteAddress || '').replace('::ffff:', '');
+  const forwarded = String(req.headers['x-forwarded-for'] || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  // Entri terakhir ditambahkan proxy terdekat (Caddy), jadi tidak bisa
+  // dipalsukan lewat header kiriman klien.
+  if (forwarded.length > 0 && (socketIp === '127.0.0.1' || socketIp === '::1')) {
+    return forwarded[forwarded.length - 1];
+  }
+  return socketIp || 'unknown';
 }
 
 function checkLoginRate(ip: string): void {

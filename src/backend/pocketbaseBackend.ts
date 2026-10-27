@@ -117,20 +117,11 @@ export const isFirestoreQuotaExceeded = isPocketBaseUnavailable;
 /*  Autentikasi PocketBase                                                    */
 /* -------------------------------------------------------------------------- */
 /**
- * Kredensial user sinkronisasi (service account) yang dipakai aplikasi agar
- * seluruh client (kasir, admin, developer) dapat membaca/menulis basis data.
- * Di-set di .env:
- *   PB_SYNC_EMAIL=...
- *   PB_SYNC_PASSWORD=...
- *
- * Bila kosong, aplikasi mencoba memakai akun yang sedang login; bila gagal,
+ * Kredensial akun sinkronisasi TIDAK lagi ditanam di bundle browser.
+ * Browser meminta token lewat POST /api/pocketbase/session; server yang menyimpan
+ * PB_SYNC_EMAIL / PB_SYNC_PASSWORD. Bila server/PocketBase tidak terjangkau,
  * aplikasi otomatis masuk ke Mode Lokal.
  */
-const SYNC_EMAIL = (import.meta.env.VITE_PB_SYNC_EMAIL as string) || '';
-const SYNC_PASSWORD = (import.meta.env.VITE_PB_SYNC_PASSWORD as string) || '';
-const GUEST_EMAIL = (import.meta.env.VITE_PB_GUEST_EMAIL as string) || 'sync@bejo.local';
-const GUEST_PASSWORD = (import.meta.env.VITE_PB_GUEST_PASSWORD as string) || 'sync_password_bejo_2026';
-
 export let authReady: Promise<void> = Promise.resolve();
 
 async function performAuth(): Promise<void> {
@@ -144,27 +135,16 @@ async function performAuth(): Promise<void> {
       }
     }
     if (!pb.authStore.isValid) {
-      if (SYNC_EMAIL && SYNC_PASSWORD) {
-        await pb.collection('users').authWithPassword(SYNC_EMAIL, SYNC_PASSWORD);
-      } else {
-        try {
-          await pb.collection('users').authWithPassword(GUEST_EMAIL, GUEST_PASSWORD);
-        } catch {
-          try {
-            await pb.collection('users').create({
-              email: GUEST_EMAIL,
-              password: GUEST_PASSWORD,
-              passwordConfirm: GUEST_PASSWORD,
-              name: 'Bejo Sync Service',
-              role: 'developer',
-              isActive: true,
-            });
-            await pb.collection('users').authWithPassword(GUEST_EMAIL, GUEST_PASSWORD);
-          } catch {
-            /* biarkan; operasi cloud akan fallback ke mode lokal */
-          }
-        }
+      const response = await fetch('/api/pocketbase/session', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.token || !data?.record) {
+        throw new Error(data?.error || `Sesi PocketBase gagal dibuat (HTTP ${response.status}).`);
       }
+      pb.authStore.save(data.token, data.record);
     }
     isCloudUnavailable = false;
     console.log('[PocketBase] Terhubung & terautentikasi.');

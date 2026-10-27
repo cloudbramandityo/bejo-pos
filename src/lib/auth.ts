@@ -15,7 +15,7 @@ export interface AppUser {
 /**
  * Wrapper autentikasi PocketBase.
  * - `signInWithEmail` : login user nyata (email + password)
- * - `signInAnonymously`: memakai akun sinkronisasi bersama (fallback)
+ * - `signInAnonymously`: meminta token akun sinkronisasi dari server
  * - `signOut`         : keluar & hapus token
  */
 export const auth = {
@@ -73,32 +73,25 @@ export const auth = {
     })) as unknown as RecordModel;
   },
 
-  /** Login memakai akun sinkronisasi bersama */
+  /** Login memakai akun sinkronisasi bersama (diverifikasi server) */
   async signInAnonymously(): Promise<RecordModel | null> {
     const pb = getPB();
-    const email =
-      (import.meta.env.VITE_PB_SYNC_EMAIL as string) || 'sync@bejo.local';
-    const password =
-      (import.meta.env.VITE_PB_SYNC_PASSWORD as string) || 'sync_password_bejo_2026';
     try {
-      const authData = await pb.collection('users').authWithPassword(email, password);
-      return authData.record;
-    } catch {
-      try {
-        await pb.collection('users').create({
-          email,
-          password,
-          passwordConfirm: password,
-          name: 'Bejo Sync Service',
-          role: 'developer',
-          isActive: true,
-        });
-        const authData = await pb.collection('users').authWithPassword(email, password);
-        return authData.record;
-      } catch (err) {
-        console.warn('[Auth] Login sinkronisasi gagal:', err);
+      const response = await fetch('/api/pocketbase/session', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.token || !data?.record) {
+        console.warn('[Auth] Sesi sinkronisasi tidak tersedia:', data?.error || response.status);
         return null;
       }
+      pb.authStore.save(data.token, data.record);
+      return data.record as RecordModel;
+    } catch (err) {
+      console.warn('[Auth] Login sinkronisasi gagal:', err);
+      return null;
     }
   },
 

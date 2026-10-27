@@ -2,10 +2,13 @@ import express from "express";
 import fs from "fs";
 import path from "path";
 import http from "http";
+import crypto from "crypto";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import { registerMarketingRoutes } from "./server/marketingApi";
 import { registerJournalRoutes } from "./server/journalApi";
+import { registerDevAuthRoutes } from "./server/devAuth";
+import { registerPbSessionRoutes } from "./server/pbSession";
 import {
   registerLandingRoutes,
   getPublishedLandingIdentity,
@@ -50,7 +53,13 @@ const REMOTE_ACCESS_ENABLED = REMOTE_ACCESS_PASS.length > 0;
 
 // IP lokal & LAN tidak perlu login tambahan (sudah terlindungi jaringan fisik).
 function isLocalRequest(req: express.Request): boolean {
-  const ip = (req.ip || req.socket.remoteAddress || '').replace('::ffff:', '');
+  const direct = (req.socket.remoteAddress || '').replace('::ffff:', '');
+  // Hanya percayai X-Forwarded-For bila koneksi berasal dari reverse proxy lokal.
+  // Koneksi langsung dari internet tidak boleh memalsukan IP lewat header.
+  const ip = (direct === '127.0.0.1' || direct === '::1' ? req.ip || direct : direct).replace(
+    '::ffff:',
+    ''
+  );
   return (
     ip === '127.0.0.1' ||
     ip === '::1' ||
@@ -72,26 +81,21 @@ function isLocalHostName(req: express.Request): boolean {
   );
 }
 
-// Header khas Cloudflare Tunnel / reverse proxy Ã¢â‚¬â€ penanda pasti akses dari internet.
-function hasTunnelHeaders(req: express.Request): boolean {
-  return Boolean(
-    req.headers['cf-connecting-ip'] ||
-    req.headers['cf-ray'] ||
-    req.headers['cf-visitor'] ||
-    req.headers['x-forwarded-for']
-  );
+// Perbandingan waktu tetap untuk kredensial Basic Auth.
+function timingSafeEqualStrings(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
 /**
  * Menentukan apakah request WAJIB melewati login.
- * PENTING: cloudflared meneruskan request dari 127.0.0.1, sehingga deteksi
- * berbasis IP saja tidak cukup Ã¢â‚¬â€ header terowongan ikut diperiksa.
+ * Hanya request dari jaringan lokal (socket/IP setelah proxy) DENGAN hostname
+ * lokal/LAN yang dianggap aman. Header terowongan TIDAK dipakai sendiri karena
+ * Caddy selalu menambahkan X-Forwarded-For, termasuk untuk akses LAN.
  */
 function needsRemoteAuth(req: express.Request): boolean {
-  if (hasTunnelHeaders(req)) return true;   // datang lewat terowongan internet
-  if (!isLocalRequest(req)) return true;    // socket bukan dari jaringan lokal
-  if (!isLocalHostName(req)) return true;   // hostname bukan lokal/LAN
-  return false;
+  return !(isLocalRequest(req) && isLocalHostName(req));
 }
 
 if (REMOTE_ACCESS_ENABLED) {
@@ -104,13 +108,14 @@ if (REMOTE_ACCESS_ENABLED) {
     if (scheme === 'Basic' && encoded) {
       const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
       const sepIndex = decoded.indexOf(':');
-      const user = decoded.slice(0, sepIndex);
-      const pass = decoded.slice(sepIndex + 1);
+      if (sepIndex >= 0) {
+        const user = decoded.slice(0, sepIndex);
+        const pass = decoded.slice(sepIndex + 1);
 
-      // Perbandingan panjang tetap untuk mengurangi risiko timing attack
-      const userOk = user.length === REMOTE_ACCESS_USER.length && user === REMOTE_ACCESS_USER;
-      const passOk = pass.length === REMOTE_ACCESS_PASS.length && pass === REMOTE_ACCESS_PASS;
-      if (userOk && passOk) return next();
+        const userOk = timingSafeEqualStrings(user, REMOTE_ACCESS_USER);
+        const passOk = timingSafeEqualStrings(pass, REMOTE_ACCESS_PASS);
+        if (userOk && passOk) return next();
+      }
     }
 
     res.setHeader('WWW-Authenticate', 'Basic realm="Bejo Stiker POS - Akses Terbatas", charset="UTF-8"');
@@ -125,7 +130,21 @@ if (REMOTE_ACCESS_ENABLED) {
   });
   console.log('[Keamanan] Proteksi akses jaringan luar AKTIF (user: ' + REMOTE_ACCESS_USER + ').');
 } else {
-  console.log('[Keamanan] Proteksi akses luar NONAKTIF Ã¢â‚¬â€ set REMOTE_ACCESS_PASS di .env untuk mengaktifkan.');
+  // Fail-closed: tanpa REMOTE_ACCESS_PASS, akses dari internet ditolak total.
+  // Hanya localhost/LAN yang boleh masuk.
+  app.use((req, res, next) => {
+    if (!needsRemoteAuth(req)) return next();
+    res.status(403).type('html').send(
+      '<!doctype html><html lang="id"><head><meta charset="utf-8">' +
+      '<title>Akses Internet Dinonaktifkan</title></head><body style="font-family:system-ui;' +
+      'display:flex;align-items:center;justify-content:center;height:100vh;margin:0;' +
+      'background:#0f172a;color:#e2e8f0"><div style="text-align:center;max-width:420px;padding:24px">' +
+      '<h1 style="font-size:20px">Akses Internet Dinonaktifkan</h1>' +
+      '<p style="font-size:13px;color:#94a3b8">Administrator server belum mengatur REMOTE_ACCESS_PASS. ' +
+      'Aplikasi hanya dapat diakses dari jaringan lokal.</p></div></body></html>'
+    );
+  });
+  console.warn('[Keamanan] REMOTE_ACCESS_PASS belum disetel: akses internet DITOLAK (hanya localhost/LAN).');
 }
 
 app.use(express.json({ limit: "100mb" }));
@@ -929,49 +948,76 @@ async function ensureDataDirExists() {
 
 // Helper: Membaca database invoice dari disk saat startup
 async function loadServerInvoicesFromDisk() {
-  try {
-    await ensureDataDirExists();
-    const fs = await import("fs/promises");
-    try {
-      const data = await fs.readFile(INVOICES_DATA_FILE, 'utf-8');
-      const parsed = JSON.parse(data);
-      serverInvoices = Array.isArray(parsed) ? parsed : [];
-    } catch {
-      serverInvoices = [];
-    }
+  await ensureDataDirExists();
+  const fs = await import("fs/promises");
 
-    try {
-      const identityData = await fs.readFile(INVOICE_STORE_IDENTITY_FILE, 'utf-8');
-      serverInvoiceIdentity = JSON.parse(identityData);
-    } catch {
-      serverInvoiceIdentity = null;
+  try {
+    const data = await fs.readFile(INVOICES_DATA_FILE, 'utf-8');
+    const parsed = JSON.parse(data);
+    if (!Array.isArray(parsed)) throw new Error('Format database invoice bukan array.');
+    serverInvoices = parsed;
+  } catch (err: any) {
+    serverInvoices = [];
+    if (err?.code !== 'ENOENT') {
+      // Jangan pernah menimpa file yang rusak: pindahkan dulu agar bisa dipulihkan manual.
+      const corruptPath = `${INVOICES_DATA_FILE}.corrupt-${Date.now()}`;
+      try {
+        await fs.rename(INVOICES_DATA_FILE, corruptPath);
+        console.error(`[Invoice Storage] Database invoice tidak valid. Salinan disimpan di ${corruptPath}.`, err);
+      } catch (renameErr) {
+        console.error('[Invoice Storage] Database invoice tidak valid dan gagal dipindahkan. Penulisan ditahan.', err, renameErr);
+        throw renameErr;
+      }
     }
-  } catch (err) {
-    console.warn("[Invoice Storage] Notice on disk load:", err);
+  }
+
+  try {
+    const identityData = await fs.readFile(INVOICE_STORE_IDENTITY_FILE, 'utf-8');
+    serverInvoiceIdentity = JSON.parse(identityData);
+  } catch (err: any) {
+    serverInvoiceIdentity = null;
+    if (err?.code !== 'ENOENT') {
+      console.warn('[Invoice Storage] Identitas toko tidak valid, memakai identitas lokal:', err?.message || err);
+    }
   }
 }
 
-loadServerInvoicesFromDisk();
+const invoicesReady = loadServerInvoicesFromDisk();
 
-// Helper: Menyimpan database invoice ke disk secara asinkron
-async function persistServerInvoicesToDisk() {
-  try {
+// Helper: Menyimpan database invoice ke disk secara atomik & berurutan
+async function atomicWriteJson(filePath: string, data: unknown): Promise<void> {
+  const fs = await import("fs/promises");
+  const tempPath = `${filePath}.tmp`;
+  await fs.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf-8');
+  await fs.rename(tempPath, filePath);
+}
+
+let invoicePersistQueue: Promise<void> = Promise.resolve();
+
+// Pemanggil menerima kegagalan tulis (agar API bisa merespons error), tetapi
+// antrean tetap sehat sehingga penulisan berikutnya tidak ikut gagal.
+function persistServerInvoicesToDisk(): Promise<void> {
+  const task = invoicePersistQueue.then(async () => {
     await ensureDataDirExists();
-    const fs = await import("fs/promises");
-    await fs.writeFile(INVOICES_DATA_FILE, JSON.stringify(serverInvoices, null, 2), 'utf-8');
-  } catch (err) {
+    await atomicWriteJson(INVOICES_DATA_FILE, serverInvoices);
+  });
+  invoicePersistQueue = task.catch((err) => {
     console.error("[Invoice Storage] Failed to persist to disk:", err);
-  }
+  });
+  return task;
 }
 
-async function persistServerInvoiceIdentityToDisk() {
-  try {
+let invoiceIdentityPersistQueue: Promise<void> = Promise.resolve();
+
+function persistServerInvoiceIdentityToDisk(): Promise<void> {
+  const task = invoiceIdentityPersistQueue.then(async () => {
     await ensureDataDirExists();
-    const fs = await import("fs/promises");
-    await fs.writeFile(INVOICE_STORE_IDENTITY_FILE, JSON.stringify(serverInvoiceIdentity, null, 2), 'utf-8');
-  } catch (err) {
+    await atomicWriteJson(INVOICE_STORE_IDENTITY_FILE, serverInvoiceIdentity);
+  });
+  invoiceIdentityPersistQueue = task.catch((err) => {
     console.error("[Invoice Storage] Failed to persist store identity:", err);
-  }
+  });
+  return task;
 }
 
 // Sanitizer string untuk mencegah serangan injeksi dan script berbahaya
@@ -1078,6 +1124,21 @@ function generateSequentialNumber(type: 'PROFORMA' | 'COMMERCIAL', customPrefix?
   return `${pattern}${nextSeqStr}${cleanSuffix}`;
 }
 
+// Tunggu database invoice selesai dimuat sebelum melayani request invoice.
+app.use("/api/invoices", async (_req, res, next) => {
+  try {
+    await invoicesReady;
+  } catch (err) {
+    console.error('[Invoice Storage] Database invoice gagal dimuat:', err);
+    res.status(503).json({
+      success: false,
+      error: 'Database invoice gagal dimuat. Periksa file data/invoices_db.json di server.'
+    });
+    return;
+  }
+  next();
+});
+
 // 1. API: Ambil Daftar Invoice (Filter by Type, Status, Search)
 app.get("/api/invoices", (req, res) => {
   try {
@@ -1126,7 +1187,16 @@ app.get("/api/invoices/next-number", (req, res) => {
   }
 });
 
-// 3. API: Detail 1 Invoice
+// 3. API: Identitas Toko Penerbit Invoice (Kop Surat, No. Rekening, Logo)
+// Didaftarkan sebelum route /:id agar tidak tertangkap sebagai ID invoice.
+app.get("/api/invoices/store-identity", (req, res) => {
+  res.json({
+    success: true,
+    identity: serverInvoiceIdentity
+  });
+});
+
+// 4. API: Detail 1 Invoice
 app.get("/api/invoices/:id", (req, res) => {
   const found = serverInvoices.find(inv => inv.id === req.params.id);
   if (!found) {
@@ -1137,7 +1207,7 @@ app.get("/api/invoices/:id", (req, res) => {
 });
 
 // 4. API: Buat Proforma Invoice atau Commercial Invoice Baru
-app.post("/api/invoices", (req, res) => {
+app.post("/api/invoices", async (req, res) => {
   try {
     const body = req.body || {};
     const docType: 'PROFORMA' | 'COMMERCIAL' = body.documentType === 'COMMERCIAL' ? 'COMMERCIAL' : 'PROFORMA';
@@ -1225,7 +1295,7 @@ app.post("/api/invoices", (req, res) => {
     };
 
     serverInvoices.unshift(newInvoice);
-    persistServerInvoicesToDisk();
+    await persistServerInvoicesToDisk();
 
     res.status(201).json({
       success: true,
@@ -1239,7 +1309,7 @@ app.post("/api/invoices", (req, res) => {
 
 // 5. API: Konversi Otomatis dari Proforma Invoice (PI) ke Invoice Final (INV)
 // Endpoint krusial yang menduplikasi rincian PI menjadi faktur resmi bernomor urut
-app.post("/api/invoices/:id/convert-to-final", (req, res) => {
+app.post("/api/invoices/:id/convert-to-final", async (req, res) => {
   try {
     const proforma = serverInvoices.find(inv => inv.id === req.params.id);
     if (!proforma) {
@@ -1384,7 +1454,7 @@ app.post("/api/invoices/:id/convert-to-final", (req, res) => {
 
     // Masukkan invoice baru ke daftar
     serverInvoices.unshift(commercialInvoice);
-    persistServerInvoicesToDisk();
+    await persistServerInvoicesToDisk();
 
     res.json({
       success: true,
@@ -1398,7 +1468,7 @@ app.post("/api/invoices/:id/convert-to-final", (req, res) => {
 });
 
 // 6. API: Catat Pembayaran Uang Muka (DP) atau Pelunasan Sisa Tagihan
-app.post("/api/invoices/:id/payments", (req, res) => {
+app.post("/api/invoices/:id/payments", async (req, res) => {
   try {
     const invoice = serverInvoices.find(inv => inv.id === req.params.id);
     if (!invoice) {
@@ -1445,7 +1515,7 @@ app.post("/api/invoices/:id/payments", (req, res) => {
     }
     invoice.updatedAt = Date.now();
 
-    persistServerInvoicesToDisk();
+    await persistServerInvoicesToDisk();
 
     res.json({
       success: true,
@@ -1459,7 +1529,7 @@ app.post("/api/invoices/:id/payments", (req, res) => {
 });
 
 // 7. API: Update Dokumen (Hanya untuk Draf / Proforma yang belum terkunci)
-app.put("/api/invoices/:id", (req, res) => {
+app.put("/api/invoices/:id", async (req, res) => {
   try {
     const invoice = serverInvoices.find(inv => inv.id === req.params.id);
     if (!invoice) {
@@ -1530,7 +1600,7 @@ app.put("/api/invoices/:id", (req, res) => {
     invoice.balanceDue = financials.balanceDue;
     invoice.updatedAt = Date.now();
 
-    persistServerInvoicesToDisk();
+    await persistServerInvoicesToDisk();
 
     res.json({
       success: true,
@@ -1543,7 +1613,7 @@ app.put("/api/invoices/:id", (req, res) => {
 });
 
 // 8. API: Hapus Dokumen (Mendukung penghapusan status apa pun termasuk Lunas / Paid oleh Developer)
-app.delete("/api/invoices/:id", (req, res) => {
+app.delete("/api/invoices/:id", async (req, res) => {
   try {
     const idx = serverInvoices.findIndex(inv => inv.id === req.params.id);
     if (idx === -1) {
@@ -1591,7 +1661,7 @@ app.delete("/api/invoices/:id", (req, res) => {
     }
 
     serverInvoices.splice(idx, 1);
-    persistServerInvoicesToDisk();
+    await persistServerInvoicesToDisk();
 
     res.json({ success: true, message: `Dokumen ${target.documentNumber} (${target.status}) berhasil dihapus.` });
   } catch (err: any) {
@@ -1600,7 +1670,7 @@ app.delete("/api/invoices/:id", (req, res) => {
 });
 
 // 8b. API: Pembatalan Dokumen (Proforma / Invoice Final dengan Credit Note)
-app.post("/api/invoices/:id/cancel", (req, res) => {
+app.post("/api/invoices/:id/cancel", async (req, res) => {
   try {
     const invoice = serverInvoices.find(inv => inv.id === req.params.id);
     if (!invoice) {
@@ -1648,7 +1718,7 @@ app.post("/api/invoices/:id/cancel", (req, res) => {
       }
     }
 
-    persistServerInvoicesToDisk();
+    await persistServerInvoicesToDisk();
     res.json({ success: true, message: `Dokumen ${invoice.documentNumber} berhasil dibatalkan.`, invoice });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
@@ -1656,17 +1726,10 @@ app.post("/api/invoices/:id/cancel", (req, res) => {
 });
 
 // 9. API: Identitas Toko Penerbit Invoice (Kop Surat, No. Rekening, Logo)
-app.get("/api/invoices/store-identity", (req, res) => {
-  res.json({
-    success: true,
-    identity: serverInvoiceIdentity
-  });
-});
-
-app.post("/api/invoices/store-identity", (req, res) => {
+app.post("/api/invoices/store-identity", async (req, res) => {
   try {
     serverInvoiceIdentity = req.body;
-    persistServerInvoiceIdentityToDisk();
+    await persistServerInvoiceIdentityToDisk();
     res.json({
       success: true,
       message: "Identitas toko penerbit invoice berhasil diperbarui.",
@@ -1856,6 +1919,8 @@ process.on('uncaughtException', (err) => {
 });
 
 registerJournalRoutes(app);
+registerDevAuthRoutes(app);
+registerPbSessionRoutes(app);
 registerMarketingRoutes(app);
 registerLandingRoutes(app);
 

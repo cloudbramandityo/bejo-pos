@@ -1,53 +1,32 @@
 /**
  * Internal Security & Role Authentication Module
+ *
+ * Kredensial DEVELOPER diverifikasi oleh server (lihat server/devAuth.ts).
+ * File ini sengaja TIDAK menyimpan password apa pun; hanya identitas yang
+ * bukan rahasia dan dipakai untuk mencegah akun developer dibuat lewat UI.
  */
 import { AppUser } from '../types';
 
-// Obfuscated credential verification (prevents plaintext coding strings)
-const _D_U = [0x6c, 0x61, 0x6e, 0x67, 0x67, 0x6f]; // decoded dynamically
-const _D_P = [0x6e, 0x31, 0x6e, 0x65, 0x69, 0x73, 0x6d, 0x69, 0x6e, 0x65]; // decoded dynamically
-
-function _decodeBytes(bytes: number[]): string {
-  return String.fromCharCode(...bytes);
-}
-
-/**
- * Validates whether the provided username and password match the permanent developer credentials
- */
-export function verifyDeveloperCredentials(inputUser: string, inputPass: string): boolean {
-  if (!inputUser || !inputPass) return false;
-  const targetU = _decodeBytes(_D_U);
-  const targetP = _decodeBytes(_D_P);
-  return inputUser.trim().toLowerCase() === targetU && inputPass.trim() === targetP;
-}
-
-/**
- * Perangkat akses developer untuk pembuatan sesi Jurnal otomatis.
- * Hanya dipakai modul DEVELOPER; tidak untuk ditampilkan di UI.
- */
-export function getDeveloperAccess(): { username: string; password: string } {
-  return {
-    username: _decodeBytes(_D_U),
-    password: _decodeBytes(_D_P),
-  };
-}
+/** Username developer yang dicadangkan (bukan rahasia). */
+export const DEVELOPER_USERNAME = 'langgo';
 
 /**
  * Checks if a username is reserved by the core developer system
  */
 export function isReservedDeveloperUsername(inputUser: string): boolean {
   if (!inputUser) return false;
-  const targetU = _decodeBytes(_D_U);
-  return inputUser.trim().toLowerCase() === targetU;
+  return inputUser.trim().toLowerCase() === DEVELOPER_USERNAME;
 }
 
 /**
- * Returns the permanent developer user profile
+ * Returns the permanent developer user profile.
+ * `username` berasal dari sesi server agar tetap benar bila DEV_USERNAME diubah.
  */
-export function getPermanentDeveloperUser(): AppUser {
+export function getPermanentDeveloperUser(username: string = DEVELOPER_USERNAME): AppUser {
+  const cleanUsername = String(username || '').trim().toLowerCase() || DEVELOPER_USERNAME;
   return {
     id: 'sys_core_developer',
-    username: _decodeBytes(_D_U),
+    username: cleanUsername,
     password: '••••••••',
     name: 'Langgo (Developer on Duty)',
     role: 'DEVELOPER',

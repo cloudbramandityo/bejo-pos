@@ -13,12 +13,14 @@
     1. Preflight: admin, folder aplikasi, service, Node/npm, .env, PocketBase, Caddy
     2. Unduh source terbaru dari GitHub (branch main) atau pakai source lokal
     3. Salin source tanpa menyentuh .env, data/, logs/, backups/, node_modules/, dist/
-    4. Backup dist dan Caddyfile
-    5. npm ci + build produksi
-    6. Pasang Caddyfile (batas body 110MB) dan restart Caddy bila berubah
-    7. Restart service aplikasi, health check lokal, rollback otomatis bila gagal
-    8. Verifikasi live: service, PocketBase, DNS, HTTPS, dan APP_URL publik
-    9. Ringkasan hasil deploy
+    4. Validasi .env keamanan (REMOTE_ACCESS_PASS, kredensial developer, DSB.)
+    5. Perketat aturan akses koleksi PocketBase (--harden)
+    6. Backup dist dan Caddyfile, lalu pasang Caddyfile (batas body 110MB)
+    7. npm ci + build produksi
+    8. Restart service aplikasi, health check lokal, rollback otomatis bila gagal
+    9. Verifikasi lokal: service, Jurnal, auth developer, broker PocketBase, Marketing
+   10. Verifikasi live: DNS, HTTPS, APP_URL publik, identitas Landing
+   11. Ringkasan hasil deploy
 
   Data yang TIDAK disentuh:
     .env, data/, logs/, backups/, database PocketBase
@@ -30,6 +32,8 @@
     -Force                       Timpa perubahan lokal tracked (patch tetap dibackup)
     -SkipSourceUpdate            Pakai source lokal di VPS
     -SkipCaddy                   Jangan ubah/restart Caddy
+    -SkipPbHardening             Jangan perketat aturan akses koleksi PocketBase
+    -AllowLanOnly                Izinkan REMOTE_ACCESS_PASS kosong (akses internet ditolak)
     -SkipPublicCheck             Lewati verifikasi domain publik
     -SkipMarketingCheck          Lewati pemeriksaan endpoint Marketing
     -RequireMarketing            Exit code 2 bila kanal Marketing belum LIVE
@@ -37,7 +41,7 @@
 
   Exit code:
     0 sukses
-    1 deploy/health lokal gagal
+    1 deploy/health lokal/hardening gagal
     2 Marketing wajib belum LIVE
     3 verifikasi publik/DNS/HTTPS gagal
 =====================================================================
@@ -55,6 +59,8 @@ param(
   [string]$PublicUrl = '',
   [switch]$SkipSourceUpdate,
   [switch]$SkipCaddy,
+  [switch]$SkipPbHardening,
+  [switch]$AllowLanOnly,
   [switch]$SkipPublicCheck,
   [switch]$SkipMarketingCheck,
   [switch]$RequireMarketing,
@@ -88,6 +94,8 @@ function Get-EnvValue([string]$Path, [string]$Key) {
     if ($trim.Substring(0, $eq).Trim() -eq $Key) {
       $value = $trim.Substring($eq + 1).Trim()
       if ($value.Length -ge 2 -and $value.StartsWith('"') -and $value.EndsWith('"')) {
+        $value = $value.Substring(1, $value.Length - 2)
+      } elseif ($value.Length -ge 2 -and $value.StartsWith("'") -and $value.EndsWith("'")) {
         $value = $value.Substring(1, $value.Length - 2)
       }
       return $value
@@ -408,17 +416,55 @@ if ($runningScriptBackup) {
 Remove-ObsoleteWrappers $AppDir
 
 # ----------------------------------------------------------- env check
-Write-Step '2/7 Validasi konfigurasi .env'
-$requiredKeys = @('APP_URL', 'VITE_POCKETBASE_URL', 'VITE_PB_SYNC_EMAIL', 'VITE_PB_SYNC_PASSWORD')
+Write-Step '2/8 Validasi konfigurasi .env'
+$requiredKeys = @('APP_URL', 'VITE_POCKETBASE_URL', 'PB_SYNC_EMAIL', 'PB_SYNC_PASSWORD')
 $missingEnv = @()
 foreach ($key in $requiredKeys) {
   $value = Get-EnvValue $envPath $key
   if ([string]::IsNullOrWhiteSpace($value)) { $missingEnv += $key }
 }
+
+# Login DEVELOPER kini diverifikasi server; password tidak lagi di bundle.
+$developerPassword = Get-EnvValue $envPath 'DEV_PASSWORD'
+if ([string]::IsNullOrWhiteSpace($developerPassword)) {
+  $developerPassword = Get-EnvValue $envPath 'JOURNAL_DEV_PASSWORD'
+}
+if ([string]::IsNullOrWhiteSpace($developerPassword)) { $missingEnv += 'DEV_PASSWORD (atau JOURNAL_DEV_PASSWORD)' }
+
+# Kunci HMAC cookie sesi; tanpa ini sesi hilang setiap restart dan login web gagal.
+$sessionSecret = Get-EnvValue $envPath 'APP_SESSION_SECRET'
+if ([string]::IsNullOrWhiteSpace($sessionSecret)) {
+  $sessionSecret = Get-EnvValue $envPath 'JOURNAL_SESSION_SECRET'
+}
+if ([string]::IsNullOrWhiteSpace($sessionSecret)) {
+  $sessionSecret = Get-EnvValue $envPath 'PB_ADMIN_PASSWORD'
+}
+if ([string]::IsNullOrWhiteSpace($sessionSecret)) { $missingEnv += 'APP_SESSION_SECRET' }
+
 if ($missingEnv.Count -gt 0) {
   Write-Warn2 "Env penting masih kosong: $($missingEnv -join ', ')"
 } else {
-  Write-Ok 'Env inti aplikasi terisi.'
+  Write-Ok 'Env inti aplikasi terisi (nilai tidak dicetak).'
+}
+
+foreach ($legacyKey in @('VITE_PB_SYNC_EMAIL', 'VITE_PB_SYNC_PASSWORD')) {
+  if (-not [string]::IsNullOrWhiteSpace((Get-EnvValue $envPath $legacyKey))) {
+    Write-Warn2 "$legacyKey masih terisi (DEPRECATED). Hapus dari .env dan ganti password akun sync PocketBase."
+  }
+}
+
+# Server menolak SEMUA akses internet (403) bila REMOTE_ACCESS_PASS kosong.
+# Karena Test-PublicEndpoint menganggap 403 sebagai "terjangkau", deploy harus
+# berhenti lebih dulu agar tidak melaporkan sukses padahal situs tidak bisa dibuka.
+$remoteAccessPass = Get-EnvValue $envPath 'REMOTE_ACCESS_PASS'
+if ([string]::IsNullOrWhiteSpace($remoteAccessPass)) {
+  if ($AllowLanOnly) {
+    Write-Warn2 'REMOTE_ACCESS_PASS kosong: aplikasi hanya bisa diakses dari lokal/LAN (internet ditolak 403).'
+  } else {
+    Fail 'REMOTE_ACCESS_PASS kosong. Akses dari internet akan ditolak (403). Isi password kuat di .env, atau jalankan dengan -AllowLanOnly bila memang ingin LAN-only.'
+  }
+} else {
+  Write-Ok 'REMOTE_ACCESS_PASS terisi; akses internet diizinkan.'
 }
 
 $marketingKeys = @(
@@ -437,8 +483,58 @@ if ($missingMarketing.Count -gt 0) {
   Write-Ok 'Env Marketing terisi (nilai tidak dicetak).'
 }
 
+# ----------------------------------------------------------- pocketbase hardening
+Write-Step '3/8 Perketat aturan akses PocketBase'
+$pbHardeningStatus = 'dilewati'
+if ($SkipPbHardening) {
+  Write-Warn2 'Hardening PocketBase dilewati (-SkipPbHardening).'
+} else {
+  $pbAdminEmail = Get-EnvValue $envPath 'PB_ADMIN_EMAIL'
+  $pbAdminPassword = Get-EnvValue $envPath 'PB_ADMIN_PASSWORD'
+  $hardeningScript = Join-Path $AppDir 'scripts\create-pocketbase-collections.mjs'
+  if ([string]::IsNullOrWhiteSpace($pbAdminEmail) -or [string]::IsNullOrWhiteSpace($pbAdminPassword)) {
+    Write-Warn2 'PB_ADMIN_EMAIL / PB_ADMIN_PASSWORD kosong; hardening koleksi dilewati.'
+    Write-Warn2 'Tanpa hardening, koleksi lama bisa masih terbuka untuk publik. Isi kredensial admin lalu deploy ulang.'
+    $pbHardeningStatus = 'kredensial admin kosong'
+  } elseif (-not (Test-Path -LiteralPath $hardeningScript)) {
+    Write-Warn2 "$hardeningScript tidak ditemukan; hardening dilewati."
+    $pbHardeningStatus = 'skrip tidak ditemukan'
+  } else {
+    $pbUpstream = Get-EnvValue $envPath 'POCKETBASE_UPSTREAM'
+    if ([string]::IsNullOrWhiteSpace($pbUpstream)) { $pbUpstream = 'http://127.0.0.1:8090' }
+    $nodeExe = (Get-Command node).Source
+    $previousPbUrl = $env:POCKETBASE_URL
+    $previousPbEmail = $env:PB_ADMIN_EMAIL
+    $previousPbPassword = $env:PB_ADMIN_PASSWORD
+    $hardeningExit = 1
+    Push-Location $AppDir
+    try {
+      # Kredensial hanya diteruskan lewat environment proses anak; tidak dicetak.
+      $env:POCKETBASE_URL = $pbUpstream
+      $env:PB_ADMIN_EMAIL = $pbAdminEmail
+      $env:PB_ADMIN_PASSWORD = $pbAdminPassword
+      $hardening = Invoke-NativeCapture $nodeExe @($hardeningScript, '--harden')
+      $hardening.Output | Select-Object -Last 20 | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
+      $hardeningExit = $hardening.ExitCode
+    } catch {
+      Write-Warn2 "Hardening PocketBase error: $($_.Exception.Message)"
+      $hardeningExit = 1
+    } finally {
+      if ($null -eq $previousPbUrl) { Remove-Item Env:POCKETBASE_URL -ErrorAction SilentlyContinue } else { $env:POCKETBASE_URL = $previousPbUrl }
+      if ($null -eq $previousPbEmail) { Remove-Item Env:PB_ADMIN_EMAIL -ErrorAction SilentlyContinue } else { $env:PB_ADMIN_EMAIL = $previousPbEmail }
+      if ($null -eq $previousPbPassword) { Remove-Item Env:PB_ADMIN_PASSWORD -ErrorAction SilentlyContinue } else { $env:PB_ADMIN_PASSWORD = $previousPbPassword }
+      Pop-Location
+    }
+    if ($hardeningExit -ne 0) {
+      Fail "Hardening PocketBase gagal (exit $hardeningExit). Aturan akses koleksi belum tentu aman; perbaiki lalu deploy ulang."
+    }
+    Write-Ok 'Aturan akses koleksi PocketBase sudah diperketat.'
+    $pbHardeningStatus = 'OK'
+  }
+}
+
 # ----------------------------------------------------------- backup
-Write-Step '3/7 Backup build dan Caddyfile sebelumnya'
+Write-Step '4/8 Backup build dan Caddyfile sebelumnya'
 $distPath = Join-Path $AppDir 'dist'
 $distBackup = $null
 if (Test-Path -LiteralPath $distPath) {
@@ -504,7 +600,7 @@ if ($doCaddy) {
 }
 
 # ----------------------------------------------------------- build
-Write-Step '4/7 Install dependensi dan build produksi'
+Write-Step '5/8 Install dependensi dan build produksi'
 Push-Location $AppDir
 try {
   $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
@@ -552,7 +648,7 @@ try {
 }
 
 # ----------------------------------------------------------- restart
-Write-Step '5/7 Restart service dan health check lokal'
+Write-Step '6/8 Restart service dan health check lokal'
 try {
   Restart-Service -Name $ServiceName -Force
 } catch {
@@ -605,19 +701,53 @@ if ($doCaddy) {
 }
 
 # ----------------------------------------------------------- local integrations
-Write-Step '6/7 Pemeriksaan integrasi lokal'
+Write-Step '7/8 Pemeriksaan integrasi lokal'
 try {
   $journalSession = Invoke-RestMethod -Uri "$localBaseUrl/api/journal/session" -TimeoutSec 15
   if ($journalSession.success) {
     Write-Ok 'Route Jurnal aktif.'
     if (-not $journalSession.configured.developerLogin -or -not $journalSession.configured.sessionSecret) {
-      Write-Warn2 'Sesi Jurnal belum lengkap; isi JOURNAL_DEV_* dan JOURNAL_SESSION_SECRET di .env VPS.'
+      Write-Warn2 'Sesi Jurnal belum lengkap; isi DEV_PASSWORD (atau JOURNAL_DEV_PASSWORD) dan APP_SESSION_SECRET di .env VPS.'
     }
   } else {
     Write-Warn2 'Route Jurnal merespons tanpa status success.'
   }
 } catch {
   Write-Warn2 "Pemeriksaan Jurnal gagal: $($_.Exception.Message)"
+}
+
+# Login DEVELOPER diverifikasi server lewat cookie HttpOnly; tidak ada
+# kredensial di bundle browser. Endpoint ini aman dipanggil tanpa login.
+try {
+  $devSession = Invoke-RestMethod -Uri "$localBaseUrl/api/auth/session" -TimeoutSec 15
+  if ($devSession.success) {
+    Write-Ok 'Route auth developer aktif (server-side).'
+  } else {
+    Write-Warn2 'Route auth developer merespons tanpa status success.'
+  }
+} catch {
+  Write-Warn2 "Route auth developer tidak tersedia: $($_.Exception.Message)"
+}
+
+# Token PocketBase kini diminta browser dari server. Jangan pernah mencetak isi
+# respons (bisa berisi token); cukup periksa kode status.
+try {
+  $probeBody = @{ email = 'deploy-probe@invalid.local'; password = 'deploy-probe' } | ConvertTo-Json -Compress
+  $pbProbe = Invoke-WebRequest -Uri "$localBaseUrl/api/pocketbase/session" -Method Post `
+    -ContentType 'application/json' -Body $probeBody -UseBasicParsing -TimeoutSec 15
+  Write-Ok "Broker sesi PocketBase aktif (HTTP $([int]$pbProbe.StatusCode))."
+} catch {
+  $pbProbeCode = 0
+  try { $pbProbeCode = [int]$_.Exception.Response.StatusCode } catch { }
+  if ($pbProbeCode -eq 503) {
+    Write-Ok 'Broker sesi PocketBase aktif (503: PB_SYNC_* belum diisi di .env).'
+  } elseif ($pbProbeCode -eq 400 -or $pbProbeCode -eq 401) {
+    Write-Ok "Broker sesi PocketBase aktif (HTTP $pbProbeCode)."
+  } elseif ($pbProbeCode -eq 404) {
+    Write-Warn2 'Broker /api/pocketbase/session tidak ditemukan; build lama mungkin masih berjalan atau Caddy mem-proxy ke PocketBase.'
+  } else {
+    Write-Warn2 "Broker sesi PocketBase tidak merespons semestinya (HTTP $pbProbeCode)."
+  }
 }
 
 $marketingConfigured = $false
@@ -681,7 +811,11 @@ if ($RequireMarketing) {
 }
 
 # ----------------------------------------------------------- public check
-Write-Step '7/7 Verifikasi akses internet'
+Write-Step '8/8 Verifikasi akses internet'
+$lanOnlyMode = $AllowLanOnly -and [string]::IsNullOrWhiteSpace($remoteAccessPass)
+if ($lanOnlyMode) {
+  Write-Warn2 'Mode LAN-only aktif: penolakan 403 dari internet adalah hasil yang diharapkan.'
+}
 $publicBase = ''
 if ($PublicUrl) {
   $candidate = $PublicUrl.Trim().TrimEnd('/')
@@ -798,7 +932,7 @@ if (-not $KeepSourceArchive) {
 $exitCode = 0
 if ($RequireMarketing -and $marketingRequiredFailed) {
   $exitCode = 2
-} elseif (-not $publicOk -and -not $SkipPublicCheck) {
+} elseif (-not $publicOk -and -not $SkipPublicCheck -and -not $lanOnlyMode) {
   $exitCode = 3
 }
 
@@ -816,6 +950,8 @@ Write-Host "   Source            : $sourceLabel"
 Write-Host "   Service aplikasi  : $appStatus"
 Write-Host "   Caddy             : $caddyStatusText"
 Write-Host "   PocketBase        : $pbStatusText"
+Write-Host "   Aturan PB         : $pbHardeningStatus"
+Write-Host "   Akses internet    : $(if ($lanOnlyMode) { 'LAN-only (403 dari internet)' } elseif ([string]::IsNullOrWhiteSpace($remoteAccessPass)) { 'tanpa password (hanya lokal/LAN)' } else { 'dengan password REMOTE_ACCESS_PASS' })"
 Write-Host "   Health lokal      : $(if (Test-AppHealth $localHealthUrl 5) { 'OK' } else { 'GAGAL' }) ($localHealthUrl)"
 if ($publicBase) {
   Write-Host "   Domain publik     : $publicBase (HTTP $publicCode)"

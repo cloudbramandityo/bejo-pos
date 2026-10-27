@@ -10,13 +10,16 @@
  *      node scripts\create-pocketbase-collections.mjs
  *
  *  Opsi:
- *      --drop    hapus koleksi lama lebih dulu (PENTING untuk data lama)
+ *      --drop     hapus koleksi lama lebih dulu (PENTING untuk data lama)
+ *      --harden   perbarui aturan akses koleksi yang SUDAH ADA menjadi
+ *                 wajib login (menutup akses publik tanpa menghapus data)
  * =====================================================================
  */
 import PocketBase from 'pocketbase';
 
 const args = process.argv.slice(2);
 const DROP = args.includes('--drop');
+const HARDEN = args.includes('--harden');
 
 const PB_URL = process.env.POCKETBASE_URL || 'http://localhost:8090';
 const PB_EMAIL = process.env.PB_ADMIN_EMAIL || '';
@@ -511,9 +514,14 @@ async function main() {
     fail('PB_ADMIN_EMAIL / PB_ADMIN_PASSWORD belum di-set.');
   }
   try {
-    await pb.admins.authWithPassword(PB_EMAIL, PB_PASSWORD);
-  } catch (e) {
-    fail(`Login admin gagal: ${e.message}`);
+    await pb.collection('_superusers').authWithPassword(PB_EMAIL, PB_PASSWORD);
+  } catch (primaryError) {
+    try {
+      if (!pb.admins?.authWithPassword) throw primaryError;
+      await pb.admins.authWithPassword(PB_EMAIL, PB_PASSWORD);
+    } catch (e) {
+      fail(`Login admin gagal: ${e.message}`);
+    }
   }
   ok(`Terhubung ke ${PB_URL}`);
 
@@ -533,11 +541,31 @@ async function main() {
   let created = 0;
   let skipped = 0;
 
+  // Aturan akses: tidak ada operasi publik. Koleksi auth (users) hanya boleh
+  // dibaca/diubah oleh pemilik record; koleksi data wajib login.
+  const rulesFor = (def) => {
+    const isAuth = def.type === 'auth';
+    const authRule = '@request.auth.id != ""';
+    return {
+      listRule: isAuth ? 'id = @request.auth.id' : authRule,
+      viewRule: isAuth ? 'id = @request.auth.id' : authRule,
+      // Pembuatan akun hanya lewat admin PocketBase (tidak ada signup publik).
+      createRule: isAuth ? null : authRule,
+      updateRule: isAuth ? 'id = @request.auth.id' : authRule,
+      deleteRule: isAuth ? 'id = @request.auth.id' : authRule,
+    };
+  };
+
   for (const def of COLLECTIONS) {
     try {
-      await pb.collections.getOne(def.name);
+      const existing = await pb.collections.getOne(def.name);
+      if (HARDEN) {
+        await pb.collections.update(existing.id, rulesFor(def));
+        console.log(`   * ${def.name} (aturan akses diperketat)`);
+      } else {
+        console.log(`   = ${def.name} (sudah ada, dilewati — jalankan --harden untuk memperketat aturan)`);
+      }
       skipped++;
-      console.log(`   = ${def.name} (sudah ada, dilewati)`);
       continue;
     } catch {
       /* belum ada -> buat */
@@ -550,12 +578,8 @@ async function main() {
       // Field id logis aplikasi (PocketBase memakai primary key sendiri)
       // + `data` = salinan utuh objek aplikasi (field baru tetap tersimpan)
       fields: [...(def.fields || []), T('legacyId', false, 128), J('data', false, 5000000)],
-      // Aturan akses: hanya request yang sudah terautentikasi (akun sinkronisasi).
-      listRule: isAuth ? '' : '@request.auth.id != ""',
-      viewRule: isAuth ? '' : '@request.auth.id != ""',
-      createRule: '',
-      updateRule: isAuth ? '' : '@request.auth.id != ""',
-      deleteRule: isAuth ? '' : '@request.auth.id != ""',
+      // Tidak ada create/list publik: mencegah spam & pembacaan data tanpa login.
+      ...rulesFor(def),
       options: {},
     };
 

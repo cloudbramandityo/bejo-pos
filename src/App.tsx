@@ -40,7 +40,7 @@ import {
   saveStoredLandingConfig,
   saveStoredLandingDraft
 } from './utils/landingPageStorage';
-import { closeJournalSession } from './lib/journalApi';
+import { getDeveloperSession, logoutDeveloper } from './lib/devAuth';
 
 import {
   Product,
@@ -386,6 +386,26 @@ export default function App() {
     if (user?.role === 'KASIR') return 'pos';
     return 'spk';
   });
+
+  // Sesi DEVELOPER hanya dianggap sah bila cookie HttpOnly di server masih valid.
+  useEffect(() => {
+    if (currentUserRef.current?.role !== 'DEVELOPER') return;
+    let cancelled = false;
+    getDeveloperSession()
+      .then((session) => {
+        if (cancelled || session.authenticated) return;
+        currentUserRef.current = null;
+        saveStoredAuthUser(null);
+        setCurrentUser(null);
+        setCurrentTab('spk');
+      })
+      .catch(() => {
+        // Server tidak dapat dihubungi: biarkan sesi lokal agar mode offline tetap berjalan.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [agentScreenSubTab, setAgentScreenSubTab] = useState<'katalog_order' | 'riwayat' | undefined>(undefined);
   const [spkInitialTab, setSpkInitialTab] = useState<'kanban' | 'list' | 'create' | 'machines' | 'team_status' | 'reject_log'>('kanban');
   const [pendingSpkOrderToLoad, setPendingSpkOrderToLoad] = useState<any | null>(null);
@@ -883,20 +903,11 @@ export default function App() {
     // 6. Subscribe App Users (Auth & RBAC)
     const unsubUsers = subscribeUsers((cloudUsers) => {
       if (cloudUsers) {
-        // Check if default developer account needs migration in local memory
-        const sanitizedUsers = cloudUsers.map((u) => {
-          if (u.id === 'user_dev' || (u.role === 'DEVELOPER' && u.username === 'developer')) {
-            if (u.username === 'developer' || u.password === 'dev123') {
-              return {
-                ...u,
-                username: 'langgo',
-                password: 'n1neismine',
-                name: u.name === 'Master Developer' ? 'Langgo Bramandityo' : u.name
-              };
-            }
-          }
-          return u;
-        });
+        // Akun DEVELOPER tidak lagi disimpan di daftar pengguna maupun disinkronkan
+        // ke perangkat lain; login developer diverifikasi oleh server.
+        const sanitizedUsers = cloudUsers.filter(
+          (u) => u.role !== 'DEVELOPER' && u.id !== 'user_dev' && u.id !== 'sys_core_developer'
+        );
 
         setUsers(sanitizedUsers);
         saveStoredUsers(sanitizedUsers);
@@ -1172,7 +1183,10 @@ export default function App() {
     currentUserRef.current = updatedUser; // Update ref immediately to prevent race conditions
     setCurrentUser(updatedUser);
     saveStoredAuthUser(updatedUser);
-    saveUserCloud(updatedUser).catch(console.error);
+    // Akun developer hanya hidup di sesi server; jangan pernah disinkronkan ke PocketBase.
+    if (user.role !== 'DEVELOPER') {
+      saveUserCloud(updatedUser).catch(console.error);
+    }
 
     if (user.role === 'SPK') {
       setCurrentTab('spk');
@@ -1191,7 +1205,7 @@ export default function App() {
 
   const handleLogout = () => {
     currentUserRef.current = null; // Clear ref immediately to prevent race condition re-logins from PocketBase snapshot listener
-    closeJournalSession().catch(() => {});
+    logoutDeveloper().catch(() => {});
     if (currentUser) {
       const offlineUser: AppUser = {
         ...currentUser,
@@ -1618,11 +1632,94 @@ export default function App() {
     deleteProductCategoryCloud(categoryId).catch(console.error);
   };
 
+  /* Identitas toko yang dipakai bersama website ikut diperbarui. Hanya field
+     yang masih mencerminkan data toko sebelumnya yang diubah, sehingga
+     kustomisasi khusus website (mis. nama merek "BEJO Print") tidak tertimpa. */
+  const syncStoreIdentityToLanding = (prev: StoreInfo, next: StoreInfo) => {
+    const digits = (value: string) => (value || '').replace(/[^0-9]/g, '');
+    const prevName = (prev.storeName || '').trim();
+    const nextName = (next.storeName || '').trim();
+    const prevPhone = (prev.phone || '').trim();
+    const nextPhone = (next.phone || '').trim();
+    const prevAddress = (prev.address || '').trim();
+    const nextAddress = (next.address || '').trim();
+
+    const apply = (config: LandingPageConfig): LandingPageConfig | null => {
+      let changed = false;
+      const brand = { ...config.brand };
+      const contact = { ...config.contact };
+
+      if (nextName && (brand.name || '').trim() === prevName) {
+        brand.name = nextName;
+        changed = true;
+      }
+      if (nextPhone && (contact.phoneDisplay || '').trim() === prevPhone) {
+        contact.phoneDisplay = nextPhone;
+        changed = true;
+      }
+      if (nextAddress && (contact.storeAddress || '').trim() === prevAddress) {
+        contact.storeAddress = nextAddress;
+        changed = true;
+      }
+      if (nextPhone && digits(contact.whatsappNumber) === digits(prevPhone)) {
+        const usesCountryCode = /^\+?62/.test((contact.whatsappNumber || '').trim());
+        const nextDigits = digits(nextPhone);
+        contact.whatsappNumber = usesCountryCode
+          ? nextDigits.replace(/^0/, '62')
+          : nextDigits.replace(/^62/, '0');
+        changed = true;
+      }
+
+      return changed
+        ? { ...config, brand, contact, lastModifiedAt: Date.now() }
+        : null;
+    };
+
+    const draft = apply(landingDraft);
+    if (draft) {
+      saveStoredLandingDraft(draft);
+      saveLandingDraftCloud(draft).catch(console.error);
+    }
+
+    const published = apply(landingConfig);
+    if (published) {
+      saveStoredLandingConfig(published);
+      saveLandingPublishedCloud(published).catch(console.error);
+    }
+  };
+
   // Store Info Handler
   const handleSaveStoreInfo = (newStoreInfo: StoreInfo) => {
+    syncStoreIdentityToLanding(storeInfo, newStoreInfo);
     setStoreInfo(newStoreInfo);
     saveStoredStoreInfo(newStoreInfo);
     saveStoreInfoCloud(newStoreInfo).catch(console.error);
+    syncInvoiceIdentityFromStore(newStoreInfo);
+
+    /* Profil aktif harus ikut tersimpan ke database, bukan hanya store_info,
+       agar daftar profil di dashboard dan perangkat lain tidak tertinggal. */
+    const activeProfile = storeProfiles.find((p) => p.id === activeProfileId);
+    if (activeProfile) {
+      const updatedProfile: StoreProfile = {
+        ...activeProfile,
+        storeName: newStoreInfo.storeName,
+        branch: newStoreInfo.branch,
+        address: newStoreInfo.address,
+        phone: newStoreInfo.phone,
+        receiptFooter: newStoreInfo.receiptFooter,
+        logoUrl: newStoreInfo.logoUrl,
+        storeStatus: newStoreInfo.storeStatus,
+        isMaster: activeProfile.id === 'bejo_polsek' ? true : activeProfile.isMaster
+      };
+      setStoreProfiles((prev) => prev.map((p) => (p.id === updatedProfile.id ? updatedProfile : p)));
+      saveStoreProfileCloud(updatedProfile).catch(console.error);
+    }
+
+    recordActivityLog(
+      'STORE_SETTINGS',
+      `Simpan Profil Toko "${newStoreInfo.storeName}"`,
+      `Oleh: ${currentUser?.name || 'Admin'} • Cabang: ${newStoreInfo.branch || '-'}`
+    );
   };
 
   // Multi-Store Profile Handlers
@@ -1641,6 +1738,7 @@ export default function App() {
     if (profile.id === activeProfileId) {
       const updatedInfo: StoreInfo = {
         storeName: profile.storeName,
+        appTitle: storeInfo.appTitle || 'Point of Sales',
         branch: profile.branch,
         address: profile.address,
         phone: profile.phone,
@@ -1686,6 +1784,7 @@ export default function App() {
     // Switch store info metadata
     const updatedInfo: StoreInfo = {
       storeName: target.storeName,
+      appTitle: storeInfo.appTitle || 'Point of Sales',
       branch: target.branch,
       address: target.address,
       phone: target.phone,

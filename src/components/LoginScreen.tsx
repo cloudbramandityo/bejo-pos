@@ -12,8 +12,8 @@ import {
 } from 'lucide-react';
 import { AppUser } from '../types';
 import { StoreLogo } from './StoreLogo';
-import { verifyDeveloperCredentials, getPermanentDeveloperUser } from '../utils/authSecurity';
-import { closeJournalSession } from '../lib/journalApi';
+import { getPermanentDeveloperUser } from '../utils/authSecurity';
+import { DeveloperAuthError, loginDeveloper, logoutDeveloper } from '../lib/devAuth';
 
 interface LoginScreenProps {
   users: AppUser[];
@@ -34,7 +34,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
@@ -48,39 +48,45 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
     setIsLoading(true);
 
-    setTimeout(() => {
-      // 1. Check permanent master developer credentials
-      if (verifyDeveloperCredentials(cleanUsername, cleanPassword)) {
-        setIsLoading(false);
-        onLoginSuccess(getPermanentDeveloperUser());
-        return;
-      }
-
-      // Akun non-developer tidak boleh mewarisi sesi Jurnal dari pengguna sebelumnya.
-      closeJournalSession().catch(() => {});
-
-      // 2. Find matching user in operational user list (Admin / Kasir)
-      const matchedUser = users.find(
-        (u) =>
-          u.username.toLowerCase() === cleanUsername.toLowerCase() &&
-          u.password === cleanPassword
+    try {
+      const knownUser = users.find(
+        (u) => u.username.toLowerCase() === cleanUsername.toLowerCase()
       );
 
-      if (!matchedUser) {
-        setErrorMsg('Username atau Password salah! Periksa kembali data login Anda.');
-        setIsLoading(false);
+      // 1. Akun operasional (Admin / Kasir / Agen / SPK)
+      if (knownUser) {
+        if (knownUser.password !== cleanPassword) {
+          setErrorMsg('Username atau Password salah! Periksa kembali data login Anda.');
+          return;
+        }
+        if (knownUser.isActive === false) {
+          setErrorMsg('Akun ini sedang dinonaktifkan. Hubungi Developer / Administrator.');
+          return;
+        }
+
+        // Akun non-developer tidak boleh mewarisi sesi developer/Jurnal sebelumnya.
+        await logoutDeveloper().catch(() => {});
+        onLoginSuccess(knownUser);
         return;
       }
 
-      if (matchedUser.isActive === false) {
-        setErrorMsg('Akun ini sedang dinonaktifkan. Hubungi Developer / Administrator.');
-        setIsLoading(false);
-        return;
+      // 2. Bukan akun operasional: verifikasi kredensial DEVELOPER di server.
+      try {
+        const session = await loginDeveloper(cleanUsername, cleanPassword);
+        onLoginSuccess(getPermanentDeveloperUser(session.username));
+      } catch (error) {
+        if (
+          error instanceof DeveloperAuthError &&
+          (error.status === 429 || error.status === 503)
+        ) {
+          setErrorMsg(error.message);
+        } else {
+          setErrorMsg('Username atau Password salah! Periksa kembali data login Anda.');
+        }
       }
-
+    } finally {
       setIsLoading(false);
-      onLoginSuccess(matchedUser);
-    }, 150);
+    }
   };
 
   return (

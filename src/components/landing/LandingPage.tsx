@@ -492,7 +492,7 @@ const Header: React.FC<{
               <div className="mx-auto grid max-w-[1200px] grid-cols-2 gap-8 px-4 py-8 md:grid-cols-4">
                 {item.columns!.map((col) => (
                   <div key={col.id}>
-                    <p className="mb-3 text-[12px] font-bold uppercase tracking-wider text-[#111]">{col.heading}</p>
+                    <p className="mb-3 text-[12px] font-bold uppercase tracking-wider text-[#111]" style={{ fontFamily: col.fontFamily || undefined, fontSize: col.fontSize ? `${col.fontSize}px` : undefined }}>{col.heading}</p>
                     <ul className="space-y-2">
                       {col.links.map((link) => (
                         <li key={link.id}>
@@ -500,6 +500,7 @@ const Header: React.FC<{
                             type="button"
                             onClick={() => handleMegaLink(link)}
                             className="text-left text-[13px] text-slate-600 transition-colors hover:text-[#00AAFF]"
+                            style={{ fontFamily: link.fontFamily || undefined, fontSize: link.fontSize ? `${link.fontSize}px` : undefined }}
                           >
                             {link.label}
                           </button>
@@ -715,10 +716,10 @@ const ProblemSection: React.FC<{ config: LandingPageConfig; onConsult: () => voi
   const left = problem.points.filter((p) => p.side === 'left');
   const right = problem.points.filter((p) => p.side === 'right');
 
-  const Point: React.FC<{ text: string; align: 'left' | 'right' }> = ({ text, align }) => (
+  const Point: React.FC<{ text: string; align: 'left' | 'right'; fontSize?: number; fontFamily?: string }> = ({ text, align, fontSize, fontFamily }) => (
     <div className={cx('flex items-start gap-2', align === 'right' && 'md:flex-row-reverse md:text-right')}>
       <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
-      <p className="text-[12.5px] leading-snug text-slate-600">{text}</p>
+      <p className="leading-snug text-slate-600" style={{ fontSize: fontSize ? `${fontSize}px` : '12.5px', fontFamily: fontFamily ? fontFamily : undefined }}>{text}</p>
     </div>
   );
 
@@ -731,7 +732,7 @@ const ProblemSection: React.FC<{ config: LandingPageConfig; onConsult: () => voi
       <div className="grid items-center gap-8 md:grid-cols-[1fr_1.1fr_1fr]">
         <div className="order-2 space-y-5 md:order-1">
           {left.map((p) => (
-            <Point key={p.id} text={p.text} align="left" />
+            <Point key={p.id} text={p.text} align="left" fontSize={p.fontSize || problem.pointsFontSize} fontFamily={p.fontFamily || problem.pointsFontFamily} />
           ))}
         </div>
 
@@ -743,7 +744,7 @@ const ProblemSection: React.FC<{ config: LandingPageConfig; onConsult: () => voi
 
         <div className="order-3 space-y-5">
           {right.map((p) => (
-            <Point key={p.id} text={p.text} align="right" />
+            <Point key={p.id} text={p.text} align="right" fontSize={p.fontSize || problem.pointsFontSize} fontFamily={p.fontFamily || problem.pointsFontFamily} />
           ))}
         </div>
       </div>

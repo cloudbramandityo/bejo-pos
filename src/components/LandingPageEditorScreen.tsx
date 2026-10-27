@@ -41,6 +41,7 @@ import {
   Type,
   Upload,
   X,
+  Type as FontIcon,
 } from 'lucide-react';
 import type {
   LandingBlogPost,
@@ -48,6 +49,7 @@ import type {
   LandingCategoryGroup,
   LandingFaqItem,
   LandingFacilityItem,
+  LandingCustomFont,
   LandingFooterColumn,
   LandingGalleryItem,
   LandingMenuItem,
@@ -362,6 +364,7 @@ const SECTIONS = [
   { key: 'brand', label: 'Identitas & Logo', icon: Store },
   { key: 'hero', label: 'Judul Utama', icon: Type },
   { key: 'slides', label: 'Banner Hero', icon: Images },
+  { key: 'fonts', label: 'Font Kustom', icon: FontIcon },
   { key: 'menu', label: 'Menu Navigasi', icon: Menu },
   { key: 'categories', label: 'Kategori & Kartu', icon: Layers },
   { key: 'templates', label: 'Template Design', icon: Sparkles },
@@ -507,6 +510,44 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
 
   /* panjang deskripsi website (meta description) */
   const descLength = (config.brand?.metaDescription || '').trim().length;
+
+  /* font upload */
+  const fontInputRef = useRef<HTMLInputElement>(null);
+  const [fontUploading, setFontUploading] = useState(false);
+
+  const handleFontUpload = async (file?: File) => {
+    if (!file) return;
+    setFontUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result as string;
+        const ext = file.name.split('.').pop()?.toLowerCase() || 'ttf';
+        const format = ext === 'woff2' ? 'woff2' : ext === 'woff' ? 'woff' : ext === 'otf' ? 'otf' : 'ttf';
+        const fontName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9\s]/g, '').trim() || 'CustomFont';
+        const font: LandingCustomFont = {
+          id: `font_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          name: fontName,
+          fileName: file.name,
+          url: dataUrl,
+          format,
+          uploadedAt: Date.now()
+        };
+        const fonts = [...(config.customFonts || []), font];
+        patch({ customFonts: fonts });
+        notify('Font berhasil diunggah');
+        setFontUploading(false);
+      };
+      reader.onerror = () => {
+        notifyError(new Error('Gagal membaca file font'));
+        setFontUploading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (e) {
+      notifyError(e);
+      setFontUploading(false);
+    }
+  };
 
   /* simpan config terbaru agar klik "Simpan" tidak menyimpan state basi */
   const configRef = useRef<LandingPageConfig>(config);
@@ -1214,13 +1255,36 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                     onDown={i < config.menu.length - 1 ? () => updateList('menu', moveItem(config.menu, i, i + 1)) : undefined}
                     right={<Toggle active={item.isActive} onChange={(v) => updateList('menu', config.menu.map((m) => (m.id === item.id ? { ...m, isActive: v } : m)))} />}
                   >
-                    <div className="grid gap-3 md:grid-cols-4">
+                    <div className="grid gap-3 md:grid-cols-5">
                       <Field label="Label Menu">
                         <input
                           value={item.label}
                           onChange={(e) => updateList('menu', config.menu.map((m) => (m.id === item.id ? { ...m, label: e.target.value } : m)))}
                           className={inputCls}
                         />
+                      </Field>
+                      <Field label="Ukuran Font (px)">
+                        <input
+                          type="number"
+                          min="8"
+                          max="32"
+                          value={item.fontSize || ''}
+                          onChange={(e) => updateList('menu', config.menu.map((m) => (m.id === item.id ? { ...m, fontSize: e.target.value ? Number(e.target.value) : undefined } : m)))}
+                          className={inputCls}
+                          placeholder="12"
+                        />
+                      </Field>
+                      <Field label="Jenis Font">
+                        <select
+                          value={item.fontFamily || ''}
+                          onChange={(e) => updateList('menu', config.menu.map((m) => (m.id === item.id ? { ...m, fontFamily: e.target.value || undefined } : m)))}
+                          className={inputCls}
+                        >
+                          <option value="">Default</option>
+                          {(config.customFonts || []).map((f) => (
+                            <option key={f.id} value={f.name}>{f.name}</option>
+                          ))}
+                        </select>
                       </Field>
                       <Field label="Tipe">
                         <select
@@ -1595,6 +1659,60 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
             </SectionCard>
           )}
 
+          {/* ============================ FONTS =============================== */}
+          {active === 'fonts' && (
+            <SectionCard title="Font Kustom" description="Unggah font (.ttf, .otf, .woff, .woff2) untuk digunakan di website. Font dapat dipilih pada Menu Navigasi dan Poin Keluhan.">
+              <div className="space-y-4">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[12px] font-bold text-slate-800">Upload Font</p>
+                      <p className="mt-0.5 text-[10.5px] text-slate-500">Format: TTF, OTF, WOFF, WOFF2</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={fontUploading}
+                      onClick={() => fontInputRef.current?.click()}
+                      className={btnPrimary}
+                    >
+                      <Upload size={12} /> {fontUploading ? 'Mengunggah...' : 'Unggah Font'}
+                    </button>
+                  </div>
+                  <input
+                    ref={fontInputRef}
+                    type="file"
+                    accept=".ttf,.otf,.woff,.woff2"
+                    className="hidden"
+                    onChange={(e) => {
+                      void handleFontUpload(e.target.files?.[0]);
+                      e.target.value = '';
+                    }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  {(config.customFonts || []).map((font) => (
+                    <div key={font.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+                      <div>
+                        <p className="text-[12px] font-bold text-slate-800">{font.name}</p>
+                        <p className="mt-0.5 text-[10px] text-slate-400">{font.fileName} · {font.format.toUpperCase()}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => patch({ customFonts: (config.customFonts || []).filter((f) => f.id !== font.id) })}
+                        className={btnDanger}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  {(config.customFonts || []).length === 0 && (
+                    <p className="py-6 text-center text-[11px] text-slate-400">Belum ada font kustom yang diunggah</p>
+                  )}
+                </div>
+              </div>
+            </SectionCard>
+          )}
+
           {/* ============================ PROBLEM ============================== */}
           {active === 'problem' && (
             <SectionCard title="Problem Customer" description="Keluhan pelanggan dan tombol ajakan. Ilustrasi 1024 × 1024 px.">
@@ -1624,8 +1742,25 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                   </div>
                 </div>
 
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Pengaturan Font Poin Keluhan</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Ukuran Font Default (px)">
+                      <input type="number" min="8" max="32" value={config.problem.pointsFontSize || ''} onChange={(e) => patchSub('problem', { pointsFontSize: e.target.value ? Number(e.target.value) : undefined })} className={inputCls} placeholder="12.5" />
+                    </Field>
+                    <Field label="Jenis Font Default">
+                      <select value={config.problem.pointsFontFamily || ''} onChange={(e) => patchSub('problem', { pointsFontFamily: e.target.value || undefined })} className={inputCls}>
+                        <option value="">Default (Quicksand)</option>
+                        {(config.customFonts || []).map((f) => (
+                          <option key={f.id} value={f.name}>{f.name}</option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Poin Keluhan</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Poin Keluhan (POIN KELUHAN)</p>
                   <button
                     type="button"
                     onClick={() => patchSub('problem', { points: [...config.problem.points, { id: newId('pp'), text: 'Keluhan baru', side: 'left' }] })}
@@ -1642,10 +1777,29 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                         onChange={(e) => patchSub('problem', { points: config.problem.points.map((p) => (p.id === point.id ? { ...p, text: e.target.value } : p)) })}
                         className={inputCls}
                       />
+                      <input
+                        type="number"
+                        min="8"
+                        max="32"
+                        placeholder="Ukuran"
+                        value={point.fontSize || ''}
+                        onChange={(e) => patchSub('problem', { points: config.problem.points.map((p) => (p.id === point.id ? { ...p, fontSize: e.target.value ? Number(e.target.value) : undefined } : p)) })}
+                        className={`${inputCls} !w-[70px]`}
+                      />
+                      <select
+                        value={point.fontFamily || ''}
+                        onChange={(e) => patchSub('problem', { points: config.problem.points.map((p) => (p.id === point.id ? { ...p, fontFamily: e.target.value || undefined } : p)) })}
+                        className={`${inputCls} !w-[120px]`}
+                      >
+                        <option value="">Default</option>
+                        {(config.customFonts || []).map((f) => (
+                          <option key={f.id} value={f.name}>{f.name}</option>
+                        ))}
+                      </select>
                       <select
                         value={point.side}
                         onChange={(e) => patchSub('problem', { points: config.problem.points.map((p) => (p.id === point.id ? { ...p, side: e.target.value as 'left' | 'right' } : p)) })}
-                        className={`${inputCls} !w-[100px]`}
+                        className={`${inputCls} !w-[90px]`}
                       >
                         <option value="left">Kiri</option>
                         <option value="right">Kanan</option>

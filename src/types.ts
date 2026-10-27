@@ -782,6 +782,27 @@ export interface LandingMenuItem {
   page?: LandingPageKey; // tujuan bila type = 'link'
   columns?: LandingMenuColumn[]; // dipakai bila type = 'mega'
   isActive: boolean;
+  fontSize?: number; // ukuran font dalam px
+  fontFamily?: string; // nama font kustom
+}
+
+/** Kolom mega menu header */
+export interface LandingMenuColumn {
+  id: string;
+  heading: string;
+  links: LandingMenuLink[];
+  fontSize?: number; // ukuran font heading dalam px
+  fontFamily?: string; // font heading kustom
+}
+
+/** Tautan di dalam mega menu header */
+export interface LandingMenuLink {
+  id: string;
+  label: string;
+  categoryKey?: string; // membuka halaman produk dengan kategori terkait
+  page?: LandingPageKey; // membuka halaman internal tertentu
+  fontSize?: number; // ukuran font dalam px
+  fontFamily?: string; // nama font kustom
 }
 
 /** Promo template design (kartu besar di bawah slider kategori) */
@@ -799,6 +820,8 @@ export interface LandingProblemPoint {
   id: string;
   text: string;
   side: 'left' | 'right';
+  fontSize?: number; // ukuran font dalam px
+  fontFamily?: string; // nama font kustom
 }
 
 /** Seksi "Problem Customer" */
@@ -808,6 +831,8 @@ export interface LandingProblemConfig {
   points: LandingProblemPoint[];
   primaryCtaText: string;
   secondaryCtaText: string;
+  pointsFontSize?: number; // ukuran font default untuk semua poin keluhan
+  pointsFontFamily?: string; // font default untuk semua poin keluhan
 }
 
 /** Statistik pada seksi "Mengapa Kami" */
@@ -940,11 +965,25 @@ export interface LandingBrandingConfig {
   metaDescription?: string; // deskripsi website (meta description), ideal 150-160 karakter
 }
 
+/** Font kustom yang diunggah */
+export interface LandingCustomFont {
+  id: string;
+  name: string; // nama font untuk CSS font-family
+  fileName: string;
+  url: string; // URL ke file font
+  format: 'woff2' | 'woff' | 'ttf' | 'otf';
+  weight?: string;
+  style?: string;
+  uploadedAt: number;
+}
+
 export interface LandingPageConfig {
   isPublished: boolean; // Slide button: true = PUBLISH (Tampilan Awal Aktif), false = ON HOLD
   lastModifiedAt: number;
   lastPublishedAt?: number;
   lastModifiedBy?: string;
+  /** Font kustom */
+  customFonts?: LandingCustomFont[];
   /** Judul H1 + paragraf pembuka di bawah slider banner */
   hero: LandingHeroConfig;
   brand: LandingBrandingConfig; // logo & tagline header/footer

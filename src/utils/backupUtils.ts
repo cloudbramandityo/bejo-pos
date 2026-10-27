@@ -460,10 +460,22 @@ export async function restoreBackupToCloud(
           syncedRecords += 1;
           return;
         }
+        const recordId = batch[offset]?.id ?? index + offset + 1;
+        const message = String(result.reason?.message || result.reason || '');
+        const lowerMsg = message.toLowerCase();
+        // Username sudah dipakai atau duplikasi diizinkan - jangan anggap gagal total
+        if (
+          task.label === 'Pengguna' &&
+          (lowerMsg.includes('username') && (lowerMsg.includes('sudah dipakai') || lowerMsg.includes('taken') || lowerMsg.includes('duplicate'))) ||
+          (lowerMsg.includes('already exists') || lowerMsg.includes('unique constraint'))
+        ) {
+          if (errors.length < 10) {
+            errors.push(`${task.label} #${recordId}: ${message} (dilewati)`);
+          }
+          return;
+        }
         failedRecords += 1;
         if (errors.length < 10) {
-          const recordId = batch[offset]?.id ?? index + offset + 1;
-          const message = result.reason?.message || String(result.reason);
           errors.push(`${task.label} #${recordId}: ${message}`);
         }
       });

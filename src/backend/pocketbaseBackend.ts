@@ -151,9 +151,11 @@ async function performAuth(): Promise<void> {
     if (!authenticated) {
       hasDashboardSession = false;
       isCloudUnavailable = false;
+      authAttemptSettled = true;
       // Token lama (mis. dari sesi sebelumnya) tidak boleh dipakai lagi.
       pb.authStore.clear();
       console.log('[PocketBase] Belum login dashboard: sinkronisasi cloud ditunda.');
+      emitSyncStatus();
       return;
     }
 
@@ -179,13 +181,22 @@ async function performAuth(): Promise<void> {
       pb.authStore.save(data.token, data.record);
     }
     isCloudUnavailable = false;
+    hasReportedUnavailable = false;
+    authAttemptSettled = true;
     console.log('[PocketBase] Terhubung & terautentikasi.');
+    // Kanal realtime dibuat setelah sesi ada; bangunkan yang masih tertidur.
+    reviveAllChannels();
+    void flushOutbox();
+    emitSyncStatus();
   } catch (err) {
     isCloudUnavailable = true;
+    hasDashboardSession = false;
+    authAttemptSettled = true;
     console.warn(
       '[PocketBase] Gagal terhubung. Aplikasi berjalan dalam MODE LOKAL. Detail:',
       err
     );
+    emitSyncStatus();
     // Coba ulang otomatis setelah 15 detik agar pemulihan jaringan tidak perlu refresh halaman.
     setTimeout(() => {
       authReady = performAuth().catch(() => {});
@@ -198,6 +209,7 @@ async function performAuth(): Promise<void> {
 export async function refreshPocketBaseAuth(): Promise<boolean> {
   const pb = getPB();
   pb.authStore.clear();
+  realtimeConnected = false;
   try {
     await performAuth();
   } catch {
@@ -206,10 +218,15 @@ export async function refreshPocketBaseAuth(): Promise<boolean> {
   return hasDashboardSession;
 }
 
-authReady = performAuth().catch(() => {});
+// Bootstrapping ditunda ke microtask berikutnya: performAuth menyentuh status
+// dan outbox yang baru diisi setelah blok deklarasi di bawah.
+authReady = Promise.resolve()
+  .then(() => performAuth())
+  .catch(() => {});
 
 export function resetCloudAvailability(): void {
   isCloudUnavailable = false;
+  emitSyncStatus();
 }
 
 /* -------------------------------------------------------------------------- */
@@ -316,6 +333,266 @@ export function handleBackendError(
 
 /** Alias lama (kompatibilitas) */
 export const handleFirestoreError = handleBackendError;
+
+/* -------------------------------------------------------------------------- */
+/*  Outbox: tulis yang gagal karena jaringan tetap diantre dan diulang        */
+/* -------------------------------------------------------------------------- */
+/** Kunci yang sama dipakai Modal Database Lokal untuk menampilkan antrean. */
+const OUTBOX_STORAGE_KEY = 'bejo_pos_outbox_queue_v1';
+const MAX_OUTBOX_ENTRIES = 500;
+
+interface OutboxEntry {
+  id: string;
+  collection: string;
+  docId: string;
+  action: 'CREATE' | 'UPDATE' | 'DELETE';
+  data?: any;
+  timestamp: number;
+}
+
+let outboxCount = 0;
+
+function readOutbox(): OutboxEntry[] {
+  try {
+    const raw = localStorage.getItem(OUTBOX_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as OutboxEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeOutbox(entries: OutboxEntry[]): void {
+  try {
+    localStorage.setItem(OUTBOX_STORAGE_KEY, JSON.stringify(entries));
+  } catch (err) {
+    console.error('[PocketBase] Antrean tulis gagal disimpan:', err);
+  }
+  outboxCount = entries.length;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('bejo_outbox_queue_updated'));
+    emitSyncStatus();
+  }
+}
+
+/** Simpan tulis yang gagal; pembaruan terbaru untuk kunci yang sama menimpa yang lama. */
+function enqueueOutbox(entry: Omit<OutboxEntry, 'id' | 'timestamp'>): void {
+  const entries = readOutbox();
+  const sameTarget = entries.findIndex(
+    (e) => e.collection === entry.collection && e.docId === entry.docId && e.action === entry.action
+  );
+  if (sameTarget >= 0) {
+    entries[sameTarget] = { ...entries[sameTarget], data: entry.data, timestamp: Date.now() };
+  } else {
+    entries.push({
+      ...entry,
+      id: `mut_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      timestamp: Date.now(),
+    });
+  }
+  writeOutbox(entries.slice(-MAX_OUTBOX_ENTRIES));
+  console.warn(
+    `[PocketBase] Tulis ${entry.action} ${entry.collection}/${entry.docId} diantre (outbox ${outboxCount}).`
+  );
+}
+
+let outboxFlushInFlight: Promise<number> | null = null;
+
+/**
+ * Kirim ulang seluruh antrean tulis secara berurutan.
+ * Berhenti saat jaringan masih putus; buang entri yang ditolak PocketBase
+ * (payload tidak valid) agar antrean tidak pernah macet selamanya.
+ */
+async function flushOutbox(): Promise<number> {
+  if (outboxFlushInFlight) return outboxFlushInFlight;
+
+  outboxFlushInFlight = (async () => {
+    let flushed = 0;
+    for (const entry of readOutbox()) {
+      if (isCloudUnavailable || !hasDashboardSession) break;
+      try {
+        if (entry.action === 'DELETE') {
+          await executeRemoveRecord(entry.collection, entry.docId);
+        } else {
+          await executeUpsert(entry.collection, entry.docId, entry.data || {});
+        }
+        const rest = readOutbox().filter((e) => e.id !== entry.id);
+        writeOutbox(rest);
+        flushed += 1;
+      } catch (err: any) {
+        if (isNetworkError(err)) break;
+        console.error(`[PocketBase] Antrean tulis ${entry.collection}/${entry.docId} dibuang:`, err);
+        writeOutbox(readOutbox().filter((e) => e.id !== entry.id));
+      }
+    }
+    if (flushed > 0) console.log(`[PocketBase] ${flushed} tulis tertunda berhasil dikirim.`);
+    return flushed;
+  })().finally(() => {
+    outboxFlushInFlight = null;
+  });
+
+  return outboxFlushInFlight;
+}
+
+/** Kirim ulang antrean tulis manual (dipakai panel diagnostik). */
+export async function flushPendingWrites(): Promise<number> {
+  try {
+    await testPocketBaseConnection();
+  } catch {
+    /* status sudah dipulihkan bila berhasil */
+  }
+  return flushOutbox();
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Pengawas koneksi realtime + status sinkronisasi                           */
+/* -------------------------------------------------------------------------- */
+export type SyncState = 'connecting' | 'connected' | 'reconnecting' | 'local-only';
+
+export interface SyncStatus {
+  state: SyncState;
+  realtimeConnected: boolean;
+  channels: number;
+  lastSyncAt: number;
+  pendingWrites: number;
+}
+
+interface RealtimeChannel {
+  attempt: () => void;
+  revive: () => void;
+  refetch: () => void;
+  dispose: () => void;
+}
+
+const REALTIME_WATCHDOG_MS = 15000;
+const REALTIME_REVIVE_AFTER_MS = 30000;
+
+const realtimeChannels = new Set<RealtimeChannel>();
+const syncListeners = new Set<(status: SyncStatus) => void>();
+
+let realtimeConnected = false;
+let realtimeDownSince = 0;
+let realtimeWatchdogTimer: ReturnType<typeof setInterval> | null = null;
+let authAttemptSettled = false;
+let lastSyncAt = 0;
+
+function deriveSyncState(): SyncState {
+  if (!authAttemptSettled) return 'connecting';
+  if (!hasDashboardSession || isCloudUnavailable) return 'local-only';
+  return realtimeConnected ? 'connected' : 'reconnecting';
+}
+
+export function getSyncStatus(): SyncStatus {
+  return {
+    state: deriveSyncState(),
+    realtimeConnected,
+    channels: realtimeChannels.size,
+    lastSyncAt,
+    pendingWrites: outboxCount,
+  };
+}
+
+/** Pantau status sinkronisasi; balik fungsi untuk berhenti mendengar. */
+export function onSyncStatusChange(listener: (status: SyncStatus) => void): () => void {
+  syncListeners.add(listener);
+  listener(getSyncStatus());
+  return () => syncListeners.delete(listener);
+}
+
+function emitSyncStatus(): void {
+  const status = getSyncStatus();
+  syncListeners.forEach((listener) => {
+    try {
+      listener(status);
+    } catch (err) {
+      console.error('[PocketBase] Pendengar status sinkronisasi error:', err);
+    }
+  });
+}
+
+function markSyncActivity(): void {
+  lastSyncAt = Date.now();
+}
+
+/** Bangun ulang kanal yang mati (SDK PocketBase berhenti mencoba setelah 10x). */
+function reviveAllChannels(): void {
+  realtimeChannels.forEach((channel) => channel.revive());
+}
+
+/** Ambil snapshot terbaru semua kanal (event yang terlewat saat putus). */
+function refetchAllChannels(): void {
+  realtimeChannels.forEach((channel) => channel.refetch());
+}
+
+function tickRealtimeWatchdog(): void {
+  if (typeof window === 'undefined') return;
+  const pb = getPB();
+  const nowConnected = hasDashboardSession && pb.realtime.isConnected;
+
+  if (nowConnected !== realtimeConnected) {
+    realtimeConnected = nowConnected;
+    if (nowConnected) {
+      // Event yang terjadi selama koneksi putus tidak pernah dikirim ke client
+      // ini, jadi tarik ulang snapshot dan kirim antrean tulis yang tertahan.
+      markSyncActivity();
+      refetchAllChannels();
+      void flushOutbox();
+    }
+    emitSyncStatus();
+  }
+
+  if (hasDashboardSession && realtimeChannels.size > 0 && !nowConnected) {
+    if (!realtimeDownSince) {
+      realtimeDownSince = Date.now();
+    } else if (Date.now() - realtimeDownSince >= REALTIME_REVIVE_AFTER_MS) {
+      realtimeDownSince = Date.now();
+      reviveAllChannels();
+    }
+  } else {
+    realtimeDownSince = 0;
+  }
+
+  if (isCloudUnavailable) {
+    void testPocketBaseConnection().then((healthy) => {
+      if (!healthy) return;
+      isCloudUnavailable = false;
+      hasReportedUnavailable = false;
+      void flushOutbox();
+      emitSyncStatus();
+    });
+  }
+
+  emitSyncStatus();
+}
+
+function ensureRealtimeWatchdog(): void {
+  if (realtimeWatchdogTimer || typeof window === 'undefined') return;
+  realtimeWatchdogTimer = setInterval(tickRealtimeWatchdog, REALTIME_WATCHDOG_MS);
+
+  const revive = () => {
+    realtimeDownSince = 0;
+    reviveAllChannels();
+    void flushPendingWrites();
+  };
+
+  window.addEventListener('online', revive);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    // Tab yang lama di background kehilangan SSE; bangun ulang lalu tarik snapshot.
+    const pb = getPB();
+    if (!pb.realtime.isConnected) {
+      revive();
+    } else {
+      refetchAllChannels();
+    }
+  });
+}
+
+function stopRealtimeWatchdogIfIdle(): void {
+  if (realtimeChannels.size === 0 && realtimeWatchdogTimer) {
+    clearInterval(realtimeWatchdogTimer);
+    realtimeWatchdogTimer = null;
+  }
+}
 
 /* -------------------------------------------------------------------------- */
 /*  Sanitizer                                                                 */
@@ -440,6 +717,35 @@ async function findByAppId(collection: string, appId: string): Promise<any | nul
  */
 const writeQueues = new Map<string, Promise<void>>();
 
+/**
+ * Jalankan tulis cloud: bila gagal karena jaringan, simpan di outbox agar
+ * dikirim ulang saat koneksi kembali; entri lama untuk target yang sama dibuang
+ * karena tulis ini sudah membawa kondisi terbaru.
+ */
+async function guardNetworkWrite(
+  collection: string,
+  docId: string,
+  action: OutboxEntry['action'],
+  data: any,
+  run: () => Promise<void>
+): Promise<void> {
+  try {
+    await run();
+    dropOutboxTarget(collection, docId);
+  } catch (err) {
+    if (isNetworkError(err)) {
+      enqueueOutbox({ collection, docId, action, data });
+    }
+    throw err;
+  }
+}
+
+function dropOutboxTarget(collection: string, docId: string): void {
+  if (!outboxCount) return;
+  const kept = readOutbox().filter((e) => !(e.collection === collection && e.docId === docId));
+  if (kept.length !== outboxCount) writeOutbox(kept);
+}
+
 async function upsertRecord(
   collection: string,
   id: string,
@@ -447,7 +753,13 @@ async function upsertRecord(
 ): Promise<void> {
   const key = `${collection}:${id}`;
   const previous = writeQueues.get(key) || Promise.resolve();
-  const task = previous.catch(() => {}).then(() => doUpsertRecord(collection, id, data));
+  const task = previous
+    .catch(() => {})
+    .then(() =>
+      guardNetworkWrite(collection, id, 'UPDATE', data, () =>
+        executeUpsert(collection, id, data)
+      )
+    );
   writeQueues.set(key, task);
   try {
     await task;
@@ -456,7 +768,7 @@ async function upsertRecord(
   }
 }
 
-async function doUpsertRecord(
+async function executeUpsert(
   collection: string,
   id: string,
   data: Record<string, any>
@@ -571,6 +883,12 @@ async function doUpsertRecord(
 }
 
 async function removeRecord(collection: string, id: string): Promise<void> {
+  await guardNetworkWrite(collection, id, 'DELETE', undefined, () =>
+    executeRemoveRecord(collection, id)
+  );
+}
+
+async function executeRemoveRecord(collection: string, id: string): Promise<void> {
   const service = pbService(collection);
   if (PB_ID_PATTERN.test(id)) {
     try {
@@ -631,21 +949,14 @@ export async function safeCloudWrite(
   opType: OperationType,
   path: string
 ): Promise<void> {
-  if (isCloudUnavailable) {
-    // Coba pulihkan ketersediaan cloud sebelum menyerah.
-    try {
-      await authReady;
-      isCloudUnavailable = false;
-    } catch {
-      return;
-    }
-  }
   try {
     await authReady;
     await operation();
     isCloudUnavailable = false;
   } catch (err: any) {
     if (isNetworkError(err)) {
+      // Tulis yang gagal sudah masuk outbox (lihat guardNetworkWrite) dan
+      // dikirim ulang begitu koneksi kembali — tidak ada data yang hilang.
       isCloudUnavailable = true;
       handleBackendError(err, opType, path);
       return;
@@ -656,69 +967,95 @@ export async function safeCloudWrite(
 }
 
 /**
- * Membuat subscription real-time PocketBase.
- * `setupListener` menerima callback onError.
+ * Membuat subscription real-time PocketBase yang tahan putus.
+ *
+ * Kanal selalu dihidupkan lagi setelah error, setelah sesi dashboard siap, atau
+ * saat pengawas realtime mendeteksi koneksi SDK sudah mati — tanpa ini satu
+ * gangguan jaringan kecil membuat user tidak pernah menerima perubahan dari
+ * user lain sampai halaman di-refresh.
  */
 function createSafeSubscription(
   path: string,
   opType: OperationType,
-  setupListener: (onError: (error: any) => void) => () => void
+  setup: (onError: (error: any) => void) => { stop: () => void; refetch: () => void }
 ): () => void {
-  let unsub: (() => void) | null = null;
+  let live: { stop: () => void; refetch: () => void } | null = null;
+  let disposed = false;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryDelay = 3000;
+
+  const stopLive = () => {
+    if (!live) return;
+    try {
+      live.stop();
+    } catch {}
+    live = null;
+  };
+
+  const attempt = () => {
+    if (disposed || live) return;
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
+    }
+    authReady
+      .then(() => {
+        if (disposed || live) return;
+        // Pengunjung landing publik tidak punya sesi dashboard; jangan mencoba
+        // membaca koleksi aplikasi sebelum login berhasil.
+        if (!hasDashboardSession || isCloudUnavailable) {
+          scheduleRetry();
+          return;
+        }
+        try {
+          live = setup(onError);
+          retryDelay = 3000;
+        } catch (err) {
+          onError(err);
+        }
+      })
+      .catch(() => scheduleRetry());
+  };
+
+  const scheduleRetry = () => {
+    if (disposed || retryTimer) return;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      attempt();
+    }, retryDelay);
+    retryDelay = Math.min(retryDelay * 2, 60000);
+  };
+
   const onError = (error: any) => {
     handleBackendError(error, opType, path);
-    if (isCloudUnavailable && unsub) {
-      try {
-        unsub();
-        unsub = null;
-      } catch {}
-    }
+    stopLive();
+    scheduleRetry();
   };
 
-  let cancelled = false;
-  const trySetup = () => {
-    if (cancelled) return;
-    if (isCloudUnavailable) {
-      // Coba pulihkan, lalu ulangi.
-      authReady
-        .then(() => {
-          if (cancelled) return;
-          if (!hasDashboardSession) return;
-          isCloudUnavailable = false;
-          trySetup();
-        })
-        .catch(() => {
-          setTimeout(trySetup, 15000);
-        });
-      return;
-    }
-    try {
-      authReady
-        .then(() => {
-          if (cancelled) return;
-          // Pengunjung landing publik tidak punya sesi dashboard; jangan
-          // mencoba membaca koleksi aplikasi sampai login berhasil.
-          if (!hasDashboardSession) return;
-          unsub = setupListener(onError);
-        })
-        .catch((err) => onError(err));
-    } catch (err) {
-      onError(err);
-      return;
-    }
+  const channel: RealtimeChannel = {
+    attempt,
+    revive: () => {
+      stopLive();
+      attempt();
+    },
+    refetch: () => live?.refetch(),
+    dispose: () => {
+      disposed = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = null;
+      stopLive();
+      realtimeChannels.delete(channel);
+      stopRealtimeWatchdogIfIdle();
+      emitSyncStatus();
+    },
   };
 
-  trySetup();
+  realtimeChannels.add(channel);
+  ensureRealtimeWatchdog();
+  emitSyncStatus();
+  attempt();
 
-  return () => {
-    cancelled = true;
-    if (unsub) {
-      try {
-        unsub();
-      } catch {}
-      unsub = null;
-    }
-  };
+  return () => channel.dispose();
 }
 
 /**
@@ -729,7 +1066,7 @@ function subscribeCollection(
   onData: (items: any[]) => void,
   onError: (error: any) => void,
   options?: { filter?: string; sort?: string }
-): () => void {
+): { stop: () => void; refetch: () => void } {
   const service = pbService(collection);
   let cancelled = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -742,7 +1079,9 @@ function subscribeCollection(
         filter: options?.filter,
         sort: options?.sort,
       });
-      if (!cancelled) onData(items);
+      if (cancelled) return;
+      markSyncActivity();
+      onData(items);
     } catch (err) {
       if (!cancelled) onError(err);
     }
@@ -778,18 +1117,24 @@ function subscribeCollection(
     }, 200);
   };
 
-  const unsub = subscribeRealtime(service as any, '*', schedule);
+  const unsub = subscribeRealtime(service as any, '*', () => {
+    markSyncActivity();
+    schedule();
+  });
 
   // Ambil snapshot awal SEKARANG. Sebelumnya data baru dimuat setelah
   // ada event realtime, sehingga client yang baru dibuka / setelah
   // localStorage dibersihkan tidak pernah menerima data dari server.
   void run();
 
-  return () => {
-    cancelled = true;
-    if (timer) clearTimeout(timer);
-    timer = null;
-    unsub();
+  return {
+    stop: () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      unsub();
+    },
+    refetch: schedule,
   };
 }
 
@@ -801,7 +1146,7 @@ function subscribeRecord(
   id: string,
   onData: (item: any | null) => void,
   onError: (error: any) => void
-): () => void {
+): { stop: () => void; refetch: () => void } {
   const service = pbService(collection);
   let cancelled = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -809,7 +1154,9 @@ function subscribeRecord(
   const load = async () => {
     try {
       const item = await fetchOneRecord(collection, id);
-      if (!cancelled) onData(item);
+      if (cancelled) return;
+      markSyncActivity();
+      onData(item);
     } catch (err) {
       if (!cancelled) onError(err);
     }
@@ -840,11 +1187,14 @@ function subscribeRecord(
   // Snapshot awal tanpa menunggu event
   void load();
 
-  return () => {
-    cancelled = true;
-    if (timer) clearTimeout(timer);
-    timer = null;
-    unsub();
+  return {
+    stop: () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      unsub();
+    },
+    refetch: schedule,
   };
 }
 
@@ -855,7 +1205,9 @@ export async function testPocketBaseConnection(): Promise<boolean> {
   try {
     await getPB().health.check();
     isCloudUnavailable = false;
+    hasReportedUnavailable = false;
     console.log('Connected to PocketBase successfully');
+    emitSyncStatus();
     return true;
   } catch (error: any) {
     if (isNetworkError(error)) {
@@ -864,6 +1216,7 @@ export async function testPocketBaseConnection(): Promise<boolean> {
     } else {
       console.error('PocketBase configuration error:', error);
     }
+    emitSyncStatus();
     return false;
   }
 }
@@ -1182,9 +1535,17 @@ export async function saveStockTransactionCloud(tx: StockTransaction): Promise<v
 export async function saveBatchStockTransactionsCloud(txs: StockTransaction[]): Promise<void> {
   if (!txs || txs.length === 0) return;
   return safeCloudWrite(async () => {
+    // Satu record yang gagal (mis. koneksi putus) tidak boleh membatalkan
+    // sisanya; yang gagal masuk outbox dan dikirim ulang saat online.
+    let firstError: any = null;
     for (const tx of txs) {
-      await upsertRecord('stock_transactions', tx.id, tx as any);
+      try {
+        await upsertRecord('stock_transactions', tx.id, tx as any);
+      } catch (err) {
+        if (!firstError) firstError = err;
+      }
     }
+    if (firstError) throw firstError;
   }, OperationType.WRITE, 'stock_transactions');
 }
 
@@ -1563,10 +1924,16 @@ export async function saveAllTaxAnnualReturnsCloud(
 ): Promise<void> {
   if (!returns || !returns.length) return;
   return safeCloudWrite(async () => {
+    let firstError: any = null;
     for (const r of returns) {
       const safeDocId = r.id.replace(/\//g, '_');
-      await upsertRecord('tax_annual_returns', safeDocId, r as any);
+      try {
+        await upsertRecord('tax_annual_returns', safeDocId, r as any);
+      } catch (err) {
+        if (!firstError) firstError = err;
+      }
     }
+    if (firstError) throw firstError;
   }, OperationType.WRITE, 'tax_annual_returns/batch');
 }
 

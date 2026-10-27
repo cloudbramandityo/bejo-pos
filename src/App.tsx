@@ -143,6 +143,7 @@ import {
 import {
   testPocketBaseConnection,
   refreshPocketBaseAuth,
+  onSyncStatusChange,
   seedDatabaseIfEmpty,
   subscribeProducts,
   saveProductCloud,
@@ -818,10 +819,15 @@ export default function App() {
       window.addEventListener('app:quota-exceeded', handleQuotaExceededEvent);
     }
 
-    // Test connection & seed database if initial empty
-    testPocketBaseConnection().then((connected) => {
-      if (isMounted) setIsCloudConnected(connected);
+    // Status koneksi realtime + antrean tulis adalah satu-satunya sumber benar;
+    // health check server saja tidak membuktikan browser tersambung ke PocketBase.
+    const unsubSyncStatus = onSyncStatusChange((status) => {
+      if (status.state === 'connecting') return;
+      setIsCloudConnected(status.state === 'connected');
     });
+
+    // Test connection & seed database if initial empty
+    testPocketBaseConnection();
     seedDatabaseIfEmpty();
 
     // 1. Subscribe Products
@@ -1077,6 +1083,7 @@ export default function App() {
     return () => {
       isMounted = false;
       clearInterval(cleanupInterval);
+      unsubSyncStatus();
       unsubProducts();
       unsubCategories();
       unsubCustCategories();

@@ -363,8 +363,90 @@ function logBackendError(
 // Untuk development lokal, frontend memakai VITE_POCKETBASE_URL langsung.
 // ---------------------------------------------------------------------------
 
+/**
+ * Probe kondisi PocketBase dari sisi server (di-cache 20 detik agar health check
+ * tidak membanjiri database). "realtimeStream" membuktikan endpoint SSE
+ * /api/realtime menjawab sebagai text/event-stream — prasyarat sinkronisasi
+ * realtime antar user.
+ */
+const POCKETBASE_UPSTREAM_URL = String(
+  process.env.POCKETBASE_UPSTREAM || "http://127.0.0.1:8090"
+)
+  .trim()
+  .replace(/\/+$/, "");
+const PB_PROBE_TTL_MS = 20_000;
+
+interface PocketBaseProbe {
+  reachable: boolean;
+  realtimeStream: boolean;
+  latencyMs: number | null;
+  checkedAt: number;
+  error: string | null;
+}
+
+let pbProbe: PocketBaseProbe = {
+  reachable: false,
+  realtimeStream: false,
+  latencyMs: null,
+  checkedAt: 0,
+  error: null,
+};
+let pbProbeInflight: Promise<PocketBaseProbe> | null = null;
+
+async function probePocketBase(): Promise<PocketBaseProbe> {
+  if (Date.now() - pbProbe.checkedAt < PB_PROBE_TTL_MS) return pbProbe;
+  if (pbProbeInflight) return pbProbeInflight;
+
+  pbProbeInflight = (async () => {
+    const startedAt = Date.now();
+    let reachable = false;
+    let realtimeStream = false;
+    let error: string | null = null;
+
+    try {
+      const res = await fetch(`${POCKETBASE_UPSTREAM_URL}/api/health`, {
+        signal: AbortSignal.timeout(3000),
+      });
+      const body = (await res.json().catch(() => null)) as { code?: number } | null;
+      reachable = res.ok && body?.code === 200;
+      if (!reachable) error = `health HTTP ${res.status}`;
+    } catch (err: any) {
+      error = err?.message || "health tidak terjangkau";
+    }
+
+    if (reachable) {
+      try {
+        // Resolved begitu header SSE turun; body dibatalkan segera.
+        const stream = await fetch(`${POCKETBASE_UPSTREAM_URL}/api/realtime`, {
+          signal: AbortSignal.timeout(3000),
+        });
+        realtimeStream =
+          stream.ok && (stream.headers.get("content-type") || "").includes("text/event-stream");
+        await stream.body?.cancel().catch(() => {});
+        if (!realtimeStream) error = `realtime HTTP ${stream.status}`;
+      } catch (err: any) {
+        error = err?.message || "realtime tidak terjangkau";
+      }
+    }
+
+    pbProbe = {
+      reachable,
+      realtimeStream,
+      latencyMs: Date.now() - startedAt,
+      checkedAt: Date.now(),
+      error,
+    };
+    return pbProbe;
+  })().finally(() => {
+    pbProbeInflight = null;
+  });
+
+  return pbProbeInflight;
+}
+
 // API routes FIRST
-app.get("/api/health", (req, res) => {
+app.get("/api/health", async (req, res) => {
+  const pocketbase = await probePocketBase();
   res.json({
     status: "ok",
     app: APP_NAME,
@@ -372,6 +454,13 @@ app.get("/api/health", (req, res) => {
     mode: process.env.NODE_ENV === "production" ? "production" : "development",
     publicUrl: APP_URL || null,
     node: process.version,
+    pocketbase: {
+      reachable: pocketbase.reachable,
+      realtimeStream: pocketbase.realtimeStream,
+      latencyMs: pocketbase.latencyMs,
+      checkedAt: pocketbase.checkedAt,
+      error: pocketbase.error,
+    },
     uptimeSeconds: Math.floor((Date.now() - SERVER_START_TIME) / 1000),
     timestamp: Date.now()
   });

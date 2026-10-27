@@ -24,9 +24,11 @@
     6. Backup dist dan Caddyfile, lalu pasang Caddyfile (batas body 110MB)
     7. npm ci + build produksi
     8. Restart service aplikasi, health check lokal, rollback otomatis bila gagal
-    9. Verifikasi lokal: service, Jurnal, auth developer, broker PocketBase, Marketing
-   10. Verifikasi live: DNS, HTTPS, APP_URL publik, identitas Landing
-   11. Ringkasan hasil deploy
+    9. Verifikasi lokal: service, Jurnal, auth developer, broker PocketBase,
+       Marketing, dan jalur SSE realtime PocketBase (PB_CONNECT benar-benar mengalir)
+    10. Verifikasi live: DNS, HTTPS, APP_URL publik, identitas Landing,
+        PocketBase publik + realtime publik + isi bundle browser (URL DB)
+    11. Ringkasan hasil deploy
 
   Data yang TIDAK disentuh:
     .env, data/, logs/, backups/, database PocketBase
@@ -41,6 +43,7 @@
     -SkipPbHardening             Jangan perketat aturan akses koleksi PocketBase
     -AllowLanOnly                Izinkan REMOTE_ACCESS_PASS kosong (akses internet ditolak)
     -SkipPublicCheck             Lewati verifikasi domain publik
+    -SkipRealtimeCheck            Lewati uji sinkronisasi realtime PocketBase (SSE)
     -SkipMarketingCheck          Lewati pemeriksaan endpoint Marketing
     -RequireMarketing            Exit code 2 bila kanal Marketing belum LIVE
     -KeepSourceArchive           Simpan arsip source di %TEMP%
@@ -88,6 +91,7 @@ param(
   [switch]$SkipPbHardening,
   [switch]$AllowLanOnly,
   [switch]$SkipPublicCheck,
+  [switch]$SkipRealtimeCheck,
   [switch]$SkipMarketingCheck,
   [switch]$RequireMarketing,
   [switch]$Force,
@@ -345,6 +349,49 @@ function Test-PublicEndpoint([string]$Url) {
     $ok = $status -in @(200, 201, 204, 301, 302, 307, 308, 401, 403)
     return [pscustomobject]@{ Ok = $ok; Code = $status; Error = $_.Exception.Message }
   }
+}
+
+# Uji end-to-end jalur SSE realtime PocketBase. Yang dibuktikan: proxy
+# meneruskan streaming (content-type text/event-stream) dan event PB_CONNECT
+# pertama benar-benar sampai ke klien, bukan tertahan di buffer.
+function Test-RealtimeStream([string]$Url, [int]$TimeoutSec = 8) {
+  $result = [pscustomobject]@{ Ok = $false; StatusCode = 0; ContentType = ''; GotConnect = $false; Error = '' }
+  try {
+    if (-not ('System.Net.Http.HttpClient' -as [type])) {
+      Add-Type -AssemblyName System.Net.Http -ErrorAction Stop
+    }
+    $client = New-Object System.Net.Http.HttpClient
+    $client.Timeout = [TimeSpan]::FromSeconds($TimeoutSec)
+    try {
+      $request = New-Object System.Net.Http.HttpRequestMessage([System.Net.Http.HttpMethod]::Get, $Url)
+      $response = $client.SendAsync($request, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+      $result.StatusCode = [int]$response.StatusCode
+      $result.ContentType = [string]$response.Content.Headers.ContentType.MediaType
+      if ($response.IsSuccessStatusCode) {
+        $stream = $response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
+        $buffer = New-Object byte[] 4096
+        $readTask = $stream.ReadAsync($buffer, 0, $buffer.Length)
+        if ($readTask.Wait([TimeSpan]::FromSeconds($TimeoutSec)) -and $readTask.Result -gt 0) {
+          $head = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $readTask.Result)
+          $result.GotConnect = ($head -match 'PB_CONNECT') -or ($head -match 'clientId')
+        }
+        $stream.Dispose()
+      } else {
+        $result.Error = "HTTP $($result.StatusCode)"
+      }
+      $response.Dispose()
+      $request.Dispose()
+    } finally {
+      $client.Dispose()
+    }
+    $result.Ok = ($result.StatusCode -eq 200) -and ($result.ContentType -eq 'text/event-stream') -and $result.GotConnect
+    if (-not $result.Ok -and -not $result.Error) {
+      $result.Error = "content-type '$($result.ContentType)', PB_CONNECT $(if ($result.GotConnect) { 'diterima' } else { 'tidak diterima' })"
+    }
+  } catch {
+    $result.Error = $_.Exception.Message
+  }
+  return $result
 }
 
 function Restore-Dist([string]$BackupPath, [string]$TargetPath) {
@@ -879,6 +926,41 @@ if ($publicSite) {
   Write-Ok 'REMOTE_ACCESS_PASS terisi; akses internet diizinkan dengan Basic Auth.'
 }
 
+# ---------------------------------------------------------------------------
+# URL PocketBase yang DIPAKAI BROWSER (VITE_POCKETBASE_URL). Ini bukan URL
+# server: nilai localhost hanya berlaku di dalam VPS, sehingga Pengunjung
+# internet yang bundle-nya menunjuk localhost tidak pernah tersambung ke
+# PocketBase (terjebak Mode Lokal, tidak sync antar user).
+# ---------------------------------------------------------------------------
+$publicBaseCandidate = ''
+if ($PublicUrl) {
+  $publicBaseCandidate = $PublicUrl.Trim().TrimEnd('/')
+  if ($publicBaseCandidate -notmatch '^https?://') { $publicBaseCandidate = "https://$publicBaseCandidate" }
+}
+$appUrlValue = Get-EnvValue $envPath 'APP_URL'
+if (-not $publicBaseCandidate -and $appUrlValue -match '^https?://' -and
+    $appUrlValue -notmatch '^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|/|$)') {
+  $publicBaseCandidate = $appUrlValue.TrimEnd('/')
+}
+if (-not $publicBaseCandidate) { $publicBaseCandidate = Get-CaddyPublicUrl $AppDir }
+
+$pbBrowserUrl = ''
+if ($publicBaseCandidate) {
+  $pbBrowserUrl = "$($publicBaseCandidate.TrimEnd('/'))/api/pb"
+  $pbBrowserConfigured = Get-EnvValue $envPath 'VITE_POCKETBASE_URL'
+  if ([string]::IsNullOrWhiteSpace($pbBrowserConfigured) -or
+      $pbBrowserConfigured -match '(localhost|127\.0\.0\.1|0\.0\.0\.0)') {
+    Set-EnvValue $envPath 'VITE_POCKETBASE_URL' $pbBrowserUrl
+    Write-Ok "VITE_POCKETBASE_URL disetel ke $pbBrowserUrl agar browser pengunjung menjangkau PocketBase."
+  } elseif ($pbBrowserConfigured.TrimEnd('/') -ne $pbBrowserUrl) {
+    Write-Warn2 "VITE_POCKETBASE_URL ($pbBrowserConfigured) beda dari jalur proxy publik ($pbBrowserUrl). Ganti bila bukan kesengajaan."
+  } else {
+    Write-Ok "VITE_POCKETBASE_URL sudah mengarah ke PocketBase publik ($pbBrowserUrl)."
+  }
+} else {
+  Write-Warn2 'Domain publik tidak dikenali (APP_URL/Caddyfile kosong); VITE_POCKETBASE_URL tidak diverifikasi.'
+}
+
 $marketingKeys = @(
   'META_ACCESS_TOKEN', 'META_AD_ACCOUNT_ID',
   'TIKTOK_ACCESS_TOKEN', 'TIKTOK_ADVERTISER_ID',
@@ -1057,6 +1139,30 @@ try {
     if (Restore-Dist $distBackup $distPath) { Write-Warn2 'dist lama dikembalikan.' }
     Fail 'dist\server.cjs tidak terbentuk.'
   }
+  # Bundle yang masih menunjuk PocketBase localhost membuat SEMUA pengunjung
+  # internet diam-diam berjalan Mode Lokal: data tidak pernah sampai ke server
+  # dan tidak sync antar user. Build dianggap cacat bila begitu.
+  $assetGlob = Join-Path $distPath 'assets\*.js'
+  if (Test-Path -LiteralPath (Join-Path $distPath 'assets')) {
+    $pbLocalHits = @(
+      Select-String -Path $assetGlob -SimpleMatch -Pattern 'localhost:8090', '127.0.0.1:8090' -List -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty Path -Unique
+    )
+    $pbPublicInBundle = $false
+    if ($pbBrowserUrl) {
+      $pbPublicInBundle = (@(Select-String -Path $assetGlob -SimpleMatch -Pattern $pbBrowserUrl -List -ErrorAction SilentlyContinue).Count -gt 0)
+    }
+    if ($pbLocalHits.Count -gt 0) {
+      Restore-Dist $distBackup $distPath
+      Fail "Bundle produksi menunjuk PocketBase localhost ($($pbLocalHits -join ', ')). Setel VITE_POCKETBASE_URL ke $pbBrowserUrl lalu deploy ulang."
+    }
+    if ($pbBrowserUrl -and -not $pbPublicInBundle) {
+      Write-Warn2 "URL PocketBase publik ($pbBrowserUrl) tidak ditemukan di bundle; periksa isi .env bagian VITE_POCKETBASE_URL."
+    } elseif ($pbPublicInBundle) {
+      Write-Ok "Bundle browser memakai URL PocketBase publik ($pbBrowserUrl)."
+    }
+  }
+
   Write-Ok 'Build selesai.'
 } finally {
   Pop-Location
@@ -1162,6 +1268,36 @@ try {
     Write-Warn2 'Broker /api/pocketbase/session tidak ditemukan; build lama mungkin masih berjalan atau Caddy mem-proxy ke PocketBase.'
   } else {
     Write-Warn2 "Broker sesi PocketBase tidak merespons semestinya (HTTP $pbProbeCode)."
+  }
+}
+
+# Sinkronisasi antar user hanya terjadi lewat SSE PocketBase. Uji langsung ke
+# upstream dalam VPS: header text/event-stream + event PB_CONNECT pertama.
+$pbLocalUrl = Get-EnvValue $envPath 'POCKETBASE_UPSTREAM'
+if ([string]::IsNullOrWhiteSpace($pbLocalUrl)) { $pbLocalUrl = 'http://127.0.0.1:8090' }
+$pbLocalUrl = $pbLocalUrl.TrimEnd('/')
+$pbRealtimeStatus = 'dilewati'
+if ($SkipRealtimeCheck) {
+  Write-Warn2 'Uji realtime PocketBase dilewati (-SkipRealtimeCheck).'
+} else {
+  $localRealtime = Test-RealtimeStream "$pbLocalUrl/api/realtime" 10
+  if ($localRealtime.Ok) {
+    $pbRealtimeStatus = "lokal OK ($($localRealtime.ContentType))"
+    Write-Ok "SSE realtime PocketBase lokal mengalir dari $pbLocalUrl (PB_CONNECT diterima)."
+  } else {
+    Fail "Realtime PocketBase tidak mengalir di VPS ($pbLocalUrl/api/realtime): $($localRealtime.Error). Tanpa SSE, perubahan satu user tidak pernah sampai ke user lain."
+  }
+
+  try {
+    $localHealth = Invoke-RestMethod -Uri $localHealthUrl -TimeoutSec 15
+    if ($localHealth.pocketbase.reachable -and $localHealth.pocketbase.realtimeStream) {
+      Write-Ok "Node aplikasi melihat PocketBase sehat dan realtime terbuka (latensi $($localHealth.pocketbase.latencyMs) ms)."
+    } else {
+      $pbProbeError = if ($localHealth.pocketbase.error) { $localHealth.pocketbase.error } else { 'probe kosong' }
+      Fail "Aplikasi (Node) tidak dapat menghubungi PocketBase lewat POCKETBASE_UPSTREAM: $pbProbeError. Periksa service PocketBase dan isi .env."
+    }
+  } catch {
+    Fail "Gagal membaca $localHealthUrl untuk probe PocketBase: $($_.Exception.Message)"
   }
 }
 
@@ -1294,6 +1430,34 @@ if ($SkipPublicCheck) {
       $publicOk = $false
     }
 
+    # Jalur yang DIPAKAI BROWSER PENGUNJUNG: domain publik -> Caddy -> PocketBase.
+    # SSE yang terputus/ter-buffer di sini berarti aplikasi live tidak sync real-time.
+    if (-not $SkipRealtimeCheck) {
+      $publicPbBase = if ($pbBrowserUrl) { $pbBrowserUrl } else { "$publicBase/api/pb" }
+      $publicRealtime = Test-RealtimeStream "$publicPbBase/api/realtime" 12
+      if ($publicRealtime.Ok) {
+        $pbRealtimeStatus = "$pbRealtimeStatus | publik OK"
+        Write-Ok "SSE realtime publik mengalir lewat $publicPbBase (proxy Caddy tidak mem-buffer)."
+      } else {
+        $pbRealtimeStatus = "$pbRealtimeStatus | publik GAGAL"
+        $publicOk = $false
+        Write-Warn2 "Realtime publik bermasalah ($publicPbBase/api/realtime): $($publicRealtime.Error). Pengunjung internet tidak akan menerima perubahan antar user."
+      }
+
+      try {
+        $publicHealthData = Invoke-RestMethod -Uri $publicHealthUrl -TimeoutSec 20
+        $publicPb = $publicHealthData.pocketbase
+        if ($publicPb.reachable -and $publicPb.realtimeStream) {
+          Write-Ok "Health publik melaporkan PocketBase sehat + realtime hidup (versi $($publicHealthData.version))."
+        } else {
+          $publicOk = $false
+          Write-Warn2 "Health publik melaporkan PocketBase bermasalah: $(if ($publicPb.error) { $publicPb.error } else { 'probe belum tersedia di build lama' })"
+        }
+      } catch {
+        Write-Warn2 "Health publik tidak dapat dibaca JSON ($publicHealthUrl): $($_.Exception.Message)"
+      }
+    }
+
     # Identitas website (logo, favicon, judul) hanya live bila landing sudah
     # dipublish dan HTML publik memuat tag identitas dari server.
     try {
@@ -1387,6 +1551,8 @@ Write-Host "   Service aplikasi  : $appStatus"
 Write-Host "   Caddy             : $caddyStatusText"
 Write-Host "   PocketBase        : $pbStatusText"
 Write-Host "   Aturan PB         : $pbHardeningStatus"
+Write-Host "   Sync realtime PB  : $pbRealtimeStatus"
+Write-Host "   URL PB browser    : $(if ($pbBrowserUrl) { $pbBrowserUrl } else { Get-EnvValue $envPath 'VITE_POCKETBASE_URL' })"
 Write-Host "   Akses internet    : $(if ($publicSite) { 'PUBLIK (landing terbuka, dashboard wajib login)' } elseif ($lanOnlyMode) { 'LAN-only (403 dari internet)' } elseif ([string]::IsNullOrWhiteSpace($remoteAccessPass)) { 'tanpa password (hanya lokal/LAN)' } else { 'dengan password REMOTE_ACCESS_PASS' })"
 Write-Host "   Health lokal      : $(if (Test-AppHealth $localHealthUrl 5) { 'OK' } else { 'GAGAL' }) ($localHealthUrl)"
 if ($publicBase) {

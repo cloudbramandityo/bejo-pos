@@ -160,6 +160,20 @@ function Test-HttpOk([string]$Url, [int]$TimeoutSec = 5) {
   }
 }
 
+# Uji login akun sync tanpa mencetak kredensial. Dipakai sebelum menonaktifkan
+# VITE_PB_SYNC_* agar Landing API tidak kehilangan kredensial yang valid.
+function Test-PbLogin([string]$BaseUrl, [string]$Email, [string]$Password) {
+  if ([string]::IsNullOrWhiteSpace($Email) -or [string]::IsNullOrWhiteSpace($Password)) { return $false }
+  try {
+    $body = @{ identity = $Email; password = $Password } | ConvertTo-Json -Compress
+    $response = Invoke-RestMethod -Uri ($BaseUrl.TrimEnd('/') + '/api/collections/users/auth-with-password') `
+      -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 10
+    return [bool]$response.token
+  } catch {
+    return $false
+  }
+}
+
 function Invoke-NativeCapture([string]$FilePath, [string[]]$Arguments, [string]$WorkDir) {
   $previous = $ErrorActionPreference
   Push-Location -LiteralPath $WorkDir
@@ -254,24 +268,6 @@ try {
     Copy-Item -LiteralPath $envPath -Destination $envBackup -Force
     Write-Ok "Backup .env dibuat: $envBackup (nilai tidak dicetak)."
 
-    # Nonaktifkan kredensial PocketBase sisi browser yang sudah deprecated.
-    $lines = New-Object System.Collections.Generic.List[string]
-    $deprecatedCount = 0
-    foreach ($line in Get-Content -LiteralPath $envPath) {
-      if ($line -match '^\s*(VITE_PB_SYNC_EMAIL|VITE_PB_SYNC_PASSWORD)\s*=') {
-        $lines.Add("# [DEPRECATED $Stamp] $line")
-        $deprecatedCount++
-      } else {
-        $lines.Add($line)
-      }
-    }
-    if ($deprecatedCount -gt 0) {
-      [System.IO.File]::WriteAllLines($envPath, $lines, (New-Object System.Text.UTF8Encoding($false)))
-      Write-Ok "$deprecatedCount baris VITE_PB_SYNC_* dinonaktifkan (tidak lagi dipakai browser)."
-    } else {
-      Write-Ok 'Tidak ada VITE_PB_SYNC_* aktif di .env.'
-    }
-
     if ([string]::IsNullOrWhiteSpace((Get-EnvValue $envPath 'DEV_USERNAME'))) {
       Set-EnvValue $envPath 'DEV_USERNAME' 'langgo'
       Write-Ok 'DEV_USERNAME diisi "langgo".'
@@ -330,6 +326,40 @@ try {
       Write-Ok 'POCKETBASE_UPSTREAM sudah terisi.'
     }
 
+    # Nilai VITE_PB_SYNC_* (dulu dipakai browser) masih dibaca Landing API
+    # sebagai fallback. Pindahkan ke PB_SYNC_* bila kosong; bila keduanya
+    # berbeda, utamakan pasangan yang benar-benar bisa login ke PocketBase.
+    $legacySyncEmail = Get-EnvValue $envPath 'VITE_PB_SYNC_EMAIL'
+    $legacySyncPassword = Get-EnvValue $envPath 'VITE_PB_SYNC_PASSWORD'
+    $syncEmail = Get-EnvValue $envPath 'PB_SYNC_EMAIL'
+    $syncPass = Get-EnvValue $envPath 'PB_SYNC_PASSWORD'
+    $pbProbeUrl = Get-EnvValue $envPath 'POCKETBASE_UPSTREAM'
+    if ([string]::IsNullOrWhiteSpace($pbProbeUrl)) { $pbProbeUrl = 'http://127.0.0.1:8090' }
+    $legacyComplete = (-not [string]::IsNullOrWhiteSpace($legacySyncEmail)) -and (-not [string]::IsNullOrWhiteSpace($legacySyncPassword))
+    $syncComplete = (-not [string]::IsNullOrWhiteSpace($syncEmail)) -and (-not [string]::IsNullOrWhiteSpace($syncPass))
+
+    if (-not $syncComplete -and $legacyComplete) {
+      Set-EnvValue $envPath 'PB_SYNC_EMAIL' $legacySyncEmail
+      Set-EnvValue $envPath 'PB_SYNC_PASSWORD' $legacySyncPassword
+      $syncEmail = $legacySyncEmail
+      $syncPass = $legacySyncPassword
+      $syncComplete = $true
+      Write-Ok 'PB_SYNC_* diisi dari VITE_PB_SYNC_* lama.'
+    } elseif ($syncComplete -and $legacyComplete -and
+              ($syncEmail -ne $legacySyncEmail -or $syncPass -ne $legacySyncPassword)) {
+      if (-not (Test-PbLogin $pbProbeUrl $syncEmail $syncPass)) {
+        if (Test-PbLogin $pbProbeUrl $legacySyncEmail $legacySyncPassword) {
+          Set-EnvValue $envPath 'PB_SYNC_EMAIL' $legacySyncEmail
+          Set-EnvValue $envPath 'PB_SYNC_PASSWORD' $legacySyncPassword
+          $syncEmail = $legacySyncEmail
+          $syncPass = $legacySyncPassword
+          Write-Ok 'PB_SYNC_* ditolak PocketBase; nilai VITE_PB_SYNC_* yang valid dipakai.'
+        } else {
+          Write-Warn2 'PB_SYNC_* dan VITE_PB_SYNC_* sama-sama ditolak PocketBase; reset akun sync lalu isi PB_SYNC_*.'
+        }
+      }
+    }
+
     $syncEmail = Get-EnvValue $envPath 'PB_SYNC_EMAIL'
     $syncPass = Get-EnvValue $envPath 'PB_SYNC_PASSWORD'
     if ([string]::IsNullOrWhiteSpace($syncEmail) -or [string]::IsNullOrWhiteSpace($syncPass)) {
@@ -352,6 +382,31 @@ try {
       }
     } else {
       Write-Ok 'Kredensial sync PocketBase sudah terisi.'
+    }
+
+    # Kredensial browser dinonaktifkan hanya setelah PB_SYNC_* lengkap;
+    # Landing API memakai VITE_PB_SYNC_* sebagai fallback.
+    $finalSyncEmail = Get-EnvValue $envPath 'PB_SYNC_EMAIL'
+    $finalSyncPass = Get-EnvValue $envPath 'PB_SYNC_PASSWORD'
+    if (-not [string]::IsNullOrWhiteSpace($finalSyncEmail) -and -not [string]::IsNullOrWhiteSpace($finalSyncPass)) {
+      $lines = New-Object System.Collections.Generic.List[string]
+      $deprecatedCount = 0
+      foreach ($line in Get-Content -LiteralPath $envPath) {
+        if ($line -match '^\s*(VITE_PB_SYNC_EMAIL|VITE_PB_SYNC_PASSWORD)\s*=') {
+          $lines.Add("# [DEPRECATED $Stamp] $line")
+          $deprecatedCount++
+        } else {
+          $lines.Add($line)
+        }
+      }
+      if ($deprecatedCount -gt 0) {
+        [System.IO.File]::WriteAllLines($envPath, $lines, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Ok "$deprecatedCount baris VITE_PB_SYNC_* dinonaktifkan (tidak lagi dipakai browser)."
+      } else {
+        Write-Ok 'Tidak ada VITE_PB_SYNC_* aktif di .env.'
+      }
+    } else {
+      Write-Warn2 'VITE_PB_SYNC_* dibiarkan aktif karena PB_SYNC_* belum lengkap (fallback Landing API).'
     }
 
     if (-not $SkipHardening) {

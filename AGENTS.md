@@ -54,6 +54,18 @@ Lokasi folder hanya boleh datang dari konfigurasi bersama, tidak pernah dikarang
 - Format path yang muncul di UI diambil dari `sharedFolderDisplayPath` (path konfigurasi atau nama folder hasil grant), bukan gabungan string yang terkesan meyakinkan.
 - `scripts/check-path-fabrication.mjs` berjalan sebagai `prebuild`; build gagal jika lokasi folder toko muncul lagi sebagai konstanta di `src/`. Cek manual: `npm run check:paths`.
 
+## Identitas akun staf di cloud (wajib)
+
+Akun staf tidak boleh dikenali hanya dari id aplikasi.
+
+- Restore backup dari perangkat lain membawa id lama (`user_1789...`), sedangkan orang yang sama di cloud bisa punya id PocketBase. Mencocokkan per id saja membuat akun ditolak (`USERNAME_TAKEN`) atau digandakan.
+- `POST /api/users` mencocokkan berurutan: `legacyId` → username → email kredensial `<username>@staff.bejo.local` → email cadangan `<username>-<id>@staff.bejo.local`. Bila sudah ada, akun **diadopsi**: profil diperbarui, tetapi id cloud, status aktif, dan password yang berlaku dipertahankan.
+- Password akun cloud yang sudah ada tidak pernah ditimpa data backup.
+- Record kredensial tidak pernah dibuat tanpa pengecekan ketiga penanda di atas, dan record hasil email cadangan selalu membawa `legacyId` agar bisa ditemukan lagi.
+- Penolakan PocketBase diteruskan beserta detail field (`details`) supaya penyebabnya tidak berhenti di "Failed to create record.".
+- Hasil restore memisahkan `skippedRecords` (digabungkan) dari `failedRecords`, dan hanya menyarankan "Coba Lagi" bila `retryable` (jaringan/5xx).
+- Uji regresi tanpa database: `npm run check:users` (PocketBase palsu di memori).
+
 ## Deploy
 
 Gunakan `deploy/deploy-vps.ps1` yang sudah ada. Jangan membuat skrip deploy baru. Build dan deploy hanya setelah `npm run build` lulus (termasuk check-brand, check-version, dan check-path-fabrication).

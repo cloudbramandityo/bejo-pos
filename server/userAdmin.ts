@@ -94,34 +94,81 @@ function assertPasswordPolicy(password: string): void {
   }
 }
 
-async function assertUsernameFree(pb: PocketBase, username: string, ownAppId: string): Promise<void> {
+/**
+ * Cari baris direktori lain dengan username yang sama. Restore dari perangkat
+ * lain membawa id lama, jadi identitas akun harus dikenali dari username —
+ * orang yang sama di cloud bisa punya id berbeda.
+ */
+async function findDirectoryByUsername(
+  pb: PocketBase,
+  username: string,
+  ownAppId: string
+): Promise<DirectoryEntry | null> {
   const rows = await pb
     .collection(DIR_COLLECTION)
     .getFullList({ filter: `username = "${username.replace(/[\\"]/g, '')}"`, requestKey: null })
     .catch(() => [] as any[]);
-  const clash = rows.map(directoryFromRecord).find((e) => e && e.id !== ownAppId);
-  if (clash) {
-    throw fail(`Username "${username}" sudah dipakai akun lain.`, 409, 'USERNAME_TAKEN');
-  }
+  return rows.map(directoryFromRecord).find((e) => e && e.id !== ownAppId) || null;
 }
 
 /* ---------------------------------------------------------------------- */
 /*  Operasi akun                                                           */
 /* ---------------------------------------------------------------------- */
 
-async function saveAccount(account: AccountInput): Promise<void> {
-  await runAsAdmin(async (pb) => {
-    await assertUsernameFree(pb, account.username, account.id);
+async function saveAccount(account: AccountInput): Promise<{ id: string; adopted: boolean }> {
+  return runAsAdmin(async (pb) => {
     const existing = await findDirectoryByAppId(pb, account.id);
+    const sameUsername = await findDirectoryByUsername(pb, account.username, account.id);
 
-    if (!existing && !account.password) {
+    // Ganti username ke username milik akun lain tetap ditolak.
+    if (existing && sameUsername) {
+      throw fail(`Username "${account.username}" sudah dipakai akun lain.`, 409, 'USERNAME_TAKEN');
+    }
+
+    if (!existing && !sameUsername && !account.password) {
       throw fail(
         `Password untuk akun baru minimal ${MIN_PASSWORD_LENGTH} karakter.`,
         400,
         'WEAK_PASSWORD'
       );
     }
-    if (account.password) assertPasswordPolicy(account.password);
+    // Password backup hanya divalidasi bila memang akan dipakai; adopsi akun
+    // cloud yang sudah punya kredensial tidak pernah memakainya.
+    if (account.password && !sameUsername) assertPasswordPolicy(account.password);
+
+    if (sameUsername) {
+      // Orang yang sama sudah ada di cloud dengan id lain (restore dari
+      // perangkat lain). Profil disamakan, tetapi id cloud, status aktif, dan
+      // password yang berlaku tidak ditimpa data backup supaya sesi/perangkat
+      // lain tidak kehilangan akses.
+      const entry: DirectoryEntry = {
+        ...account,
+        id: sameUsername.id,
+        role: sameUsername.role || account.role,
+        isActive: sameUsername.isActive,
+        createdAt: sameUsername.createdAt || account.createdAt,
+        authId: sameUsername.authId,
+        presence: sameUsername.presence,
+        recordId: sameUsername.recordId,
+        password: '',
+      };
+
+      if (!entry.authId) {
+        if (!account.password) {
+          throw fail(
+            `Akun "${account.username}" sudah ada di cloud tetapi belum punya kredensial. Isi password akun itu lewat menu Pengguna.`,
+            409,
+            'CREDENTIAL_MISSING'
+          );
+        }
+        assertPasswordPolicy(account.password);
+        entry.password = account.password;
+        entry.authId = await saveCredential(pb, entry, assertPasswordPolicy);
+      }
+
+      await writeDirectory(pb, entry);
+      return { id: entry.id, adopted: true };
+    }
 
     const entry: DirectoryEntry = {
       ...account,
@@ -132,6 +179,7 @@ async function saveAccount(account: AccountInput): Promise<void> {
 
     entry.authId = await saveCredential(pb, entry, assertPasswordPolicy);
     await writeDirectory(pb, entry);
+    return { id: entry.id, adopted: false };
   });
 }
 
@@ -177,8 +225,14 @@ export async function ensureStaffDirectory(): Promise<{ added: number; kept: num
       listAllDirectory(pb),
     ]);
 
+    const aliveAuth = new Set(credentials.map((r) => String(r.id)));
     const byAuthId = new Map(entries.map((e) => [e.authId, e]));
     const byAppId = new Set(entries.map((e) => e.id));
+    // Username hanya boleh punya satu baris direktori yang hidup; tanpa ini record
+    // kredensial yatim (sisa restore lama) melahirkan akun kembar ber-id sintetis.
+    const byUsername = new Set(
+      entries.filter((e) => !e.authId || aliveAuth.has(e.authId)).map((e) => e.username)
+    );
     const syncEmail = String(process.env.PB_SYNC_EMAIL || '').trim().toLowerCase();
 
     let added = 0;
@@ -196,7 +250,7 @@ export async function ensureStaffDirectory(): Promise<{ added: number; kept: num
         credentialEmail(email.split('@')[0], String(record.id)).split('@')[0];
       if (!username) continue;
       const legacyId = String(record.legacyId || '').trim() || `user_${record.id}`;
-      if (RESERVED_USER_IDS.has(legacyId) || byAppId.has(legacyId)) {
+      if (RESERVED_USER_IDS.has(legacyId) || byAppId.has(legacyId) || byUsername.has(username)) {
         kept += 1;
         continue;
       }
@@ -217,11 +271,11 @@ export async function ensureStaffDirectory(): Promise<{ added: number; kept: num
         presence: readPresence(record),
       });
       byAppId.add(legacyId);
+      byUsername.add(username);
       added += 1;
     }
 
     // Baris direktori yang record kredensialnya sudah dihapus dari PocketBase.
-    const aliveAuth = new Set(credentials.map((r) => String(r.id)));
     let removed = 0;
     for (const entry of entries) {
       if (entry.authId && !aliveAuth.has(entry.authId)) {
@@ -274,20 +328,38 @@ function requireManageRole(req: Request): void {
   }
 }
 
+/**
+ * Ringkas penolakan per field dari PocketBase, mis.
+ * { email: "The email is invalid or already in use." }. Tanpa ini pesan
+ * "Failed to create record." tidak memberi tahu field mana yang bermasalah.
+ */
+function pocketbaseFieldDetails(data: unknown): Record<string, string> {
+  if (!data || typeof data !== 'object') return {};
+  const out: Record<string, string> = {};
+  for (const [field, value] of Object.entries(data as Record<string, any>)) {
+    const message = String(value?.message || '').trim();
+    if (message) out[field] = message;
+  }
+  return out;
+}
+
 function sendUserError(res: Response, error: unknown): void {
   res.setHeader('Cache-Control', 'no-store');
   if (error instanceof StaffStoreError) {
     res.status(error.status).json({ success: false, code: error.code, error: error.message });
     return;
   }
-  const err = error as { status?: number; message?: string; response?: { data?: { message?: string } } };
-  const pbMessage = String(err?.response?.data?.message || err?.message || 'Terjadi kesalahan pada server.');
+  const err = error as { status?: number; message?: string; response?: { data?: any } };
+  const pbData = err?.response?.data;
+  const pbMessage = String(pbData?.message || err?.message || 'Terjadi kesalahan pada server.');
+  const details = pocketbaseFieldDetails(pbData);
   const status = err?.status === 400 ? 400 : err?.status === 404 ? 404 : 502;
   console.error('[UserAdmin] Gagal memproses permintaan:', error);
   res.status(status).json({
     success: false,
     code: 'POCKETBASE_REJECTED',
     error: `PocketBase menolak permintaan: ${pbMessage}`,
+    ...(Object.keys(details).length ? { details } : {}),
   });
 }
 
@@ -298,8 +370,13 @@ export function registerUserAdminRoutes(app: Express): void {
       assertSameOrigin(req);
       requireManageRole(req);
       const account = normalizeAccount(req.body);
-      await saveAccount(account);
-      res.json({ success: true, id: account.id, username: account.username });
+      const saved = await saveAccount(account);
+      res.json({
+        success: true,
+        id: saved.id,
+        username: account.username,
+        adopted: saved.adopted,
+      });
     } catch (error) {
       sendUserError(res, error);
     }

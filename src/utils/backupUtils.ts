@@ -135,6 +135,10 @@ export interface BackupCloudRestoreResult {
   totalRecords: number;
   syncedRecords: number;
   failedRecords: number;
+  /** Record yang memang sudah ada di cloud dan digabungkan/dilewati. */
+  skippedRecords: number;
+  /** True hanya bila kegagalan berpotensi hilang saat dicoba ulang (jaringan/5xx). */
+  retryable: boolean;
   errors: string[];
 }
 
@@ -330,6 +334,20 @@ interface CloudRestoreTask {
 }
 
 /**
+ * Penolakan data oleh PocketBase/server tidak akan berubah bila diulang, jadi
+ * jangan sarankan "Coba Lagi". Hanya gangguan jaringan atau server sibuk yang
+ * layak dicoba ulang.
+ */
+function isRetryableRestoreFailure(reason: any): boolean {
+  const status = Number(reason?.status || 0);
+  if (status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
+  const message = String(reason?.message || '');
+  return !/pocketbase menolak|sudah dipakai|tidak valid|wajib diisi|minimal \d+ karakter/i.test(
+    message
+  );
+}
+
+/**
  * Pushes restored backup data to PocketBase so it survives the realtime
  * subscription reload that would otherwise overwrite local-only changes.
  */
@@ -344,6 +362,8 @@ export async function restoreBackupToCloud(
       totalRecords: 0,
       syncedRecords: 0,
       failedRecords: 0,
+      skippedRecords: 0,
+      retryable: false,
       errors: ['Struktur file backup tidak memuat field data.'],
     };
   }
@@ -355,6 +375,8 @@ export async function restoreBackupToCloud(
       totalRecords: 0,
       syncedRecords: 0,
       failedRecords: 0,
+      skippedRecords: 0,
+      retryable: true,
       errors: ['Tidak dapat terhubung ke database cloud PocketBase. Periksa koneksi internet lalu coba lagi.'],
     };
   }
@@ -446,6 +468,8 @@ export async function restoreBackupToCloud(
   const overallTotal = tasks.reduce((sum, task) => sum + task.records.length, 0);
   let syncedRecords = 0;
   let failedRecords = 0;
+  let skippedRecords = 0;
+  let retryable = false;
   let overallProcessed = 0;
   const errors: string[] = [];
   const BATCH_SIZE = 4;
@@ -469,12 +493,14 @@ export async function restoreBackupToCloud(
           (lowerMsg.includes('username') && (lowerMsg.includes('sudah dipakai') || lowerMsg.includes('taken') || lowerMsg.includes('duplicate'))) ||
           (lowerMsg.includes('already exists') || lowerMsg.includes('unique constraint'))
         ) {
+          skippedRecords += 1;
           if (errors.length < 10) {
             errors.push(`${task.label} #${recordId}: ${message} (dilewati)`);
           }
           return;
         }
         failedRecords += 1;
+        if (isRetryableRestoreFailure(result.reason)) retryable = true;
         if (errors.length < 10) {
           errors.push(`${task.label} #${recordId}: ${message}`);
         }
@@ -496,6 +522,7 @@ export async function restoreBackupToCloud(
     if (!stillConnected) {
       errors.push('Koneksi ke database cloud terputus saat proses restore.');
       failedRecords = Math.max(failedRecords, 1);
+      retryable = true;
     }
   }
 
@@ -504,6 +531,8 @@ export async function restoreBackupToCloud(
     totalRecords: overallTotal,
     syncedRecords,
     failedRecords,
+    skippedRecords,
+    retryable,
     errors,
   };
 }

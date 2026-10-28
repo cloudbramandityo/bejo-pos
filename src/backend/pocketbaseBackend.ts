@@ -742,7 +742,16 @@ async function accountApiRequest(
   if (response.ok) return;
 
   const data = await response.json().catch(() => null);
-  const err: any = new Error(String(data?.error || `Gagal menyimpan akun (HTTP ${response.status}).`));
+  // Pesan PocketBase sering generik ("Failed to create record."); detail per
+  // field dari server dilampirkan supaya penyebabnya terbaca tanpa gali log.
+  const details =
+    data?.details && typeof data.details === 'object'
+      ? Object.entries(data.details as Record<string, string>)
+          .map(([field, message]) => `${field}: ${message}`)
+          .join('; ')
+      : '';
+  const message = String(data?.error || `Gagal menyimpan akun (HTTP ${response.status}).`);
+  const err: any = new Error(details ? `${message} (${details})` : message);
   err.status = response.status;
   err.code = data?.code;
   throw err;

@@ -174,6 +174,17 @@ export function credentialEmail(username: string, appId: string): string {
   return `${crypto.createHash('sha1').update(appId).digest('hex').slice(0, 24)}@${CREDENTIAL_EMAIL_DOMAIN}`;
 }
 
+/**
+ * Email cadangan yang dipakai bila email utama sudah terpakai record lain.
+ * Unik per id aplikasi, jadi selalu bisa dipakai ulang untuk akun yang sama.
+ */
+export function credentialFallbackEmail(username: string, appId: string): string {
+  const localPart = String(username || '')
+    .replace(/[^a-z0-9._-]/g, '-')
+    .toLowerCase();
+  return `${localPart}-${filterValue(appId)}@${CREDENTIAL_EMAIL_DOMAIN}`;
+}
+
 /* ---------------------------------------------------------------------- */
 /*  Klien PocketBase ber-akses superuser                                   */
 /* ---------------------------------------------------------------------- */
@@ -299,10 +310,17 @@ export async function writeDirectory(pb: PocketBase, entry: DirectoryEntry): Pro
   await pb.collection(DIR_COLLECTION).create(payload);
 }
 
+/** Field yang belum tentu ada di skema `users` instalasi lama. */
+const OPTIONAL_CREDENTIAL_FIELDS = ['appPassword', 'legacyId'] as const;
+
+function pbErrorMessage(err: unknown): string {
+  return JSON.stringify((err as { response?: { data?: any } })?.response?.data || '').toLowerCase();
+}
+
 /**
  * Perbarui record kredensial.
  * mengembalikan '' bila record sudah tidak ada (pemanggil harus membuat baru);
- * field `appPassword` dilepas bila skema PocketBase tidak mengenalnya.
+ * field opsional (appPassword/legacyId) dilepas bila skema PocketBase menolaknya.
  */
 async function updateCredential(
   pb: PocketBase,
@@ -315,14 +333,61 @@ async function updateCredential(
   } catch (err) {
     const status = (err as { status?: number })?.status;
     if (status === 404) return '';
-    const message = JSON.stringify((err as { response?: { data?: any } })?.response?.data || '')
-      .toLowerCase();
-    if (status === 400 && message.includes('apppassword') && 'appPassword' in patch) {
-      const { appPassword, ...rest } = patch;
-      return updateCredential(pb, id, rest);
+    if (status === 400) {
+      const message = pbErrorMessage(err);
+      const rejected =
+        OPTIONAL_CREDENTIAL_FIELDS.find(
+          (field) => field in patch && message.includes(field.toLowerCase())
+        ) ||
+        (message.includes('unknown')
+          ? OPTIONAL_CREDENTIAL_FIELDS.find((field) => field in patch)
+          : undefined);
+      if (rejected) {
+        const rest = { ...patch };
+        delete rest[rejected];
+        return updateCredential(pb, id, rest);
+      }
     }
     throw err;
   }
+}
+
+/** Buat record kredensial; mengembalikan primary key record auth. */
+async function createCredential(
+  pb: PocketBase,
+  body: Record<string, unknown>
+): Promise<string> {
+  const created: any = await pb.collection(AUTH_COLLECTION).create(body);
+  return String(created?.id || '');
+}
+
+async function findCredential(
+  pb: PocketBase,
+  filter: string
+): Promise<any[]> {
+  return pb
+    .collection(AUTH_COLLECTION)
+    .getFullList({ filter, requestKey: null })
+    .catch(() => [] as any[]);
+}
+
+/**
+ * Pakai record kredensial yang sudah ada untuk akun ini: perbarui profil dan
+ * password (bila dikirim), jangan pernah membuat record kembar. Email record
+ * dipertahankan supaya tidak menabrak record lain.
+ */
+async function adoptCredential(
+  pb: PocketBase,
+  recordId: string,
+  entry: DirectoryEntry
+): Promise<string> {
+  const patch: Record<string, unknown> = { name: entry.name, legacyId: entry.id };
+  if (entry.password) {
+    patch.password = entry.password;
+    patch.passwordConfirm = entry.password;
+    patch.appPassword = '';
+  }
+  return updateCredential(pb, recordId, patch);
 }
 
 /** Buat/perbarui record kredensial; mengembalikan primary key record auth. */
@@ -332,6 +397,7 @@ export async function saveCredential(
   passwordPolicy?: (password: string) => void
 ): Promise<string> {
   const email = credentialEmail(entry.username, entry.id);
+  const fallbackEmail = credentialFallbackEmail(entry.username, entry.id);
 
   if (entry.authId) {
     const patch: Record<string, unknown> = { email };
@@ -342,59 +408,70 @@ export async function saveCredential(
       // Kosongkan salinan plaintext lama supaya password baru yang dipakai.
       patch.appPassword = '';
     }
-    const found = await updateCredential(pb, entry.authId, patch);
+    let found = '';
+    try {
+      found = await updateCredential(pb, entry.authId, patch);
+    } catch (err) {
+      // Record ini memakai email cadangan karena email utama milik akun lain:
+      // pertahankan email yang berlaku, cukup perbarui profil/password.
+      if ((err as { status?: number })?.status !== 400 || !pbErrorMessage(err).includes('email')) {
+        throw err;
+      }
+      const rest = { ...patch };
+      delete rest.email;
+      found = await updateCredential(pb, entry.authId, rest);
+    }
     if (found) return found;
     entry.authId = '';
   }
 
-  const byEmail = await pb
-    .collection(AUTH_COLLECTION)
-    .getFullList({ filter: `email = "${filterValue(email)}"`, requestKey: null })
-    .catch(() => [] as any[]);
-  const linked = byEmail.find((r) => !r.legacyId || String(r.legacyId) === entry.id);
-  if (linked) {
-    const patch: Record<string, unknown> = { name: entry.name };
-    if (entry.password) {
-      patch.password = entry.password;
-      patch.passwordConfirm = entry.password;
-      patch.appPassword = '';
-    }
-    const found = await updateCredential(pb, String(linked.id), patch);
-    if (found) return found;
-    // Record tidak bisa diperbarui: jatuh ke pembuatan record baru.
-  }
+  // Record lama bisa dikenali dari tiga penanda. Email cadangan WAJIB dicek:
+  // percobaan restore sebelumnya bisa meninggalkan record dengan email cadangan
+  // tanpa legacyId, dan tanpa pencarian ini setiap percobaan ulang berakhir
+  // "Failed to create record." selamanya.
+  const byAppId = await findCredential(pb, `legacyId = "${filterValue(entry.id)}"`);
+  if (byAppId[0]) return adoptCredential(pb, String(byAppId[0].id), entry);
+
+  const emailRows = await findCredential(pb, `email = "${filterValue(email)}"`);
+  const linked = emailRows.find(
+    (r) => !r.legacyId || String(r.legacyId) === entry.id
+  );
+  if (linked) return adoptCredential(pb, String(linked.id), entry);
+
+  const fallbackRows = await findCredential(pb, `email = "${filterValue(fallbackEmail)}"`);
+  if (fallbackRows[0]) return adoptCredential(pb, String(fallbackRows[0].id), entry);
 
   if (entry.password && passwordPolicy) passwordPolicy(entry.password);
 
-  const createBody: Record<string, unknown> = {
-    email,
+  const base: Record<string, unknown> = {
     name: entry.name,
     password: entry.password,
     passwordConfirm: entry.password,
   };
-  // Field kustom hanya dikirim bila benar-benar ada di skema, supaya PocketBase
-  // tidak menolak request karena field tak dikenal.
-  createBody.legacyId = entry.id;
-  try {
-    const created: any = await pb.collection(AUTH_COLLECTION).create(createBody);
-    return String(created?.id || '');
-  } catch (err) {
-    const status = (err as { status?: number })?.status;
-    const data = (err as { response?: { data?: any } })?.response?.data;
-    const message = JSON.stringify(data || '').toLowerCase();
-    if (status !== 400) throw err;
-    if (!message.includes('email') && !message.includes('unknown')) throw err;
 
-    // Email sudah dipakai (akun lama dari versi sebelumnya) atau skema `users`
-    // belum punya field legacyId: pakai email unik tanpa field tambahan.
-    const fallbackBody: Record<string, unknown> = {
-      email: `${entry.username}-${filterValue(entry.id)}@${CREDENTIAL_EMAIL_DOMAIN}`,
-      name: entry.name,
-      password: entry.password,
-      passwordConfirm: entry.password,
-    };
-    const created: any = await pb.collection(AUTH_COLLECTION).create(fallbackBody);
-    return String(created?.id || '');
+  try {
+    return await createCredential(pb, { ...base, email, legacyId: entry.id });
+  } catch (err) {
+    if ((err as { status?: number })?.status !== 400) throw err;
+    const message = pbErrorMessage(err);
+    if (!message.includes('email')) {
+      if (!message.includes('legacyid') && !message.includes('unknown')) throw err;
+      // Skema `users` belum punya field legacyId.
+      return createCredential(pb, { ...base, email });
+    }
+
+    // Email utama dipakai record lain. Email cadangan unik per id aplikasi dan
+    // tetap membawa legacyId supaya record hasilnya bisa ditemukan lagi.
+    try {
+      return await createCredential(pb, { ...base, email: fallbackEmail, legacyId: entry.id });
+    } catch (fallbackErr) {
+      if ((fallbackErr as { status?: number })?.status !== 400) throw fallbackErr;
+      const fallbackMessage = pbErrorMessage(fallbackErr);
+      if (!fallbackMessage.includes('legacyid') && !fallbackMessage.includes('unknown')) {
+        throw fallbackErr;
+      }
+      return createCredential(pb, { ...base, email: fallbackEmail });
+    }
   }
 }
 

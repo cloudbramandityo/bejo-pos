@@ -805,8 +805,16 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
 
       if (!cloudResult.success) {
         const detail = cloudResult.errors.length > 0 ? ` Detail: ${cloudResult.errors.slice(0, 3).join(' | ')}` : '';
+        const adopted = cloudResult.skippedRecords > 0
+          ? ` ${cloudResult.skippedRecords} data digabungkan ke akun cloud yang sudah ada.`
+          : '';
+        // Penolakan data tidak akan berubah walau diulang, jadi jangan sarankan
+        // "Coba Lagi" untuk kasus itu.
+        const hint = cloudResult.retryable
+          ? ' Periksa koneksi internet lalu klik "Coba Lagi".'
+          : ' Perbaiki data yang ditolak dulu; mengulang restore akan memberi hasil yang sama.';
         setRestoreError(
-          `Data lokal berhasil dipulihkan, tetapi sinkronisasi ke database cloud gagal.${detail} Periksa koneksi internet lalu klik "Coba Lagi".`
+          `Data lokal berhasil dipulihkan, tetapi ${cloudResult.failedRecords} data gagal disinkronkan ke database cloud.${detail}${adopted}${hint}`
         );
         return;
       }
@@ -815,7 +823,10 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
       setRestoreProgress('Sinkronisasi cloud selesai. Memuat ulang data...');
       setIsRestoreModalOpen(false);
       setRestorePendingPayload(null);
-      setBackupToastMsg(`Restore berhasil: ${cloudResult.syncedRecords} data tersinkron ke database cloud. Memuat ulang aplikasi...`);
+      const adoptedNote = cloudResult.skippedRecords > 0
+        ? ` ${cloudResult.skippedRecords} data digabungkan ke akun yang sudah ada.`
+        : '';
+      setBackupToastMsg(`Restore berhasil: ${cloudResult.syncedRecords} data tersinkron ke database cloud.${adoptedNote} Memuat ulang aplikasi...`);
       setTimeout(() => {
         window.location.reload();
       }, 1500);

@@ -868,6 +868,12 @@ export interface LandingStatItem {
   isActive: boolean;
 }
 
+/** Video profil (YouTube/Google Drive) yang tampil di kolom kiri "Mengapa Kami". */
+export interface LandingVideoConfig {
+  /** URL YouTube (watch/youtu.be/Shorts) atau Google Drive (file publik). */
+  url?: string;
+}
+
 /** Foto fasilitas produksi. Rekomendasi gambar: 640 x 480 px */
 export interface LandingFacilityItem {
   id: string;
@@ -1017,6 +1023,7 @@ export interface LandingPageConfig {
   templatePromos: LandingTemplatePromo[]; // seksi "Produk Template Design"
   problem: LandingProblemConfig; // seksi "Problem Customer"
   stats: LandingStatItem[]; // seksi "Mengapa Kami"
+  whyVideo?: LandingVideoConfig; // video profil di kolom kiri "Mengapa Kami"
   facilities: LandingFacilityItem[]; // seksi "Fasilitas Produksi"
   blogPosts: LandingBlogPost[]; // seksi "Blog / Inspirasi Cetak"
   faqs: LandingFaqItem[]; // seksi FAQ

@@ -11,4 +11,4 @@ export const APP_NAME = 'BEJO Digital Print';
  * rekomendasi disetujui. `scripts/check-version.mjs` memastikan nilai ini
  * selalu sama dengan package.json.
  */
-export const APP_VERSION = '4.5.1';
+export const APP_VERSION = '4.6.0';

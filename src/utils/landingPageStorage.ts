@@ -426,6 +426,8 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
     }
   ],
 
+  whyVideo: { url: '' },
+
   facilities: [
     { id: 'fac_1', title: 'Mesin Digital Printing', imageUrl: undefined, isActive: true },
     { id: 'fac_2', title: 'Mesin Laser Cutting', imageUrl: undefined, isActive: true },
@@ -836,6 +838,9 @@ export function normalizeLandingConfig(parsed: unknown): LandingPageConfig {
       secondaryCtaEnabled: problem.secondaryCtaEnabled !== false
     },
     stats: Array.isArray(clean.stats) && clean.stats.length > 0 ? clean.stats : defaults.stats,
+    whyVideo: {
+      url: typeof clean.whyVideo?.url === 'string' ? clean.whyVideo.url.trim() : defaults.whyVideo?.url || ''
+    },
     facilities: Array.isArray(clean.facilities) && clean.facilities.length > 0 ? clean.facilities : defaults.facilities,
     blogPosts: Array.isArray(clean.blogPosts) && clean.blogPosts.length > 0 ? clean.blogPosts : defaults.blogPosts,
     faqs: Array.isArray(clean.faqs) && clean.faqs.length > 0 ? clean.faqs : defaults.faqs,

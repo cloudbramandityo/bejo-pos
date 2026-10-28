@@ -113,6 +113,77 @@ export function openLandingButtonLink(
   options.fallback?.();
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Video profil (Mengapa Kami)                                               */
+/* -------------------------------------------------------------------------- */
+export interface LandingVideoEmbed {
+  provider: 'youtube' | 'drive' | 'file';
+  /** URL untuk `<iframe>` (YouTube) atau `<video>` (Drive/berkas langsung). */
+  src: string;
+  /** iframe cadangan bila pemutaran langsung Drive ditolak browser. */
+  fallbackSrc?: string;
+}
+
+const YOUTUBE_ID = /^[A-Za-z0-9_-]{6,}$/;
+
+/** `loop` YouTube hanya bekerja bila id yang sama didaftarkan sebagai playlist. */
+function youtubeEmbedUrl(id: string): string {
+  const query = new URLSearchParams({
+    autoplay: '1',
+    mute: '1',
+    loop: '1',
+    playlist: id,
+    playsinline: '1',
+    rel: '0',
+    modestbranding: '1',
+    controls: '1'
+  });
+  return `https://www.youtube-nocookie.com/embed/${id}?${query.toString()}`;
+}
+
+/**
+ * Ubah URL YouTube / Google Drive (atau berkas video langsung) menjadi sumber
+ * embed yang otomatis diputar tanpa suara dan selalu looping. `null` berarti
+ * URL tidak dikenali sehingga halaman memakai foto/kartu cadangan.
+ */
+export function parseLandingVideoUrl(raw?: string): LandingVideoEmbed | null {
+  const value = safeExternalUrl(raw);
+  if (!/^https?:\/\//i.test(value)) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return null;
+  }
+  const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+  const path = parsed.pathname;
+
+  if (host === 'youtu.be') {
+    const id = path.split('/').filter(Boolean)[0] || '';
+    return YOUTUBE_ID.test(id) ? { provider: 'youtube', src: youtubeEmbedUrl(id) } : null;
+  }
+
+  if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
+    const fromPath = path.match(/^\/(?:embed|shorts|live|v)\/([A-Za-z0-9_-]+)/)?.[1] || '';
+    const id = parsed.searchParams.get('v') || fromPath;
+    return id && YOUTUBE_ID.test(id) ? { provider: 'youtube', src: youtubeEmbedUrl(id) } : null;
+  }
+
+  if (host === 'drive.google.com') {
+    const fromPath = path.match(/\/file\/d\/([^/]+)/)?.[1] || '';
+    const id = fromPath || parsed.searchParams.get('id') || '';
+    if (!id) return null;
+    const encoded = encodeURIComponent(id);
+    return {
+      provider: 'drive',
+      src: `https://drive.google.com/uc?export=download&id=${encoded}`,
+      fallbackSrc: `https://drive.google.com/file/d/${encoded}/preview`
+    };
+  }
+
+  return { provider: 'file', src: value };
+}
+
 /**
  * Warna teks yang terbaca di atas warna latar tombol.
  * Ambang 0.30 (luminance WCAG) dipilih agar biru #00AAFF tetap berteks hitam

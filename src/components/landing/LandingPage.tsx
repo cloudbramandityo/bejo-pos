@@ -56,7 +56,13 @@ import type {
   LandingRoute,
   LandingSlide,
 } from '../../types';
-import { openLandingButtonLink, readableTextColor, whatsappChatUrl } from '../../utils/landingLinks';
+import {
+  openLandingButtonLink,
+  parseLandingVideoUrl,
+  readableTextColor,
+  whatsappChatUrl
+} from '../../utils/landingLinks';
+import type { LandingVideoEmbed } from '../../utils/landingLinks';
 
 /* -------------------------------------------------------------------------- */
 /*  Token desain                                                              */
@@ -127,6 +133,53 @@ const Frame: React.FC<{
     )}
   </div>
 );
+
+/* -------------------------------------------------------------------------- */
+/*  Video profil (Mengapa Kami)                                               */
+/* -------------------------------------------------------------------------- */
+const VideoEmbed: React.FC<{ video: LandingVideoEmbed; title: string }> = ({ video, title }) => {
+  const [fallback, setFallback] = useState(false);
+
+  if (video.provider === 'youtube') {
+    return (
+      <iframe
+        src={video.src}
+        title={title}
+        className="absolute inset-0 h-full w-full"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        referrerPolicy="strict-origin-when-cross-origin"
+        allowFullScreen
+      />
+    );
+  }
+
+  /* Drive kadang menolak direct play; preview tetap menampilkan videonya. */
+  if (fallback && video.fallbackSrc) {
+    return (
+      <iframe
+        src={video.fallbackSrc}
+        title={title}
+        className="absolute inset-0 h-full w-full"
+        allow="autoplay; encrypted-media; picture-in-picture"
+        allowFullScreen
+      />
+    );
+  }
+
+  return (
+    <video
+      src={video.src}
+      title={title}
+      className="absolute inset-0 h-full w-full object-cover"
+      autoPlay
+      muted
+      loop
+      playsInline
+      controls
+      onError={() => setFallback(true)}
+    />
+  );
+};
 
 /* -------------------------------------------------------------------------- */
 /*  Tombol gulir horizontal                                                   */
@@ -803,9 +856,14 @@ const ProblemSection: React.FC<{
 /* -------------------------------------------------------------------------- */
 /*  Mengapa kami (statistik)                                                  */
 /* -------------------------------------------------------------------------- */
-const StatsSection: React.FC<{ stats: LandingPageConfig['stats']; about: LandingPageConfig['about'] }> = ({ stats, about }) => {
+const StatsSection: React.FC<{
+  stats: LandingPageConfig['stats'];
+  about: LandingPageConfig['about'];
+  videoUrl?: string;
+}> = ({ stats, about, videoUrl }) => {
   const items = stats.filter((s) => s.isActive);
   if (items.length === 0) return null;
+  const video = parseLandingVideoUrl(videoUrl);
 
   return (
     <section style={{ backgroundColor: CREAM }} className="py-14">
@@ -813,7 +871,9 @@ const StatsSection: React.FC<{ stats: LandingPageConfig['stats']; about: Landing
         <SectionTitle className="mb-10">Mengapa {APP_NAME}?</SectionTitle>
         <div className="grid items-center gap-10 md:grid-cols-2">
           <div className="relative overflow-hidden rounded-2xl bg-slate-900" style={{ aspectRatio: '16 / 9' }}>
-            {about.imageUrl ? (
+            {video ? (
+              <VideoEmbed video={video} title={`Video profil ${APP_NAME}`} />
+            ) : about.imageUrl ? (
               <img src={about.imageUrl} alt={about.imageCaption || 'Profil perusahaan'} className="h-full w-full object-cover" />
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white/70">
@@ -1396,7 +1456,7 @@ const HomePage: React.FC<{
       />
 
       <ProblemSection config={config} onOpenLink={openLink} />
-      <StatsSection stats={config.stats} about={config.about} />
+      <StatsSection stats={config.stats} about={config.about} videoUrl={config.whyVideo?.url} />
       <FacilitiesSection facilities={config.facilities} />
       <ClientsSection clients={config.clients} />
       <TestimonialsSection testimonials={config.testimonials} />

@@ -73,7 +73,12 @@ import {
   uniqueCategoryKey,
 } from '../utils/landingPageStorage';
 import { ensureLandingMediaInDatabase, saveLandingMedia } from '../utils/landingMediaStorage';
-import { LANDING_PAGE_OPTIONS, normalizeHexColor, normalizeWhatsappNumber } from '../utils/landingLinks';
+import {
+  LANDING_PAGE_OPTIONS,
+  normalizeHexColor,
+  normalizeWhatsappNumber,
+  parseLandingVideoUrl
+} from '../utils/landingLinks';
 import { LandingPage } from './landing/LandingPage';
 
 /* -------------------------------------------------------------------------- */
@@ -2070,6 +2075,25 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
               }
             >
               <div className="space-y-2.5">
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Video Profil (Kolom Kiri)</p>
+                  <Field
+                    label="URL Video"
+                    hint="Tempel tautan YouTube (watch, youtu.be, Shorts) atau Google Drive yang dibagikan sebagai 'Siapa saja yang memiliki link'. Video diputar otomatis tanpa suara dan selalu looping. Kosongkan untuk memakai Foto Workshop dari Tentang Kami."
+                  >
+                    <input
+                      value={config.whyVideo?.url || ''}
+                      onChange={(e) => patchSub('whyVideo', { url: e.target.value })}
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      className={inputCls}
+                    />
+                  </Field>
+                  {config.whyVideo?.url?.trim() && !parseLandingVideoUrl(config.whyVideo.url) && (
+                    <p className="mt-1 text-[10px] font-semibold text-rose-600">
+                      URL tidak dikenali. Gunakan tautan YouTube, Google Drive, atau berkas video langsung.
+                    </p>
+                  )}
+                </div>
                 {config.stats.map((stat, i) => (
                   <ItemAccordion
                     key={stat.id}
@@ -2387,7 +2411,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
 
           {/* ============================== ABOUT ============================= */}
           {active === 'about' && (
-            <SectionCard title="Tentang Kami" description="Konten halaman Tentang Kami dan seksi video profil.">
+            <SectionCard title="Tentang Kami" description="Konten halaman Tentang Kami. Foto Workshop juga menjadi cadangan kolom video di Mengapa Kami.">
               <div className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <ImageField

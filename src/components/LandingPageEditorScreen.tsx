@@ -45,6 +45,8 @@ import {
 } from 'lucide-react';
 import type {
   LandingBlogPost,
+  LandingButtonLink,
+  LandingButtonLinkType,
   LandingCategoryCard,
   LandingCategoryGroup,
   LandingFaqItem,
@@ -71,6 +73,7 @@ import {
   uniqueCategoryKey,
 } from '../utils/landingPageStorage';
 import { ensureLandingMediaInDatabase, saveLandingMedia } from '../utils/landingMediaStorage';
+import { LANDING_PAGE_OPTIONS, normalizeHexColor } from '../utils/landingLinks';
 import { LandingPage } from './landing/LandingPage';
 
 /* -------------------------------------------------------------------------- */
@@ -177,6 +180,152 @@ const Toggle: React.FC<{ active: boolean; onChange: (v: boolean) => void; label?
     </span>
   </button>
 );
+
+/** `<input type="color">` hanya menerima #rrggbb. */
+const expandHexColor = (value: string, fallback: string): string => {
+  const hex = String(value || '').trim();
+  if (/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  if (/^#[0-9a-f]{3}$/i.test(hex)) {
+    return `#${hex
+      .slice(1)
+      .split('')
+      .map((char) => char + char)
+      .join('')}`;
+  }
+  return fallback;
+};
+
+const ButtonLinkField: React.FC<{
+  link?: LandingButtonLink;
+  onChange: (link: LandingButtonLink) => void;
+  whatsappNumber?: string;
+}> = ({ link, onChange, whatsappNumber }) => {
+  const type: LandingButtonLinkType = link?.type || 'page';
+  const value = link?.value || '';
+  const waDigits = String(whatsappNumber || '').replace(/[^0-9]/g, '');
+
+  return (
+    <Field label="Tujuan Tombol" hint="Tombol bisa membuka WhatsApp, tautan luar, atau halaman di situs ini.">
+      <div className="space-y-2">
+        <select
+          value={type}
+          onChange={(e) => {
+            const nextType = e.target.value as LandingButtonLinkType;
+            onChange({ type: nextType, value: nextType === 'page' ? 'home' : '' });
+          }}
+          className={inputCls}
+        >
+          <option value="page">Halaman Situs</option>
+          <option value="whatsapp">WhatsApp</option>
+          <option value="url">URL / Tautan Luar</option>
+        </select>
+
+        {type === 'page' && (
+          <select value={value || 'home'} onChange={(e) => onChange({ type, value: e.target.value })} className={inputCls}>
+            {LANDING_PAGE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {type === 'whatsapp' && (
+          <>
+            <input
+              value={value}
+              onChange={(e) => onChange({ type, value: e.target.value })}
+              placeholder="Pesan pembuka (opsional)"
+              className={inputCls}
+            />
+            <p className={hintCls}>
+              {waDigits ? `Dikirim ke ${waDigits} (nomor di bagian Kontak).` : 'Nomor WhatsApp belum diisi di bagian Kontak.'}
+            </p>
+          </>
+        )}
+
+        {type === 'url' && (
+          <>
+            <input
+              value={value}
+              onChange={(e) => onChange({ type, value: e.target.value })}
+              placeholder="https://contoh.com/halaman"
+              className={inputCls}
+            />
+            <p className={hintCls}>Hanya http/https, mailto:, atau tel:. Alamat tanpa https:// dilengkapi otomatis.</p>
+          </>
+        )}
+      </div>
+    </Field>
+  );
+};
+
+const ProblemButtonEditor: React.FC<{
+  title: string;
+  label: string;
+  color?: string;
+  defaultColor: string;
+  enabled: boolean;
+  link?: LandingButtonLink;
+  whatsappNumber?: string;
+  onLabel: (value: string) => void;
+  onColor: (value: string) => void;
+  onEnabled: (value: boolean) => void;
+  onLink: (link: LandingButtonLink) => void;
+}> = ({ title, label, color, defaultColor, enabled, link, whatsappNumber, onLabel, onColor, onEnabled, onLink }) => {
+  const solid = normalizeHexColor(color) || defaultColor;
+  const [draft, setDraft] = useState(solid);
+  useEffect(() => setDraft(solid), [solid]);
+
+  return (
+    <div className={`rounded-lg border p-3 ${enabled ? 'border-slate-200' : 'border-dashed border-slate-200 bg-slate-50/60'}`}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{title}</p>
+        <Toggle active={enabled} onChange={onEnabled} label={enabled ? 'Tampil' : 'Disembunyikan'} />
+      </div>
+      <div className="space-y-3">
+        <Field label="Teks Tombol">
+          <input value={label} onChange={(e) => onLabel(e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="Warna Tombol" hint="Warna teks dipilih otomatis (hitam/putih) agar tetap terbaca.">
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              aria-label={`Warna ${title}`}
+              value={expandHexColor(draft, defaultColor)}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                onColor(e.target.value);
+              }}
+              className="h-9 w-12 shrink-0 cursor-pointer rounded border border-slate-200 bg-white p-0.5"
+            />
+            <input
+              value={draft}
+              onChange={(e) => {
+                const next = e.target.value;
+                setDraft(next);
+                const normalized = normalizeHexColor(next);
+                if (normalized) onColor(normalized);
+              }}
+              className={`${inputCls} !w-[110px] uppercase`}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(defaultColor);
+                onColor(defaultColor);
+              }}
+              className={btnGhost}
+            >
+              <RotateCcw size={11} /> Default
+            </button>
+          </div>
+        </Field>
+        <ButtonLinkField link={link} onChange={onLink} whatsappNumber={whatsappNumber} />
+      </div>
+    </div>
+  );
+};
 
 const ImageField: React.FC<{
   value?: string;
@@ -1066,6 +1215,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                       title: 'Judul Banner Baru',
                       subtitle: '',
                       ctaText: 'Klik Di Sini',
+                      ctaLink: { type: 'page', value: 'products' },
                       imageUrl: undefined,
                       displayMode: 'overlay',
                       isActive: true,
@@ -1170,6 +1320,11 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                               className={`${inputCls} disabled:cursor-not-allowed disabled:opacity-50`}
                             />
                           </Field>
+                          <ButtonLinkField
+                            link={slide.ctaLink}
+                            whatsappNumber={config.contact.whatsappNumber}
+                            onChange={(link) => updateList('slides', config.slides.map((s) => (s.id === slide.id ? { ...s, ctaLink: link } : s)))}
+                          />
                         </div>
                       </div>
                     </div>
@@ -1662,7 +1817,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                 <button
                   type="button"
                   onClick={() => {
-                    const promo: LandingTemplatePromo = { id: newId('tpl'), eyebrow: 'TEMPLATE DESIGN', title: 'Judul Template Baru', ctaText: 'Klik Di Sini', imageUrl: undefined, isActive: true };
+                    const promo: LandingTemplatePromo = { id: newId('tpl'), eyebrow: 'TEMPLATE DESIGN', title: 'Judul Template Baru', ctaText: 'Klik Di Sini', ctaLink: { type: 'page', value: 'products' }, imageUrl: undefined, isActive: true };
                     updateList('templatePromos', [...config.templatePromos, promo]);
                     setOpenItem(promo.id);
                   }}
@@ -1706,6 +1861,11 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                         <Field label="Teks Tombol">
                           <input value={promo.ctaText} onChange={(e) => updateList('templatePromos', config.templatePromos.map((p) => (p.id === promo.id ? { ...p, ctaText: e.target.value } : p)))} className={inputCls} />
                         </Field>
+                        <ButtonLinkField
+                          link={promo.ctaLink}
+                          whatsappNumber={config.contact.whatsappNumber}
+                          onChange={(link) => updateList('templatePromos', config.templatePromos.map((p) => (p.id === promo.id ? { ...p, ctaLink: link } : p)))}
+                        />
                       </div>
                     </div>
                   </ItemAccordion>
@@ -1786,15 +1946,36 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                     <Field label="Judul Seksi">
                       <input value={config.problem.title} onChange={(e) => patchSub('problem', { title: e.target.value })} className={inputCls} />
                     </Field>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <Field label="Tombol Utama">
-                        <input value={config.problem.primaryCtaText} onChange={(e) => patchSub('problem', { primaryCtaText: e.target.value })} className={inputCls} />
-                      </Field>
-                      <Field label="Tombol Kedua">
-                        <input value={config.problem.secondaryCtaText} onChange={(e) => patchSub('problem', { secondaryCtaText: e.target.value })} className={inputCls} />
-                      </Field>
-                    </div>
                   </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <ProblemButtonEditor
+                    title="Tombol Utama"
+                    label={config.problem.primaryCtaText}
+                    color={config.problem.primaryCtaColor}
+                    defaultColor="#00AAFF"
+                    enabled={config.problem.primaryCtaEnabled !== false}
+                    link={config.problem.primaryLink}
+                    whatsappNumber={config.contact.whatsappNumber}
+                    onLabel={(v) => patchSub('problem', { primaryCtaText: v })}
+                    onColor={(v) => patchSub('problem', { primaryCtaColor: v })}
+                    onEnabled={(v) => patchSub('problem', { primaryCtaEnabled: v })}
+                    onLink={(v) => patchSub('problem', { primaryLink: v })}
+                  />
+                  <ProblemButtonEditor
+                    title="Tombol Kedua"
+                    label={config.problem.secondaryCtaText}
+                    color={config.problem.secondaryCtaColor}
+                    defaultColor="#FF4400"
+                    enabled={config.problem.secondaryCtaEnabled !== false}
+                    link={config.problem.secondaryLink}
+                    whatsappNumber={config.contact.whatsappNumber}
+                    onLabel={(v) => patchSub('problem', { secondaryCtaText: v })}
+                    onColor={(v) => patchSub('problem', { secondaryCtaColor: v })}
+                    onEnabled={(v) => patchSub('problem', { secondaryCtaEnabled: v })}
+                    onLink={(v) => patchSub('problem', { secondaryLink: v })}
+                  />
                 </div>
 
                 <div className="rounded-lg border border-slate-200 p-3">
@@ -2231,6 +2412,11 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                     <Field label="Teks Tombol CTA">
                       <input value={config.about.ctaText || ''} onChange={(e) => patchSub('about', { ctaText: e.target.value })} className={inputCls} />
                     </Field>
+                    <ButtonLinkField
+                      link={config.about.ctaLink}
+                      whatsappNumber={config.contact.whatsappNumber}
+                      onChange={(link) => patchSub('about', { ctaLink: link })}
+                    />
                   </div>
                 </div>
 

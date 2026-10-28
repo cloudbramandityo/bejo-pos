@@ -18,7 +18,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  Download,
   ExternalLink,
   Facebook,
   Globe,
@@ -47,6 +46,7 @@ import {
 import type {
   AppUser,
   LandingBlogPost,
+  LandingButtonLink,
   LandingCategoryCard,
   LandingCategoryGroup,
   LandingFaqItem,
@@ -56,6 +56,7 @@ import type {
   LandingRoute,
   LandingSlide,
 } from '../../types';
+import { openLandingButtonLink, readableTextColor } from '../../utils/landingLinks';
 
 /* -------------------------------------------------------------------------- */
 /*  Token desain                                                              */
@@ -180,7 +181,10 @@ const useScroller = () => {
 /* -------------------------------------------------------------------------- */
 /*  Hero slider                                                               */
 /* -------------------------------------------------------------------------- */
-const HeroSlider: React.FC<{ slides: LandingSlide[]; onCta: () => void }> = ({ slides, onCta }) => {
+const HeroSlider: React.FC<{ slides: LandingSlide[]; onCta: (slide: LandingSlide) => void }> = ({
+  slides,
+  onCta,
+}) => {
   const [index, setIndex] = useState(0);
   const total = slides.length;
 
@@ -246,7 +250,7 @@ const HeroSlider: React.FC<{ slides: LandingSlide[]; onCta: () => void }> = ({ s
                   {s.ctaText && (
                     <button
                       type="button"
-                      onClick={onCta}
+                      onClick={() => onCta(s)}
                       className="mt-6 w-fit rounded-full border border-white/90 px-7 py-2 text-[12px] font-semibold text-white transition-colors hover:bg-white hover:text-[#111] md:text-[13px]"
                     >
                       {s.ctaText}
@@ -674,7 +678,8 @@ const CategorySection: React.FC<{
 const TemplateSection: React.FC<{
   config: LandingPageConfig;
   onOpen: (index: number) => void;
-}> = ({ config, onOpen }) => {
+  onOpenLink: (link: LandingButtonLink | undefined) => void;
+}> = ({ config, onOpen, onOpenLink }) => {
   const promos = config.templatePromos.filter((p) => p.isActive);
   if (promos.length === 0) return null;
 
@@ -683,25 +688,36 @@ const TemplateSection: React.FC<{
       <SectionTitle className="mb-6">Produk Template Design</SectionTitle>
       <div className="grid gap-5 md:grid-cols-2">
         {promos.map((promo, i) => (
-          <button
+          <div
             key={promo.id}
-            type="button"
-            onClick={() => onOpen(i)}
             className="group relative overflow-hidden rounded-xl bg-slate-900 text-left"
             style={{ aspectRatio: '16 / 8' }}
           >
-            <Frame src={promo.imageUrl} alt={promo.title} label={promo.title} dark bare imgClassName="transition-transform duration-500 group-hover:scale-[1.04]" />
-            <div className="absolute inset-0 bg-gradient-to-tr from-black/70 via-black/25 to-transparent" />
-            <div className="absolute inset-0 flex flex-col justify-center px-7 md:px-9">
+            <button
+              type="button"
+              onClick={() => onOpen(i)}
+              aria-label={`Pratinjau ${promo.title}`}
+              className="absolute inset-0 h-full w-full"
+            >
+              <Frame src={promo.imageUrl} alt={promo.title} label={promo.title} dark bare imgClassName="transition-transform duration-500 group-hover:scale-[1.04]" />
+              <span className="absolute inset-0 bg-gradient-to-tr from-black/70 via-black/25 to-transparent" />
+            </button>
+            <div className="pointer-events-none absolute inset-0 flex flex-col justify-center px-7 md:px-9">
               <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/85">{promo.eyebrow}</p>
               <p className="mt-2 max-w-[280px] whitespace-pre-line text-[19px] font-semibold leading-tight text-white md:text-[24px]">
                 {promo.title}
               </p>
-              <span className="mt-4 flex w-fit items-center gap-2 rounded-full border border-white/80 px-5 py-1.5 text-[12px] font-semibold text-white transition-colors group-hover:bg-white group-hover:text-[#111]">
-                {promo.ctaText} <ArrowRight size={13} />
-              </span>
+              {promo.ctaText && (
+                <button
+                  type="button"
+                  onClick={() => onOpenLink(promo.ctaLink)}
+                  className="pointer-events-auto mt-4 flex w-fit items-center gap-2 rounded-full border border-white/80 px-5 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-white hover:text-[#111]"
+                >
+                  {promo.ctaText} <ArrowRight size={13} />
+                </button>
+              )}
             </div>
-          </button>
+          </div>
         ))}
       </div>
     </section>
@@ -711,10 +727,17 @@ const TemplateSection: React.FC<{
 /* -------------------------------------------------------------------------- */
 /*  Problem customer                                                          */
 /* -------------------------------------------------------------------------- */
-const ProblemSection: React.FC<{ config: LandingPageConfig; onConsult: () => void }> = ({ config, onConsult }) => {
+const ProblemSection: React.FC<{
+  config: LandingPageConfig;
+  onOpenLink: (link: LandingButtonLink | undefined) => void;
+}> = ({ config, onOpenLink }) => {
   const problem = config.problem;
   const left = problem.points.filter((p) => p.side === 'left');
   const right = problem.points.filter((p) => p.side === 'right');
+  const primaryColor = problem.primaryCtaColor || ACCENT;
+  const secondaryColor = problem.secondaryCtaColor || ACCENT_2;
+  const showPrimary = problem.primaryCtaEnabled !== false && !!problem.primaryCtaText?.trim();
+  const showSecondary = problem.secondaryCtaEnabled !== false && !!problem.secondaryCtaText?.trim();
 
   const Point: React.FC<{ text: string; align: 'left' | 'right'; fontSize?: number; fontFamily?: string }> = ({ text, align, fontSize, fontFamily }) => (
     <div className={cx('flex items-start gap-2', align === 'right' && 'md:flex-row-reverse md:text-right')}>
@@ -749,24 +772,30 @@ const ProblemSection: React.FC<{ config: LandingPageConfig; onConsult: () => voi
         </div>
       </div>
 
-      <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-        <button
-          type="button"
-          onClick={onConsult}
-          style={{ backgroundColor: ACCENT }}
-          className="rounded-full px-9 py-3 text-[14px] font-bold text-[#111] shadow-[0_4px_0_0_#111] transition-transform hover:-translate-y-0.5 active:translate-y-0 active:shadow-[0_2px_0_0_#111]"
-        >
-          {problem.primaryCtaText}
-        </button>
-        <button
-          type="button"
-          onClick={onConsult}
-          style={{ backgroundColor: ACCENT_2 }}
-          className="flex items-center gap-2 rounded-full px-9 py-3 text-[14px] font-bold text-white shadow-[0_4px_0_0_#111] transition-transform hover:-translate-y-0.5 active:translate-y-0 active:shadow-[0_2px_0_0_#111]"
-        >
-          <Download size={15} /> {problem.secondaryCtaText}
-        </button>
-      </div>
+      {(showPrimary || showSecondary) && (
+        <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+          {showPrimary && (
+            <button
+              type="button"
+              onClick={() => onOpenLink(problem.primaryLink)}
+              style={{ backgroundColor: primaryColor, color: readableTextColor(primaryColor) }}
+              className="rounded-full px-9 py-3 text-[14px] font-bold transition hover:-translate-y-0.5 hover:brightness-105"
+            >
+              {problem.primaryCtaText}
+            </button>
+          )}
+          {showSecondary && (
+            <button
+              type="button"
+              onClick={() => onOpenLink(problem.secondaryLink)}
+              style={{ backgroundColor: secondaryColor, color: readableTextColor(secondaryColor) }}
+              className="rounded-full px-9 py-3 text-[14px] font-bold transition hover:-translate-y-0.5 hover:brightness-105"
+            >
+              {problem.secondaryCtaText}
+            </button>
+          )}
+        </div>
+      )}
     </section>
   );
 };
@@ -1318,8 +1347,12 @@ const HomePage: React.FC<{
   onOpenLightbox: (items: LightboxItem[], index: number) => void;
 }> = ({ config, onNavigate, onOpenLightbox }) => {
   const categories = config.categories.filter((c) => c.isActive);
-  const wa = config.contact.whatsappNumber.replace(/[^0-9]/g, '');
-  const consult = () => window.open(`https://wa.me/${wa}`, '_blank');
+  const consult = () => {
+    const wa = config.contact.whatsappNumber.replace(/[^0-9]/g, '');
+    if (wa) window.open(`https://wa.me/${wa}`, '_blank', 'noopener,noreferrer');
+  };
+  const openLink = (link: LandingButtonLink | undefined) =>
+    openLandingButtonLink(link, { contact: config.contact, navigate: (page) => onNavigate(page), fallback: consult });
 
   const openCard = (card: LandingCategoryCard, group: LandingCategoryGroup) => {
     const list = group.cards.filter((c) => c.isActive);
@@ -1332,7 +1365,7 @@ const HomePage: React.FC<{
   return (
     <>
       <section className="mx-auto max-w-[1200px] px-4 pt-6">
-        <HeroSlider slides={config.slides.filter((s) => s.isActive)} onCta={() => onNavigate('products')} />
+        <HeroSlider slides={config.slides.filter((s) => s.isActive)} onCta={(slide) => openLink(slide.ctaLink)} />
       </section>
 
       <section className="mx-auto max-w-[900px] px-4 py-9 text-center">
@@ -1348,6 +1381,7 @@ const HomePage: React.FC<{
 
       <TemplateSection
         config={config}
+        onOpenLink={openLink}
         onOpen={(i) => {
           const promos = config.templatePromos.filter((p) => p.isActive);
           onOpenLightbox(
@@ -1357,7 +1391,7 @@ const HomePage: React.FC<{
         }}
       />
 
-      <ProblemSection config={config} onConsult={consult} />
+      <ProblemSection config={config} onOpenLink={openLink} />
       <StatsSection stats={config.stats} about={config.about} />
       <FacilitiesSection facilities={config.facilities} />
       <ClientsSection clients={config.clients} />
@@ -1451,7 +1485,13 @@ const AboutPage: React.FC<{
           </div>
           <button
             type="button"
-            onClick={() => onNavigate('contact')}
+            onClick={() =>
+              openLandingButtonLink(about.ctaLink, {
+                contact: config.contact,
+                navigate: (page) => onNavigate(page),
+                fallback: () => onNavigate('contact')
+              })
+            }
             className="rounded-full bg-[#00AAFF] px-7 py-2.5 text-[13px] font-bold text-[#111] transition-transform hover:-translate-y-0.5"
           >
             Hubungi Kami

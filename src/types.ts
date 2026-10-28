@@ -725,6 +725,19 @@ export interface LandingRoute {
   categoryKey?: string;
 }
 
+/**
+ * Tujuan sebuah tombol CTA di landing page.
+ * - whatsapp: buka chat wa.me; `value` = pesan pembuka (opsional)
+ * - url: buka tautan luar; `value` = alamat lengkap
+ * - page: pindah halaman internal; `value` = kunci halaman
+ */
+export type LandingButtonLinkType = 'whatsapp' | 'url' | 'page';
+
+export interface LandingButtonLink {
+  type: LandingButtonLinkType;
+  value?: string;
+}
+
 /** Slide banner utama (slider hero). Rekomendasi gambar: 1280 x 720 px (16:9) */
 export interface LandingSlide {
   id: string;
@@ -732,6 +745,7 @@ export interface LandingSlide {
   title: string;
   subtitle?: string; // tidak ditampilkan di banner, dipakai sebagai metadata
   ctaText?: string; // teks tombol pil di dalam banner
+  ctaLink?: LandingButtonLink; // tujuan tombol pil
   imageUrl?: string;
   /** overlay = gambar + tulisan dengan gradient (default); image = gambar saja tanpa gradient */
   displayMode?: 'overlay' | 'image';
@@ -811,6 +825,7 @@ export interface LandingTemplatePromo {
   eyebrow: string;
   title: string;
   ctaText: string;
+  ctaLink?: LandingButtonLink; // tujuan tombol pil
   imageUrl?: string; // rekomendasi 1280 x 640 px
   isActive: boolean;
 }
@@ -831,6 +846,14 @@ export interface LandingProblemConfig {
   points: LandingProblemPoint[];
   primaryCtaText: string;
   secondaryCtaText: string;
+  /** tujuan masing-masing tombol; kosong = WhatsApp (perilaku lama) */
+  primaryLink?: LandingButtonLink;
+  secondaryLink?: LandingButtonLink;
+  primaryCtaColor?: string; // hex, mis. #00AAFF
+  secondaryCtaColor?: string;
+  /** false = tombol disembunyikan dari halaman publik */
+  primaryCtaEnabled?: boolean;
+  secondaryCtaEnabled?: boolean;
   pointsFontSize?: number; // ukuran font default untuk semua poin keluhan
   pointsFontFamily?: string; // font default untuk semua poin keluhan
 }
@@ -907,6 +930,7 @@ export interface LandingAboutConfig {
   imageCaption?: string;
   stats: LandingAboutStat[];
   ctaText?: string;
+  ctaLink?: LandingButtonLink; // tujuan tombol "Hubungi Kami"
 }
 
 /** Testimoni pelanggan (logo perusahaan: 200 x 200 px lingkaran) */

@@ -5,6 +5,7 @@
  * Coded by Langgo Bramandityo.
  */
 import { LandingPageConfig } from '../types';
+import { normalizeHexColor, normalizeLandingButtonLink } from './landingLinks';
 
 export const LANDING_PAGE_STORAGE_KEY = 'bejo_pos_landing_page_config_v1';
 export const LANDING_PAGE_DRAFT_STORAGE_KEY = 'bejo_pos_landing_page_draft_v1';
@@ -105,6 +106,7 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
       title: 'Kemasan Custom Full Color\nuntuk Brand Anda',
       subtitle: 'Template kemasan siap pakai, tinggal ganti logo dan warna.',
       ctaText: 'Klik Di Sini',
+      ctaLink: { type: 'page', value: 'products' },
       imageUrl: undefined,
       displayMode: 'overlay',
       isActive: true
@@ -115,6 +117,7 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
       title: 'Cetak Stiker & Label\nPresisi Tinggi',
       subtitle: 'Hasil cetak tajam, laminasi rapi, siap kirim seluruh Indonesia.',
       ctaText: 'Klik Di Sini',
+      ctaLink: { type: 'page', value: 'products' },
       imageUrl: undefined,
       displayMode: 'overlay',
       isActive: true
@@ -125,6 +128,7 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
       title: 'Souvenir Custom\nuntuk Klien & Tim',
       subtitle: 'Tumbler, tas canvas, plakat akrilik, hingga merchandise event.',
       ctaText: 'Klik Di Sini',
+      ctaLink: { type: 'page', value: 'products' },
       imageUrl: undefined,
       displayMode: 'overlay',
       isActive: true
@@ -359,6 +363,7 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
       eyebrow: 'TEMPLATE DESIGN',
       title: 'Stiker Label Kemasan Siap Pakai',
       ctaText: 'Klik Di Sini',
+      ctaLink: { type: 'page', value: 'products' },
       imageUrl: undefined,
       isActive: true
     },
@@ -367,6 +372,7 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
       eyebrow: 'TEMPLATE DESIGN',
       title: 'Box Kemasan Full Color Siap Pakai',
       ctaText: 'Klik Di Sini',
+      ctaLink: { type: 'page', value: 'products' },
       imageUrl: undefined,
       isActive: true
     }
@@ -384,7 +390,13 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
       { id: 'pp_6', text: 'Produksi tidak sesuai deadline', side: 'right' }
     ],
     primaryCtaText: 'Konsultasi Gratis',
-    secondaryCtaText: 'Download Katalog'
+    secondaryCtaText: 'Download Katalog',
+    primaryLink: { type: 'whatsapp', value: '' },
+    secondaryLink: { type: 'url', value: '' },
+    primaryCtaColor: '#00AAFF',
+    secondaryCtaColor: '#FF4400',
+    primaryCtaEnabled: true,
+    secondaryCtaEnabled: true
   },
 
   stats: [
@@ -519,7 +531,8 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
       { value: '15.000+', label: 'Order Terpenuhi' },
       { value: '24 Jam', label: 'Respon Layanan' }
     ],
-    ctaText: 'Konsultasi Kebutuhan Cetak Anda'
+    ctaText: 'Konsultasi Kebutuhan Cetak Anda',
+    ctaLink: { type: 'page', value: 'contact' }
   },
 
   gallery: [
@@ -740,7 +753,7 @@ export const DEFAULT_LANDING_CONFIG: LandingPageConfig = {
  * Melengkapi data lama (format subur.co.id) agar tetap kompatibel
  * dengan struktur baru (format uprint.id).
  */
-function migrateConfig(parsed: unknown): LandingPageConfig {
+export function normalizeLandingConfig(parsed: unknown): LandingPageConfig {
   const raw = (parsed ?? {}) as Record<string, any>;
   const defaults = DEFAULT_LANDING_CONFIG;
 
@@ -764,6 +777,9 @@ function migrateConfig(parsed: unknown): LandingPageConfig {
         title: s?.title || '',
         subtitle: s?.subtitle || '',
         ctaText: s?.ctaText || '',
+        ctaLink:
+          normalizeLandingButtonLink(s?.ctaLink) ??
+          defaults.slides[i]?.ctaLink ?? { type: 'page' as const, value: 'products' },
         imageUrl: s?.imageUrl,
         displayMode: s?.displayMode === 'image' ? ('image' as const) : ('overlay' as const),
         isActive: s?.isActive !== false
@@ -788,6 +804,10 @@ function migrateConfig(parsed: unknown): LandingPageConfig {
       }))
     : defaults.menu;
 
+  /* Tombol lama belum punya tujuan & warna — lengkapi dengan default. */
+  const problem = { ...defaults.problem, ...(clean.problem || {}) };
+  const about = { ...defaults.about, ...(clean.about || {}) };
+
   return {
     ...defaults,
     ...clean,
@@ -799,14 +819,30 @@ function migrateConfig(parsed: unknown): LandingPageConfig {
     categories: normalizeCategoryKeyList(categories),
     menu,
     templatePromos: Array.isArray(clean.templatePromos) && clean.templatePromos.length > 0
-      ? clean.templatePromos
+      ? (clean.templatePromos as any[]).map((p, i) => ({
+          ...p,
+          ctaLink:
+            normalizeLandingButtonLink(p?.ctaLink) ??
+            defaults.templatePromos[i]?.ctaLink ?? { type: 'page' as const, value: 'products' }
+        }))
       : defaults.templatePromos,
-    problem: { ...defaults.problem, ...(clean.problem || {}) },
+    problem: {
+      ...problem,
+      primaryLink: normalizeLandingButtonLink(problem.primaryLink) ?? defaults.problem.primaryLink,
+      secondaryLink: normalizeLandingButtonLink(problem.secondaryLink) ?? defaults.problem.secondaryLink,
+      primaryCtaColor: normalizeHexColor(problem.primaryCtaColor) ?? defaults.problem.primaryCtaColor,
+      secondaryCtaColor: normalizeHexColor(problem.secondaryCtaColor) ?? defaults.problem.secondaryCtaColor,
+      primaryCtaEnabled: problem.primaryCtaEnabled !== false,
+      secondaryCtaEnabled: problem.secondaryCtaEnabled !== false
+    },
     stats: Array.isArray(clean.stats) && clean.stats.length > 0 ? clean.stats : defaults.stats,
     facilities: Array.isArray(clean.facilities) && clean.facilities.length > 0 ? clean.facilities : defaults.facilities,
     blogPosts: Array.isArray(clean.blogPosts) && clean.blogPosts.length > 0 ? clean.blogPosts : defaults.blogPosts,
     faqs: Array.isArray(clean.faqs) && clean.faqs.length > 0 ? clean.faqs : defaults.faqs,
-    about: { ...defaults.about, ...(clean.about || {}) },
+    about: {
+      ...about,
+      ctaLink: normalizeLandingButtonLink(about.ctaLink) ?? defaults.about.ctaLink
+    },
     gallery: Array.isArray(clean.gallery) && clean.gallery.length > 0 ? clean.gallery : defaults.gallery,
     testimonials: Array.isArray(clean.testimonials) && clean.testimonials.length > 0
       ? clean.testimonials
@@ -842,7 +878,7 @@ export function getStoredLandingConfig(): LandingPageConfig {
       localStorage.setItem(LANDING_PAGE_STORAGE_KEY, JSON.stringify(DEFAULT_LANDING_CONFIG));
       return DEFAULT_LANDING_CONFIG;
     }
-    return migrateConfig(JSON.parse(raw));
+    return normalizeLandingConfig(JSON.parse(raw));
   } catch (err) {
     console.error('Failed to parse landing config, falling back to defaults:', err);
     return DEFAULT_LANDING_CONFIG;
@@ -879,7 +915,7 @@ export function getStoredLandingDraft(): LandingPageConfig {
   try {
     const raw = localStorage.getItem(LANDING_PAGE_DRAFT_STORAGE_KEY);
     if (!raw) return getStoredLandingConfig();
-    return migrateConfig(JSON.parse(raw));
+    return normalizeLandingConfig(JSON.parse(raw));
   } catch (err) {
     console.error('Failed to parse landing draft, falling back to published:', err);
     return getStoredLandingConfig();

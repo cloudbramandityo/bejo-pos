@@ -37,6 +37,7 @@ import { persistSnapshotToIndexedDb, initAutoDatabaseSync } from './utils/localD
 import {
   getStoredLandingConfig,
   getStoredLandingDraft,
+  normalizeLandingConfig,
   saveStoredLandingConfig,
   saveStoredLandingDraft
 } from './utils/landingPageStorage';
@@ -316,7 +317,7 @@ export default function App() {
   useEffect(() => {
     const handleLandingConfigUpdate = (e: any) => {
       if (e.detail) {
-        setLandingConfig(e.detail);
+        setLandingConfig(normalizeLandingConfig(e.detail));
       }
     };
     const handleLandingDraftUpdate = (e: any) => {
@@ -347,8 +348,10 @@ export default function App() {
           return;
         }
         if (data.config) {
-          setLandingConfig(data.config);
-          saveStoredLandingConfig(data.config);
+          /* Konten lama di cloud belum punya field baru (tujuan tombol, dsb). */
+          const normalized = normalizeLandingConfig(data.config);
+          setLandingConfig(normalized);
+          saveStoredLandingConfig(normalized);
         }
       })
       .catch(() => {});
@@ -1063,15 +1066,17 @@ export default function App() {
     // 21b. Subscribe Landing Page CMS Config (Real-time cloud sync)
     const unsubLanding = subscribeLandingConfig((cloudConfig) => {
       if (cloudConfig) {
-        setLandingConfig(cloudConfig);
-        saveStoredLandingConfig(cloudConfig);
+        const normalized = normalizeLandingConfig(cloudConfig);
+        setLandingConfig(normalized);
+        saveStoredLandingConfig(normalized);
       }
     });
 
     const unsubLandingDraft = subscribeLandingDraft((cloudDraft) => {
       if (cloudDraft) {
-        setLandingDraft(cloudDraft);
-        saveStoredLandingDraft(cloudDraft);
+        const normalized = normalizeLandingConfig(cloudDraft);
+        setLandingDraft(normalized);
+        saveStoredLandingDraft(normalized);
       }
     });
 

@@ -1186,6 +1186,13 @@ const Lightbox: React.FC<{
   onIndex: (i: number) => void;
 }> = ({ items, index, onClose, onIndex }) => {
   const item = items[index];
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isBroken, setIsBroken] = useState(false);
+
+  useEffect(() => {
+    setIsLoaded(false);
+    setIsBroken(false);
+  }, [item?.src]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1193,62 +1200,110 @@ const Lightbox: React.FC<{
       if (e.key === 'ArrowRight') onIndex((index + 1) % items.length);
       if (e.key === 'ArrowLeft') onIndex((index - 1 + items.length) % items.length);
     };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
   }, [index, items.length, onClose, onIndex]);
 
   if (!item) return null;
 
+  const hasMultiple = items.length > 1;
+  const showImage = Boolean(item.src) && !isBroken;
+
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4" onClick={onClose}>
-      <div className="relative w-full max-w-[860px]" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-3 backdrop-blur-sm animate-in fade-in duration-150"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={item.title || 'Pratinjau gambar'}
+    >
+      {/*
+        Kartu mengikuti ukuran gambar: tidak ada padding, tidak ada kotak aspect-ratio
+        tetap, jadi tidak ada bilah kosong di tepi gambar. Bila gambar lebih besar dari
+        layar, ukurannya dibatasi 92vh / 95vw lalu tetap menempel tanpa ruang kosong.
+      */}
+      <div
+        className="group relative animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className={cx(
+            'relative inline-flex overflow-hidden rounded-2xl bg-black ring-1 ring-white/10 shadow-[0_24px_70px_-15px_rgba(0,0,0,0.85)]',
+            !isLoaded && showImage && 'min-h-[88px] min-w-[180px]'
+          )}
+        >
+          {showImage ? (
+            <img
+              src={item.src}
+              alt={item.title}
+              onLoad={() => setIsLoaded(true)}
+              onError={() => setIsBroken(true)}
+              draggable={false}
+              className={cx(
+                'block h-auto w-auto max-h-[92vh] max-w-[95vw] select-none transition-opacity duration-300',
+                isLoaded ? 'opacity-100' : 'opacity-0'
+              )}
+            />
+          ) : (
+            <div className="flex h-40 w-64 flex-col items-center justify-center gap-1.5 text-white/60">
+              <ImageIcon size={26} />
+              <span className="text-[11px]">{isBroken ? 'Gambar gagal dimuat' : 'Gambar tidak tersedia'}</span>
+            </div>
+          )}
+
+          {showImage && !isLoaded && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black">
+              <span className="h-6 w-6 animate-spin rounded-full border-2 border-white/25 border-t-white/90" />
+            </div>
+          )}
+
+          {item.title && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent px-4 pb-3 pt-8">
+              <p className="truncate text-[12.5px] font-medium leading-snug text-white/95">{item.title}</p>
+            </div>
+          )}
+
+          {hasMultiple && (
+            <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-black/55 px-2 py-0.5 text-[10.5px] font-medium text-white/85 backdrop-blur-sm">
+              {index + 1} / {items.length}
+            </span>
+          )}
+
+          {hasMultiple && (
+            <>
+              <button
+                type="button"
+                onClick={() => onIndex((index - 1 + items.length) % items.length)}
+                aria-label="Sebelumnya"
+                className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white/90 backdrop-blur-sm transition hover:bg-black/70 md:opacity-0 md:group-hover:opacity-100"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={() => onIndex((index + 1) % items.length)}
+                aria-label="Berikutnya"
+                className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white/90 backdrop-blur-sm transition hover:bg-black/70 md:opacity-0 md:group-hover:opacity-100"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </>
+          )}
+        </div>
+
         <button
           type="button"
           onClick={onClose}
           aria-label="Tutup"
-          className="absolute -top-11 right-0 flex h-9 w-9 items-center justify-center rounded-full border border-white/40 text-white transition-colors hover:bg-white hover:text-[#111]"
+          className="absolute -right-2 -top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white ring-1 ring-white/25 backdrop-blur-sm transition hover:bg-white hover:text-black"
         >
-          <X size={18} />
+          <X size={16} />
         </button>
-
-        <div className="overflow-hidden rounded-xl bg-white">
-          <div className="relative bg-slate-900" style={{ aspectRatio: '1 / 1' }}>
-            {item.src ? (
-              <img src={item.src} alt={item.title} className="h-full w-full object-contain" />
-            ) : (
-              <div className="flex h-full items-center justify-center text-white/60">
-                <ImageIcon size={40} />
-              </div>
-            )}
-          </div>
-          <div className="flex items-center justify-between gap-4 px-5 py-4">
-            <p className="text-[14px] font-semibold text-[#111]">{item.title}</p>
-            <p className="text-[12px] text-[#7A7A7A]">
-              {index + 1} / {items.length}
-            </p>
-          </div>
-        </div>
-
-        {items.length > 1 && (
-          <>
-            <button
-              type="button"
-              onClick={() => onIndex((index - 1 + items.length) % items.length)}
-              aria-label="Sebelumnya"
-              className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-[#111] shadow-lg transition-colors hover:bg-white"
-            >
-              <ChevronLeft size={20} />
-            </button>
-            <button
-              type="button"
-              onClick={() => onIndex((index + 1) % items.length)}
-              aria-label="Berikutnya"
-              className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-[#111] shadow-lg transition-colors hover:bg-white"
-            >
-              <ChevronRight size={20} />
-            </button>
-          </>
-        )}
       </div>
     </div>
   );

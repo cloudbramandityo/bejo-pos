@@ -5,9 +5,10 @@
 export const APP_NAME = 'BEJO Digital Print';
 
 /**
- * Versi aplikasi (major.minor). Jangan ubah manual: gunakan
- * `npm run version:bump` untuk update biasa atau `npm run version:major`
- * untuk update besar/modul baru. `scripts/check-version.mjs` memastikan nilai
- * ini selalu sama dengan package.json.
+ * Versi aplikasi (MAJOR.MINOR.PATCH, contoh '4.4.0'). Jangan ubah manual:
+ * gunakan `npm run version:bump` (patch), `npm run version:minor`
+ * (fitur/modul baru), atau `npm run version:major` (perubahan besar) setelah
+ * rekomendasi disetujui. `scripts/check-version.mjs` memastikan nilai ini
+ * selalu sama dengan package.json.
  */
-export const APP_VERSION = '4.4';
+export const APP_VERSION = '4.4.1';

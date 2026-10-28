@@ -2,28 +2,31 @@
 
 ## Versi aplikasi (wajib)
 
-Versi memakai format tampilan **major.minor** (contoh `v3.2`) dan disimpan di dua tempat yang dijaga tetap sinkron:
+Versi memakai format **major.minor.patch** (contoh `v4.4.0`) dan disimpan di dua tempat yang dijaga tetap sinkron:
 
-- `package.json` → semver penuh, contoh `3.2.0`
-- `src/config/brand.ts` → `APP_VERSION`, contoh `3.2`
+- `package.json` → versi penuh, contoh `4.4.0`
+- `src/config/brand.ts` → `APP_VERSION`, contoh `4.4.0`
 
 **Aturan default setiap update:**
 
-1. Setiap update yang di-commit **wajib** menaikkan versi minor: `3.2` → `3.3`.
+1. Setiap update yang di-commit **wajib** menaikkan versi patch: `4.4.0` → `4.4.1`.
    - Jalankan: `npm run version:bump`
    - Jangan mengedit versi manual di `package.json` atau `brand.ts`.
-2. Jika update bersifat besar — modul baru, perubahan arsitektur, atau fitur utama — **rekomendasikan** ke pengguna untuk naik versi major: `3.3` → `4.0`.
-   - Jalankan: `npm run version:major`
-   - Sampaikan rekomendasi tersebut sebelum/bersamaan dengan ringkasan perubahan.
-3. Satu update = satu kenaikan versi. Jangan menaikkan versi berkali-kali untuk pekerjaan yang sama.
-4. Cek versi berjalan kapan saja dengan `npm run version:show`.
+2. Jika update menambah **fitur atau modul baru** (aplikasi tetap terasa seperti versi yang sama), naikkan versi minor: `4.4.1` → `4.5.0`.
+   - Jalankan: `npm run version:minor`
+   - Sampaikan perubahan versi ini pada ringkasan perubahan.
+3. Jika **sistem menilai aplikasi sudah terlihat berbeda** dari versi sebelumnya — perubahan besar pada alur kerja, tampilan menyeluruh, atau arsitektur — **rekomendasikan** ke pengguna untuk naik versi major: `4.5.0` → `5.0.0`.
+   - Jalankan: `npm run version:major` **hanya setelah rekomendasi disetujui**.
+   - Rekomendasi disampaikan sebelum/bersamaan dengan ringkasan perubahan.
+4. Satu update = satu kenaikan versi. Jangan menaikkan versi berkali-kali untuk pekerjaan yang sama.
+5. Cek versi berjalan kapan saja dengan `npm run version:show`.
 
 `scripts/check-version.mjs` berjalan otomatis sebagai `prebuild`; build gagal jika versi di `package.json` dan `brand.ts` tidak sama.
 
 Versi yang sedang berjalan ditampilkan di:
 
 - Footer halaman login
-- Menu pengguna (dropdown desktop dan drawer mobile) sebagai "Versi aplikasi vX.Y"
+- Menu pengguna (dropdown desktop dan drawer mobile) sebagai "Versi aplikasi vX.Y.Z"
 - `GET /api/health` pada field `version`
 
 ## Nama aplikasi

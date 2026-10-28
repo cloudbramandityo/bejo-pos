@@ -53,6 +53,7 @@ import type {
   LandingFooterColumn,
   LandingGalleryItem,
   LandingMenuItem,
+  LandingMenuLink,
   LandingPageConfig,
   LandingPageKey,
   LandingSlide,
@@ -64,8 +65,10 @@ import {
   buildPublishedLandingConfig,
   isLandingConfigEqual,
   isLandingContentEqual,
+  normalizeLandingCategoryKeys,
   resetLandingDraftToDefault,
   saveStoredLandingDraft,
+  uniqueCategoryKey,
 } from '../utils/landingPageStorage';
 import { ensureLandingMediaInDatabase, saveLandingMedia } from '../utils/landingMediaStorage';
 import { LandingPage } from './landing/LandingPage';
@@ -490,8 +493,8 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
   onUnpublish,
   onPreviewLandingPage,
 }) => {
-  const [config, setConfig] = useState<LandingPageConfig>(initialConfig);
-  const [savedJson, setSavedJson] = useState<string>(() => JSON.stringify(initialConfig));
+  const [config, setConfig] = useState<LandingPageConfig>(() => normalizeLandingCategoryKeys(initialConfig));
+  const [savedJson, setSavedJson] = useState<string>(() => JSON.stringify(normalizeLandingCategoryKeys(initialConfig)));
   const [active, setActive] = useState<SectionKey>('brand');
   const [notice, setNotice] = useState<string | null>(null);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
@@ -558,8 +561,9 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
   /* Ikuti draft cloud terbaru selama belum ada perubahan yang belum disimpan. */
   useEffect(() => {
     if (!isDirty) {
-      setConfig(initialConfig);
-      setSavedJson(JSON.stringify(initialConfig));
+      const normalized = normalizeLandingCategoryKeys(initialConfig);
+      setConfig(normalized);
+      setSavedJson(JSON.stringify(normalized));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialConfig]);
@@ -641,6 +645,38 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
   /* ---- helper daftar generik ---- */
   const updateList = <K extends keyof LandingPageConfig>(key: K, items: LandingPageConfig[K]) =>
     setConfig((prev) => ({ ...prev, [key]: items }));
+
+  /**
+   * Hapus satu kategori beserta kartunya.
+   * Tautan menu & footer yang menuju kategori tersebut dikosongkan agar tidak
+   * mengarah ke halaman produk yang sudah tidak ada.
+   */
+  const deleteCategory = (group: LandingCategoryGroup) => {
+    if (!window.confirm(`Hapus kategori "${group.title}" beserta semua kartunya?`)) return;
+    setConfig((prev) => {
+      const clearTarget = (link: LandingMenuLink): LandingMenuLink =>
+        link.categoryKey === group.key ? { ...link, categoryKey: undefined } : link;
+      return {
+        ...prev,
+        categories: prev.categories.filter((c) => c.id !== group.id),
+        menu: prev.menu.map((item) => ({
+          ...item,
+          columns: (item.columns || []).map((col) => ({ ...col, links: col.links.map(clearTarget) })),
+        })),
+        footerColumns: (prev.footerColumns || []).map((col) => ({
+          ...col,
+          blocks: (col.blocks || []).map((block) => ({
+            ...block,
+            links: (block.links || []).map((link) =>
+              link.categoryKey === group.key ? { ...link, categoryKey: undefined } : link
+            ),
+          })),
+        })),
+      };
+    });
+    if (openItem === group.id) setOpenItem(null);
+  };
+
 
   const count = (key: SectionKey): number => {
     switch (key) {
@@ -1427,8 +1463,8 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                                     className={`${inputCls} !w-[150px] !py-1.5`}
                                   >
                                     <option value="">— tujuan —</option>
-                                    {config.categories.map((c) => (
-                                      <option key={c.key} value={`cat:${c.key}`}>{c.title}</option>
+                                    {(config.categories || []).map((c) => (
+                                      <option key={c.id} value={`cat:${c.key}`}>{c.title}</option>
                                     ))}
                                     {PAGE_OPTIONS.map((p) => (
                                       <option key={p.value} value={`page:${p.value}`}>{p.label}</option>
@@ -1495,7 +1531,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                   onClick={() => {
                     const group: LandingCategoryGroup = {
                       id: newId('cat'),
-                      key: 'kategori_baru',
+                      key: uniqueCategoryKey('kategori_baru', config.categories),
                       title: 'KATEGORI BARU',
                       heading: 'Judul Seksi Kategori Baru',
                       description: 'Deskripsi kategori produk baru.',
@@ -1521,6 +1557,15 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                         <span className="block text-[10px] font-medium text-slate-400">{group.cards.length} kartu</span>
                       </button>
                       <Toggle active={group.isActive} onChange={(v) => updateList('categories', config.categories.map((c) => (c.id === group.id ? { ...c, isActive: v } : c)))} />
+                      <button
+                        type="button"
+                        onClick={() => deleteCategory(group)}
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                        title="Hapus kategori"
+                        aria-label={`Hapus kategori ${group.title}`}
+                      >
+                        <Trash2 size={13} />
+                      </button>
                       <button type="button" onClick={() => setOpenItem(openItem === group.id ? null : group.id)} className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100">
                         {openItem === group.id ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                       </button>
@@ -1532,8 +1577,18 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                           <Field label="Label Tab">
                             <input value={group.title} onChange={(e) => updateList('categories', config.categories.map((c) => (c.id === group.id ? { ...c, title: e.target.value } : c)))} className={inputCls} />
                           </Field>
-                          <Field label="Slug / Kunci">
-                            <input value={group.key} onChange={(e) => updateList('categories', config.categories.map((c) => (c.id === group.id ? { ...c, key: e.target.value } : c)))} className={inputCls} />
+                          <Field label="Slug / Kunci" hint="Dipakai sebagai tujuan menu. Harus unik antar kategori.">
+                            <input
+                              value={group.key}
+                              onChange={(e) => updateList('categories', config.categories.map((c) => (c.id === group.id ? { ...c, key: e.target.value } : c)))}
+                              onBlur={(e) => {
+                                const nextKey = uniqueCategoryKey(e.target.value || group.title, config.categories, group.id);
+                                if (nextKey !== group.key) {
+                                  updateList('categories', config.categories.map((c) => (c.id === group.id ? { ...c, key: nextKey } : c)));
+                                }
+                              }}
+                              className={inputCls}
+                            />
                           </Field>
                         </div>
                         <Field label="Judul Seksi">
@@ -2440,7 +2495,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                                 >
                                   <option value="">— tujuan —</option>
                                   {config.categories.map((c) => (
-                                    <option key={c.key} value={`cat:${c.key}`}>{c.title}</option>
+                                    <option key={c.id} value={`cat:${c.key}`}>{c.title}</option>
                                   ))}
                                   {PAGE_OPTIONS.map((p) => (
                                     <option key={p.value} value={`page:${p.value}`}>{p.label}</option>

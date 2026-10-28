@@ -14,6 +14,58 @@ export const LANDING_PAGE_DRAFT_STORAGE_KEY = 'bejo_pos_landing_page_draft_v1';
 /* -------------------------------------------------------------------------- */
 const cid = (prefix: string, i: number) => `${prefix}_${i}`;
 
+/** Ubah teks menjadi kunci kategori yang aman dipakai di URL/navigasi. */
+export const slugifyCategoryKey = (value: string): string =>
+  String(value || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+/** Ambil kunci kategori unik (tidak bentrok dengan kategori lain). */
+export function uniqueCategoryKey(
+  base: string,
+  categories: Array<{ id: string; key?: string }>,
+  excludeId?: string
+): string {
+  const clean = slugifyCategoryKey(base) || 'kategori';
+  let candidate = clean;
+  let n = 2;
+  while (categories.some((c) => c.id !== excludeId && (c.key || '') === candidate)) {
+    candidate = `${clean}_${n}`;
+    n += 1;
+  }
+  return candidate;
+}
+
+/**
+ * Pastikan setiap kategori punya kunci yang unik dan tidak kosong.
+ * Kunci yang sudah baik dibiarkan apa adanya agar tautan menu lama tetap valid.
+ */
+export function normalizeCategoryKeyList<T extends { key?: string; title?: string }>(list: T[]): T[] {
+  const used = new Set<string>();
+  const normalized = list.map((group) => {
+    const rawKey = typeof group?.key === 'string' ? group.key.trim() : '';
+    let key = rawKey || slugifyCategoryKey(group?.title || '') || 'kategori';
+    if (used.has(key)) {
+      let n = 2;
+      while (used.has(`${key}_${n}`)) n += 1;
+      key = `${key}_${n}`;
+    }
+    used.add(key);
+    return key === group.key ? group : { ...group, key };
+  });
+  const changed = normalized.some((group, i) => group !== list[i]);
+  return changed ? normalized : list;
+}
+
+/** Versi config-wide dari normalizeCategoryKeyList (dipakai editor). */
+export function normalizeLandingCategoryKeys(config: LandingPageConfig): LandingPageConfig {
+  const list = Array.isArray(config.categories) ? config.categories : [];
+  const normalized = normalizeCategoryKeyList(list);
+  return normalized === list ? config : { ...config, categories: normalized };
+}
+
 const categoryCard = (prefix: string, label: string, i: number) => ({
   id: cid(prefix, i),
   label,
@@ -744,7 +796,7 @@ function migrateConfig(parsed: unknown): LandingPageConfig {
     brand: { ...defaults.brand, ...(clean.brand || {}) },
     contact,
     slides,
-    categories,
+    categories: normalizeCategoryKeyList(categories),
     menu,
     templatePromos: Array.isArray(clean.templatePromos) && clean.templatePromos.length > 0
       ? clean.templatePromos

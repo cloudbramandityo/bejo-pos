@@ -56,7 +56,7 @@ import type {
   LandingRoute,
   LandingSlide,
 } from '../../types';
-import { openLandingButtonLink, readableTextColor } from '../../utils/landingLinks';
+import { openLandingButtonLink, readableTextColor, whatsappChatUrl } from '../../utils/landingLinks';
 
 /* -------------------------------------------------------------------------- */
 /*  Token desain                                                              */
@@ -1044,7 +1044,7 @@ const Footer: React.FC<{
       const url = s.url.trim();
       return { ...s, url: /^https?:\/\//i.test(url) ? url : `https://${url}` };
     });
-  const wa = config.contact.whatsappNumber.replace(/[^0-9]/g, '');
+  const waHref = whatsappChatUrl(config.contact.whatsappNumber);
 
   const socialIcon = (label: string) => {
     const l = label.toLowerCase();
@@ -1108,14 +1108,18 @@ const Footer: React.FC<{
             <MessageCircle size={18} className="mt-0.5 shrink-0 text-emerald-600" />
             <div>
               <p className="text-[12px] font-bold text-[#111]">WhatsApp</p>
-              <a
-                href={`https://wa.me/${wa}`}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-0.5 block text-[11.5px] text-[#7A7A7A] transition-colors hover:text-[#00AAFF]"
-              >
-                {config.contact.phoneDisplay}
-              </a>
+              {waHref ? (
+                <a
+                  href={waHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-0.5 block text-[11.5px] text-[#7A7A7A] transition-colors hover:text-[#00AAFF]"
+                >
+                  {config.contact.phoneDisplay}
+                </a>
+              ) : (
+                <p className="mt-0.5 text-[11.5px] text-[#7A7A7A]">{config.contact.phoneDisplay}</p>
+              )}
             </div>
           </div>
           <div className="flex items-start gap-3">
@@ -1348,8 +1352,8 @@ const HomePage: React.FC<{
 }> = ({ config, onNavigate, onOpenLightbox }) => {
   const categories = config.categories.filter((c) => c.isActive);
   const consult = () => {
-    const wa = config.contact.whatsappNumber.replace(/[^0-9]/g, '');
-    if (wa) window.open(`https://wa.me/${wa}`, '_blank', 'noopener,noreferrer');
+    const href = whatsappChatUrl(config.contact.whatsappNumber);
+    if (href) window.open(href, '_blank', 'noopener,noreferrer');
   };
   const openLink = (link: LandingButtonLink | undefined) =>
     openLandingButtonLink(link, { contact: config.contact, navigate: (page) => onNavigate(page), fallback: consult });
@@ -1672,7 +1676,7 @@ const ContactPage: React.FC<{
 }> = ({ config, onNavigate }) => {
   const offices = config.offices.filter((o) => o.isActive);
   const contact = config.contact;
-  const wa = contact.whatsappNumber.replace(/[^0-9]/g, '');
+  const waHref = whatsappChatUrl(contact.whatsappNumber);
 
   return (
     <>
@@ -1686,7 +1690,7 @@ const ContactPage: React.FC<{
       <section className="mx-auto max-w-[1200px] px-4 py-14">
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { icon: <MessageCircle size={20} />, title: 'WhatsApp', value: contact.phoneDisplay, href: `https://wa.me/${wa}` },
+            { icon: <MessageCircle size={20} />, title: 'WhatsApp', value: contact.phoneDisplay, href: waHref || undefined },
             { icon: <Mail size={20} />, title: 'Email', value: contact.emailDisplay || '-', href: `mailto:${contact.emailDisplay || ''}` },
             { icon: <MapPin size={20} />, title: 'Kantor', value: contact.storeAddress },
             { icon: <Clock size={20} />, title: 'Jam Operasional', value: contact.operatingHours },
@@ -1748,8 +1752,9 @@ const ContactPage: React.FC<{
                 e.preventDefault();
                 const form = e.currentTarget as HTMLFormElement;
                 const data = new FormData(form);
-                const text = `Halo ${config.brand.name},%0A%0ANama: ${data.get('name')}%0AKebutuhan: ${data.get('need')}%0APesan: ${data.get('message')}`;
-                window.open(`https://wa.me/${wa}?text=${text}`, '_blank');
+                const text = `Halo ${config.brand.name},\n\nNama: ${data.get('name')}\nKebutuhan: ${data.get('need')}\nPesan: ${data.get('message')}`;
+                const href = whatsappChatUrl(contact.whatsappNumber, text);
+                if (href) window.open(href, '_blank', 'noopener,noreferrer');
               }}
             >
               <input
@@ -1936,7 +1941,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     setLightbox({ items, index });
   }, []);
 
-  const wa = config.contact.whatsappNumber.replace(/[^0-9]/g, '');
+  const waHref = whatsappChatUrl(config.contact.whatsappNumber);
 
   return (
     <div className="bejo-landing min-h-screen bg-white text-[#111]" style={{ fontFamily: FONT_STACK }}>
@@ -1990,15 +1995,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <ArrowUp size={18} />
             </button>
           )}
-          <a
-            href={`https://wa.me/${wa}`}
-            target="_blank"
-            rel="noreferrer"
-            aria-label="Chat WhatsApp"
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition-transform hover:-translate-y-0.5"
-          >
-            <MessageCircle size={22} />
-          </a>
+          {waHref && (
+            <a
+              href={waHref}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Chat WhatsApp"
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition-transform hover:-translate-y-0.5"
+            >
+              <MessageCircle size={22} />
+            </a>
+          )}
         </div>
       )}
 

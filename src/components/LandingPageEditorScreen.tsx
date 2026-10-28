@@ -73,7 +73,7 @@ import {
   uniqueCategoryKey,
 } from '../utils/landingPageStorage';
 import { ensureLandingMediaInDatabase, saveLandingMedia } from '../utils/landingMediaStorage';
-import { LANDING_PAGE_OPTIONS, normalizeHexColor } from '../utils/landingLinks';
+import { LANDING_PAGE_OPTIONS, normalizeHexColor, normalizeWhatsappNumber } from '../utils/landingLinks';
 import { LandingPage } from './landing/LandingPage';
 
 /* -------------------------------------------------------------------------- */
@@ -202,7 +202,7 @@ const ButtonLinkField: React.FC<{
 }> = ({ link, onChange, whatsappNumber }) => {
   const type: LandingButtonLinkType = link?.type || 'page';
   const value = link?.value || '';
-  const waDigits = String(whatsappNumber || '').replace(/[^0-9]/g, '');
+  const waDigits = normalizeWhatsappNumber(whatsappNumber);
 
   return (
     <Field label="Tujuan Tombol" hint="Tombol bisa membuka WhatsApp, tautan luar, atau halaman di situs ini.">
@@ -2538,7 +2538,14 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
           {active === 'contact' && (
             <SectionCard title="Kontak" description="Informasi kontak yang tampil di top bar, halaman kontak, dan footer.">
               <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Nomor WhatsApp" hint="Format 62… tanpa tanda +">
+                <Field
+                  label="Nomor WhatsApp"
+                  hint={
+                    normalizeWhatsappNumber(config.contact.whatsappNumber)
+                      ? `Tombol WhatsApp membuka wa.me/${normalizeWhatsappNumber(config.contact.whatsappNumber)}. Boleh ditulis 0812…, 812…, atau 62….`
+                      : 'Nomor belum diisi — tombol WhatsApp disembunyikan.'
+                  }
+                >
                   <input value={config.contact.whatsappNumber} onChange={(e) => patchSub('contact', { whatsappNumber: e.target.value })} className={inputCls} />
                 </Field>
                 <Field label="Nomor Telepon (tampil)">

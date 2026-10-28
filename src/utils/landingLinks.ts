@@ -51,8 +51,22 @@ export function safeExternalUrl(raw?: string): string {
   return `https://${value.replace(/^\/+/, '')}`;
 }
 
+/**
+ * Tautan wa.me wajib memakai format internasional tanpa "+". Nomor lokal yang
+ * tersimpan (0812…, 812…, +62 812…) dinormalkan menjadi 62812… agar klik
+ * tombol WhatsApp benar-benar membuka chat nomor yang disimpan.
+ */
+export function normalizeWhatsappNumber(raw?: string): string {
+  let digits = String(raw || '').replace(/[^0-9]/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.startsWith('0')) digits = `62${digits.slice(1)}`;
+  else if (digits.startsWith('8')) digits = `62${digits}`;
+  return digits;
+}
+
 export function whatsappChatUrl(number: string, message?: string): string {
-  const digits = String(number || '').replace(/[^0-9]/g, '');
+  const digits = normalizeWhatsappNumber(number);
   if (!digits) return '';
   const text = String(message || '').trim();
   return `https://wa.me/${digits}${text ? `?text=${encodeURIComponent(text)}` : ''}`;

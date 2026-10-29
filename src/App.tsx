@@ -2675,6 +2675,7 @@ export default function App() {
         user={currentUser}
         forced={userRole !== 'DEVELOPER' && Boolean(currentUser.mustChangePassword)}
         onClose={() => setIsProfileModalOpen(false)}
+        onExit={handleLogout}
         onUpdated={handleProfileUpdated}
       />
 

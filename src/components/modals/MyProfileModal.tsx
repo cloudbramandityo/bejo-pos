@@ -35,6 +35,12 @@ interface MyProfileModalProps {
   /** True = password sementara, wajib diganti sebelum memakai aplikasi. */
   forced?: boolean;
   onClose: () => void;
+  /**
+   * Penutup saat modal terkunci: keluar dari sesi ini dan kembali ke halaman
+   * login. Tanpa ini user yang tidak bisa/mau mengganti password terperangkap
+   * karena flag mustChangePassword di sesi terus membuka modal ini lagi.
+   */
+  onExit?: () => void;
   onUpdated: (user: AppUser) => void;
 }
 
@@ -78,6 +84,7 @@ export const MyProfileModal: React.FC<MyProfileModalProps> = ({
   user,
   forced = false,
   onClose,
+  onExit,
   onUpdated,
 }) => {
   const [name, setName] = useState(user.name);
@@ -221,16 +228,18 @@ export const MyProfileModal: React.FC<MyProfileModalProps> = ({
               <p className="text-[11px] text-blue-100">Nama tampilan, foto, username, dan password akun Anda</p>
             </div>
           </div>
-          {!forceChange && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-white/80 hover:text-white p-1 hover:bg-white/10 rounded-lg cursor-pointer"
-              aria-label="Tutup profil"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              if (forceChange) (onExit ?? onClose)();
+              else onClose();
+            }}
+            className="text-white/80 hover:text-white p-1 hover:bg-white/10 rounded-lg cursor-pointer"
+            aria-label={forceChange ? 'Keluar dan kembali ke halaman login' : 'Tutup profil'}
+            title={forceChange ? 'Keluar ke halaman login' : 'Tutup profil'}
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {forceChange && (

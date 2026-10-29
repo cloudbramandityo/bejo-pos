@@ -99,6 +99,8 @@ Setiap staf mengatur sendiri nama tampilan, foto profil, username login, dan pas
 - `ensureStaffDirectory` menghapus baris direktori yang `authId`-nya record sinkronisasi; `loadStaffAccounts` menyembunyikan akun ber-email sinkronisasi; `saveCredential` dan `deleteAccount` menolaknya (`ACCOUNT_RESERVED`); username `sync` ditolak (`USERNAME_RESERVED`); restore backup menghitung kedua kode itu sebagai dilewati.
 - `ensureSyncAccount` (`server/staffStore.ts`) menyamakan record dengan `.env` saat boot dan sekali lagi ketika login sinkronisasi ditolak; **jangan** menghapus panggilan ini. Tanpa `PB_ADMIN_EMAIL`/`PB_ADMIN_PASSWORD` yang valid perbaikan dilewati (tidak menebak).
 - Bila live terlanjur Mode Lokal, jalankan di VPS: `powershell -ExecutionPolicy Bypass -File C:\bejo-pos\scripts\repair-sync-account.ps1` (periksa) lalu tambahkan `-Apply` (menulis) atau `-Apply -RestartService`. Skrip tidak pernah merotasi password superuser.
+- Skrip PowerShell yang memanggil Node: PowerShell 5.1 **membuang argumen string kosong**, jadi URL PocketBase harus menjadi argumen terakhir dan skrip Node wajib menolak URL yang tidak diawali `http://`/`https://`. Tanpa itu URL bisa menerima nilai seperti `check` dan semua login gagal dengan pesan SDK "Something went wrong." yang menyesatkan.
+- Probe broker di deploy berjalan tanpa cookie sesi staf; HTTP 401 adalah jawaban yang benar. Kredensial sinkronisasi yang ditolak menghasilkan HTTP 503.
 - Uji regresi penjaga: `npm run check:users` (kasus G/H di `scripts/check-staff-credential.mts`).
 
 ## Deploy

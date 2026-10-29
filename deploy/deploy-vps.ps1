@@ -1417,8 +1417,11 @@ try {
   try { $pbProbeCode = [int]$_.Exception.Response.StatusCode } catch { }
   if ($pbProbeCode -eq 503) {
     Write-Warn2 'Broker sesi PocketBase aktif, tetapi PB_SYNC_* kosong atau ditolak (aplikasi berjalan mode lokal).'
-  } elseif ($pbProbeCode -eq 400 -or $pbProbeCode -eq 401) {
-    Write-Warn2 "Broker sesi PocketBase merespons HTTP $pbProbeCode (periksa kredensial sync)."
+  } elseif ($pbProbeCode -eq 401) {
+    # Probe ini sengaja tanpa cookie sesi staf; 401 adalah jawaban yang benar.
+    Write-Ok 'Broker sesi PocketBase aktif dan menolak permintaan tanpa sesi login (HTTP 401).'
+  } elseif ($pbProbeCode -eq 400) {
+    Write-Warn2 'Broker sesi PocketBase merespons HTTP 400; periksa middleware sesi staf.'
   } elseif ($pbProbeCode -eq 404) {
     Write-Warn2 'Broker /api/pocketbase/session tidak ditemukan; build lama mungkin masih berjalan atau Caddy mem-proxy ke PocketBase.'
   } else {

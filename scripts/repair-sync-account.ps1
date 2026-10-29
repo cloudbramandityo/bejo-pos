@@ -116,7 +116,9 @@ $nodeScript = @'
 import dotenv from 'dotenv';
 import PocketBase from 'pocketbase';
 
-const [envPath, pbUrlArg, mode] = process.argv.slice(2);
+// mode sengaja dibaca sebelum URL: PowerShell 5.1 membuang argumen string
+// kosong, jadi $LocalPbUrl harus menjadi argumen terakhir agar tidak menggeser.
+const [envPath, mode, pbUrlArg] = process.argv.slice(2);
 const apply = mode === 'apply';
 const out = {
   mode,
@@ -155,8 +157,25 @@ const newClient = () => {
   pb.autoCancellation(false);
   return pb;
 };
-const brief = (e) => `${e?.status ? e.status + ' ' : ''}${e?.message || e}`.trim();
+const brief = (e) => {
+  const status = Number(e?.status) || 0;
+  const original = String(e?.originalError?.message || '').trim();
+  const message = String(e?.message || e || '').trim() || 'galat tanpa pesan';
+  if (status) return original && original !== message ? `${status} ${message} (${original})` : `${status} ${message}`;
+  // Tanpa status HTTP berarti permintaan tidak sampai ke PocketBase; pesan SDK
+  // ("Something went wrong.") menyesatkan, jadi pakai pesan aslinya.
+  return original ? `jaringan ${original}` : message;
+};
 const lower = (v) => String(v || '').trim().toLowerCase();
+
+if (!/^https?:\/\//i.test(pbUrl)) {
+  out.errors.push(`URL PocketBase tidak valid: "${pbUrl}" (argumen skrip bergeser?).`);
+  out.sync.loginBefore = { status: 'SKIPPED' };
+  out.admin.auth = 'SKIPPED';
+  out.status = 'INVALID_URL';
+  console.log(JSON.stringify(out, null, 2));
+  process.exit(0);
+}
 
 async function probeLogin(email, password) {
   if (!email || !password) return { status: 'SKIPPED' };
@@ -308,7 +327,7 @@ console.log(JSON.stringify(out, null, 2));
 
 try {
   [System.IO.File]::WriteAllText($tmpNode, $nodeScript, [System.Text.UTF8Encoding]::new($false))
-  $raw = (& node $tmpNode $envPath $LocalPbUrl $mode 2>&1) -join "`n"
+  $raw = (& node $tmpNode $envPath $mode $LocalPbUrl 2>&1) -join "`n"
   # Buang baris non-JSON yang mungkin dicetak pustaka (mis. banner dotenv).
   $jsonStart = $raw.IndexOf('{')
   if ($jsonStart -gt 0) { $raw = $raw.Substring($jsonStart) }
@@ -356,6 +375,11 @@ if ([bool]$nodeResult.env.legacySyncInEnv) {
 # ---------------------------------------------------------------------
 Write-Section '4. HASIL'
 # ---------------------------------------------------------------------
+if ($nodeResult.pbUrl) { Info ("PocketBase diperiksa di: {0}" -f $nodeResult.pbUrl) }
+if ([string]$nodeResult.status -eq 'INVALID_URL') {
+  Fail 'URL PocketBase tidak valid; login tidak dijalankan.'
+  foreach ($err in (As-List $nodeResult.errors)) { Info $err }
+}
 $loginBefore = [string]$nodeResult.sync.loginBefore.status
 if ($loginBefore -eq 'OK') {
   Ok 'Login akun sinkronisasi BERHASIL.'
@@ -376,7 +400,7 @@ if ($adminAuth -like 'OK*') {
   Warn 'PB_ADMIN_EMAIL / PB_ADMIN_PASSWORD kosong; perbaikan via superuser tidak bisa dijalankan.'
 } else {
   Fail ("Login superuser PocketBase GAGAL: {0}" -f $nodeResult.admin.error)
-  Info 'Kalau kunci di atas terisi tetapi login ditolak, nilainya memang tidak cocok dengan superuser PocketBase.'
+  Info '400 berarti kuncinya tidak cocok dengan superuser; galat jaringan/500 berarti masalah koneksi, bukan kredensial.'
 }
 
 $rec = $nodeResult.record

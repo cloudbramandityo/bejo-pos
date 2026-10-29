@@ -353,6 +353,38 @@ const COLLECTIONS = [
     ],
   },
   {
+    // Penyebab berubahnya nilai Total Aset Toko di luar mutasi stok
+    // (koreksi stok manual, ganti harga kulak, penjualan kasir, tambah/hapus produk).
+    // Garis pergerakan aset direkonstruksi dari stock_transactions + koleksi ini;
+    // perubahan yang tidak ditulis di sini tidak akan pernah terlihat di riwayat.
+    name: 'asset_adjustments',
+    type: 'base',
+    fields: [
+      T('date', true),
+      T('time'),
+      N('timestamp'),
+      T('productId', false, 60),
+      T('productName'),
+      SEL(
+        'kind',
+        ['HARGA_KULAK', 'KOREKSI_STOK', 'PRODUK_BARU', 'PRODUK_HAPUS', 'PERHITUNGAN_ASET', 'PENJUALAN_POS', 'PULIHKAN_BACKUP'],
+        true,
+      ),
+      N('qtyBefore'),
+      N('qtyAfter'),
+      T('unit'),
+      N('unitCostBefore'),
+      N('unitCostAfter'),
+      N('valueDelta', true),
+      SEL('source', ['MANUAL', 'POS', 'STOCK_TX', 'RESTORE']),
+      T('referenceId', false, 60),
+      T('actorId', false, 60),
+      T('actorName'),
+      T('actorRole'),
+      T('notes', false, 1000),
+    ],
+  },
+  {
     name: 'spk_orders',
     type: 'base',
     fields: [

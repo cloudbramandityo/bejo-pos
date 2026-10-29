@@ -13,6 +13,7 @@ import {
   Supplier,
   Agent,
   StockTransaction,
+  AssetAdjustment,
   UserActivityLog,
   ActivityActionType,
   StoreProfile,
@@ -57,6 +58,7 @@ const STORAGE_KEYS = {
   ACTIVE_SHIFT: 'bejo_pos_active_shift_v1',
   TRANSACTIONS: 'bejo_pos_transactions_v1',
   STOCK_TRANSACTIONS: 'bejo_pos_stock_transactions_v1',
+  ASSET_ADJUSTMENTS: 'bejo_pos_asset_adjustments_v1',
   STORE_INFO: 'bejo_pos_store_info_v1',
   DEFAULT_LOGO: 'bejo_pos_default_logo_v1',
   PRODUCT_CATEGORIES: 'bejo_pos_product_categories_v1',
@@ -759,6 +761,31 @@ export function saveStoredStockTransactions(txs: StockTransaction[]): void {
     localStorage.setItem(STORAGE_KEYS.STOCK_TRANSACTIONS, JSON.stringify(txs));
   } catch (e) {
     console.error('Failed to save stock transactions', e);
+  }
+}
+
+/** Batas cermin lokal: riwayat penyesuaian aset dipakai untuk menghitung garis tren. */
+const MAX_STORED_ASSET_ADJUSTMENTS = 4000;
+
+export function getStoredAssetAdjustments(): AssetAdjustment[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.ASSET_ADJUSTMENTS);
+    const list: AssetAdjustment[] = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function saveStoredAssetAdjustments(items: AssetAdjustment[]): void {
+  try {
+    const sorted = [...items].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    localStorage.setItem(
+      STORAGE_KEYS.ASSET_ADJUSTMENTS,
+      JSON.stringify(sorted.slice(0, MAX_STORED_ASSET_ADJUSTMENTS))
+    );
+  } catch (e) {
+    console.error('Failed to save asset adjustments', e);
   }
 }
 

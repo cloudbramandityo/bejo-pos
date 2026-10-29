@@ -113,6 +113,31 @@ ADMIN = akses operasional penuh terhadap **data** di tab SPK Cetak, Laporan, dan
 - Probe broker di deploy berjalan tanpa cookie sesi staf; HTTP 401 adalah jawaban yang benar. Kredensial sinkronisasi yang ditolak menghasilkan HTTP 503.
 - Uji regresi penjaga: `npm run check:users` (kasus G/H di `scripts/check-staff-credential.mts`).
 
+## Penyesuaian aset toko (wajib)
+
+Nilai "Total Aset Toko" dibangun dari **dua ledger**, tidak boleh salah satu dihapus:
+
+- `stock_transactions` — mutasi stok (Pembelian masuk, Pengambilan agen keluar). Nilainya dihitung dari selisih satuan utama × HPP produk saat ini.
+- `asset_adjustments` — kejadian yang mengubah nilai aset **langsung dalam rupiah** saat kejadiannya terjadi.
+
+Setiap jalur tulis yang mengubah stok atau harga kulak produk terhitung aset di luar mutasi stok **wajib** mencatat penyesuaian lewat `src/utils/assetAdjustments.ts` lalu `recordAssetAdjustments()` di `App.tsx`:
+
+- Edit produk (Inventory / modal tambah-ubah produk) → `adjustmentsFromProductEdit()`; menghasilkan `PRODUK_BARU`, `PRODUK_HAPUS`, `PERHITUNGAN_ASET` (saat centang "Masuk Aset Toko" atau kategori paket berubah), `HARGA_KULAK`, `KOREKSI_STOK`.
+- Penjualan kasir yang mengurangi stok bahan (tidak menulis mutasi) → `adjustmentsFromStockDiff(..., 'PENJUALAN_POS', ...)`.
+- `handleUpdateBatchProductStockAndCost()` (dipakai StockScreen & AgentScreen) → **hanya** `adjustmentsFromCostEdit()`. Selisih stoknya sudah tercatat di `stock_transactions` pada layar yang sama; memakai `adjustmentsFromProductEdit()` di sini membuat nilai aset terhitung dua kali.
+- Pulihkan backup → `aggregateAdjustment()` dengan `kind: 'PULIHKAN_BACKUP'`, `source: 'RESTORE'`.
+
+Aturan turun-temurun:
+
+- Dekomposisi wajib persis: efek harga pada stok lama `(hargaBaru − hargaLama) × stokLama`, efek stok pada harga baru `hargaBaru × (stokBaru − stokLama)`. Jumlah kedua baris harus sama dengan selisih nilai aset — itu yang diuji.
+- Baris dengan `valueDelta` nol tidak boleh ditulis.
+- Produk tidak terhitung aset (`isPaketProduct`, Digital Printing tanpa `isAssetToko`) tidak menghasilkan baris.
+- Jangan pernah menaksir lokasi, nilai, atau tanggal penyesuaian dari kode; nilai diambil dari kondisi produk sebelum/sesudah edit.
+- Tambah jenis baru di `AssetAdjustmentKind` → perbarui `select` `kind` di `scripts/create-pocketbase-collections.mjs` dan verifikasi koleksi saat deploy, kalau tidak tulis cloud gagal.
+- Cermin localStorage `bejo_pos_asset_adjustments_v1` dibatasi 4000 baris terakhir; ia hanya cadangan Mode Lokal, sumber tetap koleksi PocketBase `asset_adjustments` dengan langganan realtime.
+- Panel "Pergerakan Aset" harus menulis dasar perhitungannya apa adanya (rekonstruksi mundur, tanggal awal penelusuran, baris item yang produknya sudah dihapus dilaporkan sebagai tidak dinilai — bukan diam-diam diabaikan).
+- Uji regresi: `npm run check:trend` (kasus 9–17 di `scripts/check-asset-trend.mts`).
+
 ## Deploy
 
 Gunakan `deploy/deploy-vps.ps1` yang sudah ada. Jangan membuat skrip deploy baru. Build dan deploy hanya setelah `npm run build` lulus (termasuk check-brand, check-version, dan check-path-fabrication).

@@ -21,6 +21,7 @@ import {
   UserRole,
   Shift,
   Invoice,
+  AssetAdjustment,
 } from '../../types';
 import { FinancialSettings } from '../../utils/financialStorage';
 import { getJournalAccess } from '../journal/journalAccess';
@@ -34,6 +35,7 @@ const LaporanJurnalScreen = React.lazy(() =>
 interface LaporanScreenProps {
   transactions: Transaction[];
   stockTransactions: StockTransaction[];
+  assetAdjustments?: AssetAdjustment[];
   invoices: Invoice[];
   isStoreOnline?: boolean;
   storeName?: string;
@@ -134,6 +136,7 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
         <TransactionHistoryScreen
           transactions={props.transactions}
           stockTransactions={props.stockTransactions}
+          assetAdjustments={props.assetAdjustments}
           invoices={props.invoices}
           isStoreOnline={props.isStoreOnline}
           storeName={props.storeName}

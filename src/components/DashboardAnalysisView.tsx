@@ -51,13 +51,16 @@ import {
   AreaChart,
   Area
 } from 'recharts';
-import { Transaction, StockTransaction, Product, Supplier, Agent, ProductCategoryItem } from '../types';
+import { Transaction, StockTransaction, Product, Supplier, Agent, ProductCategoryItem, AssetAdjustment } from '../types';
 import { formatRupiah, formatVolume, isTransactionOnDate, getTransactionDateTimeEpoch } from '../utils/formatters';
 import { normalizeStockTransaction, calculateStockItemProfit, calculateSalesItemCost } from '../utils/stockUtils';
+import AssetMovementPanel from './reports/AssetMovementPanel';
+import AgentPickupPanel from './reports/AgentPickupPanel';
 
 interface DashboardAnalysisViewProps {
   transactions: Transaction[];
   stockTransactions: StockTransaction[];
+  assetAdjustments?: AssetAdjustment[];
   products: Product[];
   suppliers?: Supplier[];
   agents?: Agent[];
@@ -140,6 +143,7 @@ const getTransactionDateKey = (tx: { date?: string; time?: string; timestamp?: n
 export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
   transactions,
   stockTransactions,
+  assetAdjustments = [],
   products,
   suppliers = [],
   agents = [],
@@ -151,7 +155,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
   storeName = 'BEJO Digital Print',
   onPeriodTypeChange,
 }) => {
-  const [activeTabSub, setActiveTabSub] = useState<'ringkasan' | 'arus_alur' | 'grafik_analisis'>('ringkasan');
+  const [activeTabSub, setActiveTabSub] = useState<'ringkasan' | 'arus_alur' | 'grafik_analisis' | 'aset_toko' | 'agen_ambil'>('ringkasan');
   const [chartFilter, setChartFilter] = useState<'semua' | 'pembelian' | 'agen' | 'pos'>('semua');
 
   // Multi-Parameter Charting Controls
@@ -872,7 +876,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
           </div>
 
           {/* Sub Navigation Pill */}
-          <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700 self-start md:self-auto shrink-0">
+          <div className="flex flex-wrap bg-slate-800 p-1 rounded-xl border border-slate-700 self-start md:self-auto shrink-0 gap-0.5">
             <button
               type="button"
               onClick={() => setActiveTabSub('ringkasan')}
@@ -909,9 +913,51 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
               <BarChart3 className="w-3.5 h-3.5" />
               <span>Grafik & Diagram</span>
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveTabSub('aset_toko')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTabSub === 'aset_toko'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
+              }`}
+            >
+              <Boxes className="w-3.5 h-3.5" />
+              <span>Pergerakan Aset</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTabSub('agen_ambil')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTabSub === 'agen_ambil'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Pengambilan Agen</span>
+            </button>
           </div>
         </div>
       </div>
+
+      {/* SECTION: PERGERAKAN TOTAL ASET TOKO (harian/mingguan/bulanan/periode manual) */}
+      {activeTabSub === 'aset_toko' && (
+        <AssetMovementPanel
+          products={products}
+          stockTransactions={stockTransactions}
+          assetAdjustments={assetAdjustments}
+        />
+      )}
+
+      {/* SECTION: TOTAL PENGAMBILAN TIAP AGEN (mingguan/bulanan/periode manual) */}
+      {activeTabSub === 'agen_ambil' && (
+        <AgentPickupPanel
+          stockTransactions={stockTransactions}
+          products={products}
+          agents={agents}
+        />
+      )}
 
       {/* 4 Main Summary KPI Cards (Visible in KPI & Rangkuman tab) */}
       {activeTabSub === 'ringkasan' && (

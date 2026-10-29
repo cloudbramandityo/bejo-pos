@@ -25,6 +25,7 @@ import {
   CashierUser,
   AppUser,
   StockTransaction,
+  AssetAdjustment,
   Supplier,
   Agent,
   UserActivityLog,
@@ -77,6 +78,7 @@ export const PB_COLLECTIONS = {
   customer_categories: 'customer_categories',
   transactions: 'transactions',
   stock_transactions: 'stock_transactions',
+  asset_adjustments: 'asset_adjustments',
   shifts: 'shifts',
   cashiers: 'cashiers',
   users: 'users',
@@ -1587,6 +1589,42 @@ export async function deleteStockTransactionCloud(txId: string): Promise<void> {
   return safeCloudWrite(async () => {
     await removeRecord('stock_transactions', txId);
   }, OperationType.DELETE, `stock_transactions/${txId}`);
+}
+
+/* -------------------------------------------------------------------------- */
+/*  10b. Asset Adjustments (penyebab perubahan nilai aset di luar mutasi stok) */
+/* -------------------------------------------------------------------------- */
+export function subscribeAssetAdjustments(
+  onData: (items: AssetAdjustment[]) => void
+): () => void {
+  return createSafeSubscription('asset_adjustments', OperationType.LIST, (onError) =>
+    subscribeCollection('asset_adjustments', (items) => {
+      const list = items as AssetAdjustment[];
+      list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      onData(list);
+    }, onError)
+  );
+}
+
+export async function saveAssetAdjustmentCloud(item: AssetAdjustment): Promise<void> {
+  return safeCloudWrite(async () => {
+    await upsertRecord('asset_adjustments', item.id, item as any);
+  }, OperationType.WRITE, `asset_adjustments/${item.id}`);
+}
+
+export async function saveBatchAssetAdjustmentsCloud(items: AssetAdjustment[]): Promise<void> {
+  if (!items || items.length === 0) return;
+  return safeCloudWrite(async () => {
+    let firstError: any = null;
+    for (const item of items) {
+      try {
+        await upsertRecord('asset_adjustments', item.id, item as any);
+      } catch (err) {
+        if (!firstError) firstError = err;
+      }
+    }
+    if (firstError) throw firstError;
+  }, OperationType.WRITE, 'asset_adjustments');
 }
 
 /* -------------------------------------------------------------------------- */

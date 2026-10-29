@@ -46,7 +46,7 @@ import {
   ArrowUp,
   ArrowDown
 } from 'lucide-react';
-import { Transaction, StockTransaction, Product, Supplier, Agent, ProductCategoryItem, UserRole, Invoice } from '../types';
+import { Transaction, StockTransaction, Product, Supplier, Agent, ProductCategoryItem, UserRole, Invoice, AssetAdjustment } from '../types';
 import { formatRupiah, formatItemTransactionSpec, formatVolume, isTransactionOnDate, getTransactionDateTimeEpoch } from '../utils/formatters';
 import { exportTransactionsToExcel, exportStockTransactionsToExcel, exportSingleStockTransactionToExcel } from '../utils/excelExport';
 import { exportTransactionsToPDF, exportStockTransactionsToPDF, exportSingleStockTransactionToPDF } from '../utils/pdfExport';
@@ -63,6 +63,7 @@ import { DashboardAnalysisView } from './DashboardAnalysisView';
 interface TransactionHistoryScreenProps {
   transactions: Transaction[];
   stockTransactions?: StockTransaction[];
+  assetAdjustments?: AssetAdjustment[];
   invoices?: Invoice[];
   isStoreOnline?: boolean;
   storeName?: string;
@@ -85,6 +86,7 @@ type PeriodType = 'HARIAN' | 'MINGGUAN' | 'BULANAN' | 'SEMUA';
 export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> = ({
   transactions,
   stockTransactions = [],
+  assetAdjustments = [],
   invoices = [],
   isStoreOnline = false,
   storeName = 'BEJO Digital Print',
@@ -1615,6 +1617,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
         <DashboardAnalysisView
           transactions={allSalesTransactions}
           stockTransactions={stockTransactions}
+          assetAdjustments={assetAdjustments}
           products={products}
           suppliers={suppliers}
           agents={agents}

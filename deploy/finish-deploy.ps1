@@ -536,7 +536,7 @@ $countScript = @"
 import PocketBase from 'pocketbase';
 const pb = new PocketBase(process.env.POCKETBASE_URL);
 await pb.collection('_superusers').authWithPassword(process.env.PB_ADMIN_EMAIL, process.env.PB_ADMIN_PASSWORD);
-for (const c of ['products','transactions','customers','users','shifts','agents','suppliers','stock_transactions','settings']) {
+for (const c of ['products','transactions','customers','users','shifts','agents','suppliers','stock_transactions','asset_adjustments','settings']) {
   try { const r = await pb.collections.getOne(c); const l = await pb.collection(c).getList(1,1); console.log(c.padEnd(20) + l.totalItems); }
   catch (e) { console.log(c.padEnd(20) + 'ERR'); }
 }

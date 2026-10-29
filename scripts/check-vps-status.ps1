@@ -307,6 +307,7 @@ Write-Header "J. KOLEKSI POCKETBASE DAN DATA UTAMA"
 $expectedCollections = @(
     'products', 'product_categories', 'customers', 'customer_categories',
     'suppliers', 'agents', 'transactions', 'shifts', 'stock_transactions',
+    'asset_adjustments',
     'users', 'cashiers', 'activity_logs', 'settings',
     'store_profiles', 'custom_roles', 'agent_notifications',
     'spk_orders', 'machines', 'invoices', 'invoice_settings',

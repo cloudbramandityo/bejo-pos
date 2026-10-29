@@ -23,6 +23,8 @@ import {
   saveStoredActiveShift,
   getStoredStockTransactions,
   saveStoredStockTransactions,
+  getStoredAssetAdjustments,
+  saveStoredAssetAdjustments,
   getStoredStoreInfo,
   saveStoredStoreInfo,
   getStoredUsers,
@@ -64,6 +66,7 @@ import {
   saveCashierCloud,
   saveUserCloud,
   saveStockTransactionCloud,
+  saveAssetAdjustmentCloud,
   saveSupplierCloud,
   saveAgentCloud,
   saveActivityLogCloud,
@@ -72,6 +75,8 @@ import {
   saveInvoiceCloud,
   saveLandingConfigCloud
 } from '../backend/pocketbaseBackend';
+import { aggregateAdjustment } from './assetAdjustments';
+import { currentStoreAssetValue } from './assetTrend';
 
 export interface PosBackupPayload {
   app: string;
@@ -87,6 +92,7 @@ export interface PosBackupPayload {
     totalTransactions: number;
     totalShifts: number;
     totalStockTransactions: number;
+    totalAssetAdjustments: number;
     totalProductCategories: number;
     totalCustomerCategories: number;
     totalUsers: number;
@@ -107,6 +113,7 @@ export interface PosBackupPayload {
     shifts: any[];
     activeShift: any;
     stockTransactions: any[];
+    assetAdjustments?: any[];
     users: any[];
     cashiers: any[];
     activityLogs: any[];
@@ -157,6 +164,7 @@ export function generateBackupPayload(): PosBackupPayload {
   const shifts = getStoredShifts();
   const activeShift = getStoredActiveShift();
   const stockTransactions = getStoredStockTransactions();
+  const assetAdjustments = getStoredAssetAdjustments();
   const users = getStoredUsers();
   const cashiers = getStoredCashiers();
   const activityLogs = getStoredActivityLogs();
@@ -187,6 +195,7 @@ export function generateBackupPayload(): PosBackupPayload {
       totalTransactions: transactions.length,
       totalShifts: shifts.length,
       totalStockTransactions: stockTransactions.length,
+      totalAssetAdjustments: assetAdjustments.length,
       totalProductCategories: productCategories.length,
       totalCustomerCategories: customerCategories.length,
       totalUsers: users.length,
@@ -207,6 +216,7 @@ export function generateBackupPayload(): PosBackupPayload {
       shifts,
       activeShift,
       stockTransactions,
+      assetAdjustments,
       users,
       cashiers,
       activityLogs,
@@ -288,6 +298,7 @@ export function validateBackupPayload(parsed: any): { isValid: boolean; error?: 
 export function restoreBackupToStorage(payload: PosBackupPayload): boolean {
   try {
     const { data } = payload;
+    const productsBeforeRestore = getStoredProducts();
     if (data.storeInfo) saveStoredStoreInfo(data.storeInfo);
     if (Array.isArray(data.products)) saveStoredProducts(data.products);
     if (Array.isArray(data.productCategories)) saveStoredProductCategories(data.productCategories);
@@ -299,6 +310,21 @@ export function restoreBackupToStorage(payload: PosBackupPayload): boolean {
     if (Array.isArray(data.shifts)) saveStoredShifts(data.shifts);
     if (data.activeShift !== undefined) saveStoredActiveShift(data.activeShift);
     if (Array.isArray(data.stockTransactions)) saveStoredStockTransactions(data.stockTransactions);
+    if (Array.isArray(data.assetAdjustments)) {
+      saveStoredAssetAdjustments(data.assetAdjustments);
+    } else if (Array.isArray(data.products)) {
+      // Cadangan lama tidak punya buku penyesuaian. Lonjakan nilai aset dari
+      // pemulihan dicatat satu baris agregat supaya garis tidak melompat diam-diam.
+      const row = aggregateAdjustment(
+        currentStoreAssetValue(productsBeforeRestore),
+        currentStoreAssetValue(data.products),
+        { source: 'RESTORE', notes: `Pulihkan cadangan ${payload.exportedAt}` }
+      );
+      if (row) {
+        saveStoredAssetAdjustments([row, ...getStoredAssetAdjustments()]);
+        saveAssetAdjustmentCloud(row).catch(console.error);
+      }
+    }
     if (Array.isArray(data.users)) saveStoredUsers(data.users);
     if (Array.isArray(data.cashiers)) saveStoredCashiers(data.cashiers);
     if (Array.isArray(data.activityLogs)) saveStoredActivityLogs(data.activityLogs);
@@ -418,6 +444,7 @@ export async function restoreBackupToCloud(
     });
   }
   addArray('Mutasi Stok', data.stockTransactions, saveStockTransactionCloud);
+  addArray('Penyesuaian Aset', data.assetAdjustments, saveAssetAdjustmentCloud);
   addArray('Kasir', data.cashiers, saveCashierCloud);
   if (Array.isArray(data.users) && data.users.length > 0) {
     tasks.push({

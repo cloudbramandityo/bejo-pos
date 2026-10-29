@@ -57,6 +57,42 @@ export interface Product {
   stockUnit?: string;
 }
 
+/**
+ * Penyebab berubahnya nilai Total Aset Toko yang BUKAN mutasi stok
+ * (Pembelian/Pengambilan). Nilai historis aset dihitung mundur dari stok kini,
+ * jadi setiap perubahan yang tidak tercatat di sini akan hilang dari garis tren.
+ */
+export type AssetAdjustmentKind =
+  | 'HARGA_KULAK'
+  | 'KOREKSI_STOK'
+  | 'PRODUK_BARU'
+  | 'PRODUK_HAPUS'
+  | 'PERHITUNGAN_ASET'
+  | 'PENJUALAN_POS'
+  | 'PULIHKAN_BACKUP';
+
+export interface AssetAdjustment {
+  id: string;
+  date: string; // YYYY-MM-DD kunci lokal
+  time: string; // HH:mm:ss
+  timestamp: number;
+  productId?: string; // kosong untuk kejadian lintas produk (pulihkan backup)
+  productName: string;
+  kind: AssetAdjustmentKind;
+  qtyBefore?: number;
+  qtyAfter?: number;
+  unit?: string;
+  unitCostBefore?: number; // harga kulak (HPP) sebelum kejadian
+  unitCostAfter?: number; // harga kulak (HPP) sesudah kejadian
+  valueDelta: number; // perubahan nilai aset dalam rupiah, boleh negatif
+  source: 'MANUAL' | 'POS' | 'STOCK_TX' | 'RESTORE';
+  referenceId?: string; // mis. id transaksi POS
+  actorId?: string;
+  actorName?: string;
+  actorRole?: string;
+  notes?: string;
+}
+
 export interface CustomerCategory {
   id: string;
   name: string;

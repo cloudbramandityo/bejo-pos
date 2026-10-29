@@ -65,6 +65,7 @@ import {
   AgentNotification,
   SpkOrder,
   Invoice,
+  AssetAdjustment,
   LandingPageConfig
 } from './types';
 import {
@@ -135,7 +136,9 @@ import {
   saveStoredActiveShiftForProfile,
   DEFAULT_MASTER_STORE_PROFILE,
   getStoredCustomRoles,
-  saveStoredCustomRoles
+  saveStoredCustomRoles,
+  getStoredAssetAdjustments,
+  saveStoredAssetAdjustments
 } from './utils/storage';
 import {
   FinancialSettings,
@@ -180,6 +183,9 @@ import {
   saveStockTransactionCloud,
   saveBatchStockTransactionsCloud,
   deleteStockTransactionCloud,
+  subscribeAssetAdjustments,
+  saveAssetAdjustmentCloud,
+  saveBatchAssetAdjustmentsCloud,
   subscribeSuppliers,
   saveSupplierCloud,
   deleteSupplierCloud,
@@ -208,6 +214,11 @@ import {
   saveLandingPublishedCloud
 } from './backend/pocketbaseBackend';
 import { DEFAULT_AGENTS_LIST } from './utils/agentMapping';
+import {
+  adjustmentsFromProductEdit,
+  adjustmentsFromCostEdit,
+  adjustmentsFromStockDiff
+} from './utils/assetAdjustments';
 
 /**
  * Samakan kop faktur Invoice dengan profil toko yang aktif.
@@ -493,6 +504,38 @@ export default function App() {
   const [agents, setAgents] = useState<Agent[]>(getStoredAgents);
   const [activityLogs, setActivityLogs] = useState<UserActivityLog[]>(getStoredActivityLogs);
   const [invoices, setInvoices] = useState<Invoice[]>(getStoredInvoices);
+  const [assetAdjustments, setAssetAdjustments] = useState<AssetAdjustment[]>(getStoredAssetAdjustments);
+
+  // Salinan produk terbaru untuk handler yang perlu membandingkan keadaan sebelum/sesudah
+  // tanpa bergantung pada waktu eksekusi updater React.
+  const productsRef = useRef<Product[]>(products);
+  useEffect(() => {
+    productsRef.current = products;
+  }, [products]);
+
+  /**
+   * Simpan kejadian yang mengubah nilai aset toko di luar mutasi stok
+   * (koreksi stok manual, perubahan harga kulak, penjualan kasir, produk hapus/baru).
+   */
+  const recordAssetAdjustments = (rows: AssetAdjustment[]) => {
+    if (rows.length === 0) return;
+    setAssetAdjustments((prev) => {
+      const merged = [...rows, ...prev].sort((a, b) => b.timestamp - a.timestamp);
+      saveStoredAssetAdjustments(merged);
+      return merged;
+    });
+    if (rows.length === 1) {
+      saveAssetAdjustmentCloud(rows[0]).catch(console.error);
+    } else {
+      saveBatchAssetAdjustmentsCloud(rows).catch(console.error);
+    }
+  };
+
+  const adjustmentContext = (source: AssetAdjustment['source'], notes?: string) => ({
+    source,
+    actor: currentUserRef.current,
+    notes
+  });
 
   // Auto-sync state snapshot to local IndexedDB (Offline-first resilience)
   useEffect(() => {
@@ -1020,6 +1063,15 @@ export default function App() {
       }
     });
 
+    // 11b. Subscribe Asset Adjustments
+    const unsubAssetAdjustments = subscribeAssetAdjustments((cloudAdjustments) => {
+      if (cloudAdjustments) {
+        const sorted = [...cloudAdjustments].sort((a, b) => b.timestamp - a.timestamp);
+        setAssetAdjustments(sorted);
+        saveStoredAssetAdjustments(sorted);
+      }
+    });
+
     // 12. Subscribe Suppliers
     const unsubSuppliers = subscribeSuppliers((cloudSuppliers) => {
       if (cloudSuppliers) {
@@ -1126,6 +1178,7 @@ export default function App() {
       clearInterval(cleanupInterval);
       unsubSyncStatus();
       unsubProducts();
+      unsubAssetAdjustments();
       unsubCategories();
       unsubCustCategories();
       unsubCustomers();
@@ -1429,6 +1482,7 @@ export default function App() {
   };
 
   const handleSaveProduct = (updatedProduct: Product) => {
+    const previous = productsRef.current.find((p) => p.id === updatedProduct.id) || null;
     setProducts((prev) => {
       const exists = prev.some((p) => p.id === updatedProduct.id);
       const next = exists
@@ -1441,15 +1495,22 @@ export default function App() {
       return sorted;
     });
     saveProductCloud(updatedProduct).catch(console.error);
+    recordAssetAdjustments(
+      adjustmentsFromProductEdit(previous, updatedProduct, adjustmentContext('MANUAL'))
+    );
   };
 
   const handleDeleteProduct = (productId: string) => {
+    const previous = productsRef.current.find((p) => p.id === productId) || null;
     setProducts((prev) => {
       const next = prev.filter((p) => p.id !== productId);
       saveStoredProducts(next);
       return next;
     });
     deleteProductCloud(productId).catch(console.error);
+    recordAssetAdjustments(
+      adjustmentsFromProductEdit(previous, null, adjustmentContext('MANUAL'))
+    );
   };
 
   const handleAddStockTransaction = (
@@ -1598,6 +1659,9 @@ export default function App() {
     >();
     updates.forEach((u) => updateMap.set(u.productId, u));
 
+    const previousById = new Map<string, Product>();
+    productsRef.current.forEach((p) => previousById.set(p.id, p));
+
     setProducts((prev) => {
       const updated = prev.map((p) => {
         const u = updateMap.get(p.id);
@@ -1618,6 +1682,22 @@ export default function App() {
       saveStoredProducts(updated);
       return updated;
     });
+
+    // Selisih stoknya sudah tercatat di mutasi stok (Pembelian/Pengambilan) yang ditulis
+    // layar yang sama, jadi hanya efek harga kulak yang dicatat agar tidak dobel.
+    const costRows: AssetAdjustment[] = [];
+    updateMap.forEach((u) => {
+      const previous = previousById.get(u.productId);
+      if (!previous) return;
+      const updated = {
+        ...previous,
+        stock: u.newStock,
+        costPrice: u.newCostPrice !== undefined ? u.newCostPrice : previous.costPrice,
+        hargaKulak: u.newCostPrice !== undefined ? u.newCostPrice : previous.hargaKulak
+      };
+      costRows.push(...adjustmentsFromCostEdit(previous, updated, adjustmentContext('STOCK_TX')));
+    });
+    recordAssetAdjustments(costRows);
   };
 
   const handleSaveCustomer = (newCustomer: Customer) => {
@@ -1699,18 +1779,28 @@ export default function App() {
     });
     saveProductCategoryCloud(updatedCategory).catch(console.error);
 
-    setProducts((prev) => {
-      const updated = prev.map((p) => {
-        if (p.category.toLowerCase() === oldIdOrName.toLowerCase()) {
-          const updatedProd = { ...p, category: updatedCategory.name };
-          saveProductCloud(updatedProd).catch(console.error);
-          return updatedProd;
-        }
-        return p;
-      });
-      saveStoredProducts(updated);
-      return updated;
+    const productsBeforeRename = productsRef.current;
+    const updatedAfterRename = productsBeforeRename.map((p) => {
+      if (p.category.toLowerCase() === oldIdOrName.toLowerCase()) {
+        const updatedProd = { ...p, category: updatedCategory.name };
+        saveProductCloud(updatedProd).catch(console.error);
+        return updatedProd;
+      }
+      return p;
     });
+    productsRef.current = updatedAfterRename;
+    setProducts(updatedAfterRename);
+    saveStoredProducts(updatedAfterRename);
+
+    // Ganti nama kategori bisa mengubah status "masuk hitungan aset toko"
+    // (mis. paket / digital printing), jadi selisih nilainya ikut dicatat.
+    const renameRows: AssetAdjustment[] = [];
+    updatedAfterRename.forEach((next, i) => {
+      renameRows.push(
+        ...adjustmentsFromProductEdit(productsBeforeRename[i], next, adjustmentContext('MANUAL'))
+      );
+    });
+    recordAssetAdjustments(renameRows);
   };
 
   const handleDeleteProductCategory = (categoryId: string) => {
@@ -2054,65 +2144,77 @@ export default function App() {
   // Transaction Handler
   const handleCompleteTransaction = (tx: Transaction) => {
     // 1. Deduct Product stock using borrow/return conversion logic
-    setProducts((prev) => {
-      const updated = prev.map((p) => {
-        const prodItems = tx.items.filter((item) => item.productId === p.id);
-        if (prodItems.length > 0 && p.stock !== undefined) {
-          const isDigital = isDigitalPrintingProduct(p, productCategories);
-          const isLaser = isLaserCuttingProduct(p, productCategories);
-          const isPaket = isPaketProduct(p, productCategories);
-          if (isDigital || isLaser || isPaket) {
-            // Khusus transaksi produk kategori Digital Printing, Paket, Laser Cutting tidak akan mengurangi jumlah stok produk
-            return p;
-          }
-
-          const formula = getMaterialStockFormula(p);
-          const conversionRate = formula.qtyPerRollPak || 1;
-
-          // Calculate total small units deducted across all items of this product
-          let totalSmallUnitsSold = 0;
-          for (const item of prodItems) {
-            const isSmallUnit =
-              item.saleType === 'meter' ||
-              item.saleType === 'lembar' ||
-              isMeterOrLembarUnit(item.unit);
-
-            if (isSmallUnit) {
-              // Sold in small units (meter, lembar)
-              const smallQty =
-                typeof item.lengthMeters === 'number' && typeof item.widthMeters === 'number' && item.lengthMeters > 0 && item.widthMeters > 0
-                  ? item.lengthMeters * item.widthMeters * (item.itemCount || item.qty || 1)
-                  : Number(item.qty) || 1;
-              totalSmallUnitsSold += smallQty;
-            } else {
-              // Sold in primary units (roll, pak, botol)
-              const largeQty = Number(item.qty) || 1;
-              totalSmallUnitsSold += largeQty * conversionRate;
-            }
-          }
-
-          // Apply Borrow-Return Formula:
-          // Total Sisa = (Stok Satuan Besar Awal x Konversi) - Penjualan Satuan Kecil
-          // Sisa Satuan Besar = Sisa Satuan Kecil / Konversi
-          const breakdown = calculateBorrowReturnStock(
-            p.stock,
-            0,
-            conversionRate,
-            totalSmallUnitsSold,
-            formula.unit,
-            formula.subUnit
-          );
-
-          const newStock = Math.max(0, breakdown.totalInPrimaryUnits);
-          const updatedProd = { ...p, stock: newStock };
-          saveProductCloud(updatedProd).catch(console.error);
-          return updatedProd;
+    //   dihitung di luar updater supaya selisih stok bisa langsung dibandingkan
+    //   dan dicatat sebagai penyesuaian aset (penjualan kasir tidak menulis mutasi stok).
+    const productsBefore = productsRef.current;
+    const updatedProducts = productsBefore.map((p) => {
+      const prodItems = tx.items.filter((item) => item.productId === p.id);
+      if (prodItems.length > 0 && p.stock !== undefined) {
+        const isDigital = isDigitalPrintingProduct(p, productCategories);
+        const isLaser = isLaserCuttingProduct(p, productCategories);
+        const isPaket = isPaketProduct(p, productCategories);
+        if (isDigital || isLaser || isPaket) {
+          // Khusus transaksi produk kategori Digital Printing, Paket, Laser Cutting tidak akan mengurangi jumlah stok produk
+          return p;
         }
-        return p;
-      });
-      saveStoredProducts(updated);
-      return updated;
+
+        const formula = getMaterialStockFormula(p);
+        const conversionRate = formula.qtyPerRollPak || 1;
+
+        // Calculate total small units deducted across all items of this product
+        let totalSmallUnitsSold = 0;
+        for (const item of prodItems) {
+          const isSmallUnit =
+            item.saleType === 'meter' ||
+            item.saleType === 'lembar' ||
+            isMeterOrLembarUnit(item.unit);
+
+          if (isSmallUnit) {
+            // Sold in small units (meter, lembar)
+            const smallQty =
+              typeof item.lengthMeters === 'number' && typeof item.widthMeters === 'number' && item.lengthMeters > 0 && item.widthMeters > 0
+                ? item.lengthMeters * item.widthMeters * (item.itemCount || item.qty || 1)
+                : Number(item.qty) || 1;
+            totalSmallUnitsSold += smallQty;
+          } else {
+            // Sold in primary units (roll, pak, botol)
+            const largeQty = Number(item.qty) || 1;
+            totalSmallUnitsSold += largeQty * conversionRate;
+          }
+        }
+
+        // Apply Borrow-Return Formula:
+        // Total Sisa = (Stok Satuan Besar Awal x Konversi) - Penjualan Satuan Kecil
+        // Sisa Satuan Besar = Sisa Satuan Kecil / Konversi
+        const breakdown = calculateBorrowReturnStock(
+          p.stock,
+          0,
+          conversionRate,
+          totalSmallUnitsSold,
+          formula.unit,
+          formula.subUnit
+        );
+
+        const newStock = Math.max(0, breakdown.totalInPrimaryUnits);
+        const updatedProd = { ...p, stock: newStock };
+        saveProductCloud(updatedProd).catch(console.error);
+        return updatedProd;
+      }
+      return p;
     });
+
+    productsRef.current = updatedProducts;
+    setProducts(updatedProducts);
+    saveStoredProducts(updatedProducts);
+
+    recordAssetAdjustments(
+      adjustmentsFromStockDiff(
+        productsBefore,
+        updatedProducts,
+        'PENJUALAN_POS',
+        adjustmentContext('POS', `Transaksi POS #${tx.id}`)
+      )
+    );
 
     // 2. Update Customer spend
     if (tx.customer) {
@@ -2451,6 +2553,7 @@ export default function App() {
           <LaporanScreen
             transactions={transactions}
             stockTransactions={stockTransactions}
+            assetAdjustments={assetAdjustments}
             invoices={invoices}
             storeName={storeInfo.storeName}
             isStoreOnline={storeInfo.storeStatus === 'ONLINE'}

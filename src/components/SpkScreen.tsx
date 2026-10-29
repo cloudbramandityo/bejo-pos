@@ -153,6 +153,7 @@ import { OpenAccountGroupCard } from './spk/OpenAccountGroupCard';
 import { groupOpenAccountOrders, OpenAccountCustomerGroup } from '../utils/openAccountStorage';
 import { getPermanentDeveloperUser } from '../utils/authSecurity';
 import { checkPasswordPolicy } from '../utils/credentialPolicy';
+import { canManageRecords } from '../utils/recordAccess';
 import {
   saveSpkOrderCloud,
   deleteSpkOrderCloud,
@@ -869,6 +870,9 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
 
   /** Folder bersama adalah alat kerja sehari-hari, bukan fitur khusus developer. */
   const canUseLanHub = Boolean(currentUser) && currentUser?.role !== 'AGEN';
+
+  /** DEVELOPER dan ADMIN boleh mengubah/menghapus order SPK yang tersimpan. */
+  const canManageSpk = canManageRecords(currentUser?.role);
 
   /**
    * Lencana status folder pada form pesanan. Hanya boleh menyebut "tersambung"
@@ -1743,7 +1747,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
     setStatusUpdateNote('');
   };
 
-  // Delete SPK Handler (DEVELOPER ONLY)
+  // Delete SPK Handler (Developer & Admin)
   const handleDeleteSpk = (orderId: string) => {
     if (!confirm('Apakah Anda yakin ingin menghapus SPK ini dari sistem secara permanen?')) return;
     const updated = deleteStoredSpkOrder(orderId);
@@ -2289,7 +2293,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                     advanceLabel="➔ Kirim ke Mesin"
                     onSendToPos={() => handleSendSpkToPos(order)}
                     sendToPosLabel="🛒 POS"
-                    onDelete={currentUser?.role === 'DEVELOPER' ? () => handleDeleteSpk(order.id) : undefined}
+                    onDelete={canManageSpk ? () => handleDeleteSpk(order.id) : undefined}
                   />
                 ))}
             </div>
@@ -2322,7 +2326,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                     advanceLabel="➔ Kirim ke Finishing"
                     onSendToPos={() => handleSendSpkToPos(order)}
                     sendToPosLabel="🛒 POS"
-                    onDelete={currentUser?.role === 'DEVELOPER' ? () => handleDeleteSpk(order.id) : undefined}
+                    onDelete={canManageSpk ? () => handleDeleteSpk(order.id) : undefined}
                   />
                 ))}
             </div>
@@ -2355,7 +2359,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                     advanceLabel="➔ Tandai Siap Ambil"
                     onSendToPos={() => handleSendSpkToPos(order)}
                     sendToPosLabel="🛒 POS"
-                    onDelete={currentUser?.role === 'DEVELOPER' ? () => handleDeleteSpk(order.id) : undefined}
+                    onDelete={canManageSpk ? () => handleDeleteSpk(order.id) : undefined}
                   />
                 ))}
             </div>
@@ -2389,7 +2393,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                     onSendToPos={() => handleSendSpkToPos(order)}
                     sendToPosLabel="🛒 Tarik ke POS"
                     onOpenAccount={() => handleUpdateStatus(order.id, 'OPEN_ACCOUNT')}
-                    onDelete={currentUser?.role === 'DEVELOPER' ? () => handleDeleteSpk(order.id) : undefined}
+                    onDelete={canManageSpk ? () => handleDeleteSpk(order.id) : undefined}
                   />
                 ))}
             </div>
@@ -2453,7 +2457,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
 
               <div className="flex items-center justify-between text-[10px] text-slate-500 font-medium">
                 <span>Auto-Hapus: Jam 19:00 WIB</span>
-                {currentUser?.role === 'DEVELOPER' && metrics.completed > 0 && (
+                {canManageSpk && metrics.completed > 0 && (
                   <button
                     type="button"
                     onClick={handleManualPurgeArchive}
@@ -2479,7 +2483,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                       setSelectedOrder(order);
                       setIsDetailModalOpen(true);
                     }}
-                    onDelete={currentUser?.role === 'DEVELOPER' ? () => handleDeleteSpk(order.id) : undefined}
+                    onDelete={canManageSpk ? () => handleDeleteSpk(order.id) : undefined}
                   />
                 ))}
             </div>
@@ -2490,7 +2494,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
       {/* VIEW 2: LIST VIEW TABEL SPK - Clean Typography & High-Contrast Rows */}
       {activeTab === 'list' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          {currentUser?.role === 'DEVELOPER' && metrics.completed > 0 && (
+          {canManageSpk && metrics.completed > 0 && (
             <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs font-sans">
               <div className="flex items-center gap-2 text-amber-900 font-bold">
                 <span className="w-2 h-2 rounded-full bg-amber-500"></span>
@@ -2654,12 +2658,12 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                             >
                               <Eye className="w-3.5 h-3.5" />
                             </button>
-                            {currentUser?.role === 'DEVELOPER' && (
+                            {canManageSpk && (
                               <button
                                 type="button"
                                 onClick={() => handleDeleteSpk(order.id)}
                                 className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg cursor-pointer transition-colors border border-rose-200"
-                                title="Hapus SPK Permanen (Khusus Developer)"
+                                title="Hapus SPK Permanen (Developer & Admin)"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -5152,12 +5156,12 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                 >
                   Tutup
                 </button>
-                {currentUser?.role === 'DEVELOPER' && (
+                {canManageSpk && (
                   <button
                     type="button"
                     onClick={() => handleDeleteSpk(selectedOrder.id)}
                     className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5 transition-all shadow-xs"
-                    title="Hapus SPK Permanen (Khusus Developer)"
+                    title="Hapus SPK Permanen (Developer & Admin)"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Hapus SPK</span>
@@ -5943,7 +5947,7 @@ const SpkKanbanCard: React.FC<SpkKanbanCardProps> = ({
               type="button"
               onClick={onDelete}
               className="p-1.5 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer transition-colors border border-slate-200 hover:border-rose-200"
-              title="Hapus SPK Permanen (Khusus Developer)"
+              title="Hapus SPK Permanen (Developer & Admin)"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>

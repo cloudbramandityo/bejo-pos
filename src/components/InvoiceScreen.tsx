@@ -80,6 +80,7 @@ import {
   saveInvoiceStoreIdentityCloud
 } from '../backend/pocketbaseBackend';
 import { buildOpenAccountInvoiceItems } from '../utils/openAccountStorage';
+import { canManageRecords } from '../utils/recordAccess';
 import { exportInvoiceToPDF } from '../utils/invoicePdf';
 import { StoreLogo } from './StoreLogo';
 import { SalesTransactionPickerModal } from './modals/SalesTransactionPickerModal';
@@ -123,8 +124,8 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
   pendingOpenAccountGroup,
   onClearPendingOpenAccountGroup
 }) => {
-  // Developer Role Verification (Hapus Dokumen Manual khusus akun DEVELOPER)
-  const isDeveloper = currentUser?.role === 'DEVELOPER' || userRole === 'DEVELOPER';
+  // Wewenang hapus dokumen manual: DEVELOPER dan ADMIN.
+  const canManage = canManageRecords(currentUser?.role || userRole);
 
   // Main Data States
   const [invoices, setInvoices] = useState<Invoice[]>(() => getStoredInvoices());
@@ -1123,10 +1124,10 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
     setActiveSubTab('list');
   };
 
-  // Delete invoice (Penghapusan manual khusus akun DEVELOPER - mendukung penghapusan status apa pun termasuk Lunas / Paid)
+  // Hapus manual dokumen (Developer & Admin) — mendukung status apa pun termasuk Lunas / Paid
   const handleDeleteInvoice = async (inv: Invoice) => {
-    if (!isDeveloper) {
-      showToast('Penghapusan dokumen manual hanya dapat dilakukan oleh akun DEVELOPER.', 'error');
+    if (!canManage) {
+      showToast('Penghapusan dokumen manual hanya dapat dilakukan oleh akun DEVELOPER atau ADMIN.', 'error');
       return;
     }
 
@@ -4265,13 +4266,13 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                                 </button>
                               )}
 
-                              {/* Action: Delete (Khusus Akun DEVELOPER) */}
-                              {isDeveloper && (
+                              {/* Action: Delete (Developer & Admin) */}
+                              {canManage && (
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteInvoice(inv)}
                                   className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
-                                  title="Hapus Dokumen (Khusus Akun DEVELOPER)"
+                                  title="Hapus Dokumen (Developer & Admin)"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>

@@ -51,6 +51,7 @@ import { formatRupiah, formatItemTransactionSpec, formatVolume, isTransactionOnD
 import { exportTransactionsToExcel, exportStockTransactionsToExcel, exportSingleStockTransactionToExcel } from '../utils/excelExport';
 import { exportTransactionsToPDF, exportStockTransactionsToPDF, exportSingleStockTransactionToPDF } from '../utils/pdfExport';
 import { convertInvoicesToTransactions } from '../utils/invoiceStorage';
+import { canManageRecords } from '../utils/recordAccess';
 
 import { groupStockTransactionsByBatch, normalizeStockTransaction, calculateStockItemProfit, getProductRollPakQty, calculateSalesItemCost } from '../utils/stockUtils';
 import { isDigitalPrintingProduct, isPaketProduct } from '../utils/productFilters';
@@ -100,7 +101,8 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
   onUpdateTransaction,
   onDeleteTransaction,
 }) => {
-  const isDeveloper = userRole === 'DEVELOPER';
+  /** DEVELOPER dan ADMIN boleh mengedit/menghapus transaksi tersimpan. */
+  const canManage = canManageRecords(userRole);
 
   const [reportTab, setReportTab] = useState<'analysis' | 'penjualan' | 'pembelian_bahan' | 'pengambilan_bahan'>('analysis');
   const [periodType, setPeriodType] = useState<PeriodType>('HARIAN');
@@ -2575,13 +2577,13 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
                                   <span>Invoice</span>
                                 </button>
                               )}
-                              {isDeveloper && !tx.isInvoice && (
+                              {canManage && !tx.isInvoice && (
                                 <div className="contents">
                                   <button
                                     type="button"
                                     onClick={() => handleOpenEditSales(tx)}
                                     className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
-                                    title="Edit Transaksi Penjualan (Khusus DEVELOPER)"
+                                    title="Edit Transaksi Penjualan (Khusus DEVELOPER & ADMIN)"
                                   >
                                     <Pencil className="w-3.5 h-3.5" />
                                   </button>
@@ -2589,7 +2591,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
                                     type="button"
                                     onClick={() => handleOpenDeleteSales(tx)}
                                     className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
-                                    title="Hapus Transaksi Penjualan (Khusus DEVELOPER)"
+                                    title="Hapus Transaksi Penjualan (Khusus DEVELOPER & ADMIN)"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
@@ -2868,16 +2870,16 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
             </div>
           )}
 
-          {isDeveloper && (
+          {canManage && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-900 animate-in fade-in">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
                 <span>
-                  <strong>Akses Developer Aktif:</strong> Anda memiliki wewenang untuk mengedit data item/harga atau menghapus transaksi tersimpan secara langsung.
+                  <strong>Akses Kelola Data Aktif:</strong> Anda memiliki wewenang untuk mengedit data item/harga atau menghapus transaksi tersimpan secara langsung.
                 </span>
               </div>
               <span className="text-[10px] font-mono font-bold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-md">
-                ROLE: DEVELOPER
+                ROLE: {userRole}
               </span>
             </div>
           )}
@@ -3236,13 +3238,13 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
                                   <Printer className="w-3.5 h-3.5 text-sky-400" />
                                   Cetak
                                 </button>
-                                {isDeveloper && (
+                                {canManage && (
                                   <div className="contents">
                                     <button
                                       type="button"
                                       onClick={() => handleOpenEditSales(tx)}
                                       className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
-                                      title="Edit Transaksi (Khusus DEVELOPER)"
+                                      title="Edit Transaksi (Khusus DEVELOPER & ADMIN)"
                                     >
                                       <Pencil className="w-3.5 h-3.5" />
                                     </button>
@@ -3250,7 +3252,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
                                       type="button"
                                       onClick={() => handleOpenDeleteSales(tx)}
                                       className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
-                                      title="Hapus Transaksi (Khusus DEVELOPER)"
+                                      title="Hapus Transaksi (Khusus DEVELOPER & ADMIN)"
                                     >
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </button>
@@ -3515,8 +3517,8 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
                                 {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                               </button>
 
-                              {/* Tombol Edit Transaksi (Untuk Developer atau Transaksi Pembelian Bahan agar user bisa menginput/mengubah Ongkir Door to Door) */}
-                              {(isDeveloper || isPembelian) && (
+                              {/* Tombol Edit Transaksi (Untuk Developer/Admin atau Transaksi Pembelian Bahan agar user bisa menginput/mengubah Ongkir Door to Door) */}
+                              {(canManage || isPembelian) && (
                                 <button
                                   type="button"
                                   onClick={() => handleOpenEdit(tx)}
@@ -3527,12 +3529,12 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
                                 </button>
                               )}
 
-                              {isDeveloper && (
+                              {canManage && (
                                 <button
                                   type="button"
                                   onClick={() => handleOpenDelete(tx)}
                                   className="p-1 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
-                                  title={`Hapus Transaksi #${tx.id} (Khusus Developer)`}
+                                  title={`Hapus Transaksi #${tx.id} (Developer & Admin)`}
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -3563,24 +3565,24 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
 
                                   {/* Download and Developer/Pembelian Action Buttons for this Single Transaction */}
                                   <div className="flex items-center gap-2">
-                                    {(isDeveloper || isPembelian) && (
+                                    {(canManage || isPembelian) && (
                                       <button
                                         type="button"
                                         onClick={() => handleOpenEdit(tx)}
                                         className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-white text-[11px] font-bold rounded-lg shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
-                                        title={isPembelian ? `Edit Transaksi / Input Ongkir Door to Door #${tx.id}` : `Edit Data Transaksi #${tx.id} (Developer)`}
+                                        title={isPembelian ? `Edit Transaksi / Input Ongkir Door to Door #${tx.id}` : `Edit Data Transaksi #${tx.id} (Developer & Admin)`}
                                       >
                                         <Pencil className="w-3.5 h-3.5 text-amber-100" />
                                         <span>{isPembelian ? 'Edit Transaksi / Ongkir' : 'Edit Transaksi'}</span>
                                       </button>
                                     )}
 
-                                    {isDeveloper && (
+                                    {canManage && (
                                       <button
                                         type="button"
                                         onClick={() => handleOpenDelete(tx)}
                                         className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white text-[11px] font-bold rounded-lg shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
-                                        title={`Hapus Permanen Transaksi #${tx.id} (Developer)`}
+                                        title={`Hapus Permanen Transaksi #${tx.id} (Developer & Admin)`}
                                       >
                                         <Trash2 className="w-3.5 h-3.5 text-rose-100" />
                                         <span>Hapus Transaksi</span>
@@ -3794,7 +3796,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
       )}
 
       {/* Developer Delete Confirmation Modal */}
-      {isDeveloper && isDeleteModalOpen && deletingStockTx && (
+      {canManage && isDeleteModalOpen && deletingStockTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div
             className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
@@ -3809,7 +3811,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
                   <h3 className="font-bold text-sm leading-tight">Konfirmasi Hapus Transaksi</h3>
                   <span className="text-[10px] font-mono text-rose-100 flex items-center gap-1">
                     <ShieldCheck className="w-3 h-3 text-amber-300" />
-                    KHUSUS DEVELOPER
+                    AKSES KHUSUS DEVELOPER & ADMIN
                   </span>
                 </div>
               </div>
@@ -3884,7 +3886,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
       )}
 
       {/* Developer Edit Sales Transaction Modal */}
-      {isDeveloper && isEditSalesModalOpen && editingSalesTx && (
+      {canManage && isEditSalesModalOpen && editingSalesTx && (
         <EditSalesTransactionModal
           isOpen={isEditSalesModalOpen}
           onClose={() => {
@@ -3897,7 +3899,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
       )}
 
       {/* Developer Delete Sales Transaction Confirmation Modal */}
-      {isDeveloper && isDeleteSalesModalOpen && deletingSalesTx && (
+      {canManage && isDeleteSalesModalOpen && deletingSalesTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div
             className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
@@ -3912,7 +3914,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
                   <h3 className="font-bold text-sm leading-tight">Konfirmasi Hapus Transaksi Penjualan</h3>
                   <span className="text-[10px] font-mono text-rose-100 flex items-center gap-1">
                     <ShieldCheck className="w-3 h-3 text-amber-300" />
-                    KHUSUS DEVELOPER
+                    AKSES KHUSUS DEVELOPER & ADMIN
                   </span>
                 </div>
               </div>

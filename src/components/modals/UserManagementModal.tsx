@@ -30,11 +30,20 @@ import {
   Activity,
   UserCog,
   ArrowUpDown,
-  Printer
+  Printer,
+  ShieldAlert
 } from 'lucide-react';
 import { AppUser, UserRole, UserActivityLog, ActivityActionType } from '../../types';
 import { DeveloperJokerIcon } from '../DeveloperJokerIcon';
 import { isReservedDeveloperUsername } from '../../utils/authSecurity';
+import {
+  checkPasswordPolicy,
+  checkTemporaryPassword,
+  generateStrongPassword,
+  isPasswordMasked,
+  MIN_PASSWORD_LENGTH,
+  MIN_TEMPORARY_PASSWORD_LENGTH,
+} from '../../utils/credentialPolicy';
 
 interface UserManagementModalProps {
   isOpen: boolean;
@@ -71,6 +80,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [customRoleInput, setCustomRoleInput] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formIsActive, setFormIsActive] = useState(true);
+  const [formTemporaryPassword, setFormTemporaryPassword] = useState(true);
+  const [formNotice, setFormNotice] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -91,8 +102,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [selectedLogUser, setSelectedLogUser] = useState<string>('ALL');
   const [selectedLogAction, setSelectedLogAction] = useState<string>('ALL');
 
-  if (!isOpen) return null;
-
+  // Jangan mengembalikan null sebelum semua hook di bawah: modal selalu
+  // ter-mount untuk developer, jadi early return di sini membuat urutan hook
+  // berubah saat modal pertama dibuka (React error #310, layar blank).
   const isDeveloper = currentUserRole === 'DEVELOPER';
 
   const handleOpenAdd = () => {
@@ -104,6 +116,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     setCustomRoleInput('');
     setFormPhone('');
     setFormIsActive(true);
+    // Akun baru selalu diberi password sementara: username + password awal
+    // boleh sederhana (mis. admin / admin123), lalu wajib diganti saat login.
+    setFormTemporaryPassword(true);
+    setFormNotice(null);
     setFormError(null);
     setIsFormOpen(true);
   };
@@ -121,8 +137,22 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     }
     setFormPhone(user.phone || '');
     setFormIsActive(user.isActive !== false);
+    // Saat mengedit tanpa mengganti password, flag tidak berpengaruh di server.
+    setFormTemporaryPassword(user.mustChangePassword === true);
+    setFormNotice(null);
     setFormError(null);
     setIsFormOpen(true);
+  };
+
+  /** Reset password oleh Developer: isi password baru sementara + wajib ganti. */
+  const handleOpenResetPassword = (user: AppUser) => {
+    handleOpenEdit(user);
+    setFormPassword(generateStrongPassword());
+    setFormTemporaryPassword(true);
+    setShowPassword(true);
+    setFormNotice(
+      'Password sementara baru sudah dibuat. Salin password di kolom Password dan berikan ke pengguna — ia wajib mengganti sendiri saat login pertama.'
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -163,6 +193,16 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       return;
     }
 
+    if (cleanPassword && !isPasswordMasked(cleanPassword)) {
+      const problem = formTemporaryPassword
+        ? checkTemporaryPassword(cleanPassword)
+        : checkPasswordPolicy(cleanUsername, cleanPassword);
+      if (problem) {
+        setFormError(problem.message);
+        return;
+      }
+    }
+
     const today = new Date();
     const months = [
       'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -179,6 +219,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       phone: formPhone.trim() || undefined,
       isActive: formIsActive,
       createdAt: editingUser ? editingUser.createdAt : dateFormatted,
+      avatarUrl: editingUser?.avatarUrl || '',
+      mustChangePassword: formTemporaryPassword,
     };
 
     // Server yang menyimpan akun ini (browser tidak punya hak tulis koleksi auth),
@@ -234,6 +276,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       return matchSearch && matchUser && matchAction;
     });
   }, [activityLogs, logSearchQuery, selectedLogUser, selectedLogAction]);
+
+  if (!isOpen) return null;
 
   // Export logs to CSV
   const handleExportCSV = () => {
@@ -425,6 +469,13 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                   </div>
                 )}
 
+                {formNotice && (
+                  <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs rounded-xl flex items-start gap-2">
+                    <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                    <span className="leading-snug">{formNotice}</span>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -461,6 +512,20 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                         {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                       </button>
                     </div>
+                    <p className="mt-1 text-[10px] leading-snug text-slate-500 dark:text-slate-400">
+                      {formTemporaryPassword
+                        ? `Password sementara minimal ${MIN_TEMPORARY_PASSWORD_LENGTH} karakter (boleh sederhana, mis. admin123). User wajib mengganti sendiri saat login.`
+                        : `Minimal ${MIN_PASSWORD_LENGTH} karakter, gabungan huruf dan angka. Password default (admin123, agen123, dll.) ditolak.`}
+                    </p>
+                    <label className="mt-1.5 flex items-start gap-1.5 text-[10px] font-semibold text-amber-900 dark:text-amber-300 leading-snug cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formTemporaryPassword}
+                        onChange={(e) => setFormTemporaryPassword(e.target.checked)}
+                        className="mt-0.5 w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
+                      />
+                      <span>Password sementara — user wajib mengganti username & password saat login pertama</span>
+                    </label>
                   </div>
                 </div>
 
@@ -672,7 +737,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                             onClick={() => {
                               setFormUsername(preset.username);
                               setFormName(preset.name);
-                              if (!formPassword) setFormPassword('agen123');
+                              // Jangan isi password default publik: buat acak kuat
+                              // supaya admin bisa menyalinnya dari kolom password.
+                              if (!formPassword || isPasswordMasked(formPassword)) {
+                                setFormPassword(generateStrongPassword());
+                                setShowPassword(true);
+                              }
                             }}
                             className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer text-left ${
                               formUsername.toLowerCase() === preset.username.toLowerCase()
@@ -813,16 +883,36 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                               return (
                                 <tr key={u.id} className="hover:bg-slate-50/80 dark:hover:bg-[#252525] transition-colors">
                                   <td className="py-3 px-3.5">
-                                    <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                                      {u.name}
-                                      {isCurrent && (
-                                        <span className="text-[10px] bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 px-1.5 py-0.2 rounded font-bold">
-                                          Akun Anda
-                                        </span>
+                                    <div className="flex items-center gap-2">
+                                      {u.avatarUrl ? (
+                                        <img
+                                          src={u.avatarUrl}
+                                          alt={`Foto ${u.name}`}
+                                          className="w-7 h-7 rounded-lg object-cover border border-slate-200 dark:border-[#3c3c3c] bg-slate-100 dark:bg-[#202020] shrink-0"
+                                        />
+                                      ) : (
+                                        <div className="w-7 h-7 rounded-lg bg-slate-200 dark:bg-[#353535] text-slate-600 dark:text-slate-300 flex items-center justify-center text-[11px] font-black shrink-0">
+                                          {(u.name || u.username || '?').charAt(0).toUpperCase()}
+                                        </div>
                                       )}
-                                    </div>
-                                    <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                                      @{u.username}
+                                      <div className="min-w-0">
+                                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                          {u.name}
+                                          {isCurrent && (
+                                            <span className="text-[10px] bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 px-1.5 py-0.2 rounded font-bold">
+                                              Akun Anda
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                                          @{u.username}
+                                        </div>
+                                        {u.mustChangePassword && (
+                                          <span className="mt-0.5 inline-block text-[9px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-800 px-1.5 py-0.5 rounded">
+                                            Wajib ganti password
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
                                   </td>
                                   <td className="py-3 px-3.5 font-mono text-slate-600 dark:text-slate-300">
@@ -877,6 +967,14 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                   </td>
                                   <td className="py-3 px-3.5 text-center">
                                     <div className="flex items-center justify-center gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenResetPassword(u)}
+                                        className="p-1.5 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded-lg transition-colors cursor-pointer"
+                                        title="Reset Password Sementara"
+                                      >
+                                        <KeyRound className="w-3.5 h-3.5" />
+                                      </button>
                                       <button
                                         type="button"
                                         onClick={() => handleOpenEdit(u)}

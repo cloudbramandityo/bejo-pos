@@ -25,6 +25,10 @@ export interface AccountUser {
   spkRoleCategory?: string;
   isActive?: boolean;
   createdAt?: string;
+  /** Foto profil terkompresi (data URL) atau tautan https. */
+  avatarUrl?: string;
+  /** Password masih sementara dari Developer dan wajib diganti. */
+  mustChangePassword?: boolean;
 }
 
 export interface LoginResult {
@@ -106,8 +110,48 @@ export async function getAccountSession(): Promise<AccountSessionInfo> {
   };
 }
 
-export async function getSiteMode(): Promise<SiteMode> {
-  const response = await fetch('/api/auth/mode', {
+export interface ProfileUpdateInput {
+  name?: string;
+  username?: string;
+  /** Data URL hasil kompresi di browser; string kosong menghapus foto. */
+  avatarUrl?: string;
+  currentPassword?: string;
+  newPassword?: string;
+}
+
+/**
+ * Simpan perubahan profil akun sendiri. Server memverifikasi password saat
+ * ini sebelum username/password diganti, lalu menerbitkan ulang cookie sesi.
+ */
+export async function updateMyAccount(input: ProfileUpdateInput): Promise<AccountUser> {
+  let response: Response;
+  try {
+    response = await fetch('/api/users/me', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+  } catch {
+    throw new PosAuthError(
+      'Server tidak dapat dihubungi. Periksa koneksi jaringan.',
+      0,
+      'NETWORK_ERROR'
+    );
+  }
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.success) {
+    throw new PosAuthError(
+      data?.error || `Profil gagal disimpan (HTTP ${response.status}).`,
+      response.status,
+      data?.code || 'PROFILE_ERROR'
+    );
+  }
+  return data.user as AccountUser;
+}
+
+export async function getSiteMode(): Promise<SiteMode> {  const response = await fetch('/api/auth/mode', {
     credentials: 'same-origin',
     cache: 'no-store',
   });

@@ -229,6 +229,10 @@ export interface AppUser {
   lastActiveAt?: number;
   lastLoginAt?: number;
   spkRoleCategory?: SpkRoleCategory;
+  /** Foto profil terkompresi (data URL) hasil unggahan user sendiri. */
+  avatarUrl?: string;
+  /** Password sementara dari Developer: wajib diganti saat login berikutnya. */
+  mustChangePassword?: boolean;
 }
 
 export type ActivityActionType = 

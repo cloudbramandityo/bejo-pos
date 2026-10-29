@@ -135,5 +135,23 @@ function check(label: string, condition: boolean, extra = '') {
   check('D: tidak menyertakan legacyId', !('legacyId' in pb.creates[0]));
 }
 
+// F. Kontrak kebijakan password saat create: (username, password).
+{
+  const pb: any = new FakePB([]);
+  let seen = '';
+  const id = await saveCredential(
+    pb,
+    entry('u6', 'budi', 'CetakPresisi2026') as any,
+    (username: string, password: string) => {
+      seen = `${username}|${password}`;
+    }
+  );
+  check(
+    'F: kebijakan menerima (username, password)',
+    id === pb.creates[0].id && seen === 'budi|CetakPresisi2026',
+    seen
+  );
+}
+
 console.log(failures === 0 ? 'SEMUA LULUS' : `${failures} GAGAL`);
 process.exit(failures === 0 ? 0 : 1);

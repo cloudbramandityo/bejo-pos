@@ -85,6 +85,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         spkRoleCategory: account.spkRoleCategory as AppUser['spkRoleCategory'],
         isActive: account.isActive !== false,
         createdAt: account.createdAt || '',
+        avatarUrl: account.avatarUrl || '',
+        mustChangePassword: account.mustChangePassword === true,
       });
       return;
     } catch (error) {

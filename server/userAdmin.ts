@@ -22,19 +22,30 @@ import {
   findDirectoryByAppId,
   listAllCredentials,
   listAllDirectory,
+  loadStaffAccounts,
   readPresence,
   runAsAdmin,
   safeAppId,
   saveCredential,
+  verifyStaffPassword,
   writeDirectory,
   type AccountInput,
   type DirectoryEntry,
   type PresenceInput,
 } from './staffStore';
-import { getPosSession, requirePosSession, isDefaultStaffPassword } from './posAuth';
+import { getPosSession, issueStaffSession, requirePosSession } from './posAuth';
+import { getDevUsername } from './devAuth';
+import {
+  MAX_AVATAR_DATA_URL_LENGTH,
+  MIN_PASSWORD_LENGTH,
+  MIN_TEMPORARY_PASSWORD_LENGTH,
+  PASSWORD_MASK,
+  checkPasswordPolicy,
+  checkTemporaryPassword,
+  checkUsernameFormat,
+} from '../src/utils/credentialPolicy';
 
 const MANAGE_ROLES = new Set(['DEVELOPER', 'ADMIN', 'OWNER']);
-const MIN_PASSWORD_LENGTH = 8;
 
 /** Topeng password dari server: bukan password asli, jangan disimpan. */
 const PASSWORD_MASK_PATTERN = /^\u2022+$/;
@@ -45,14 +56,30 @@ function fail(message: string, status = 500, code = 'USER_ADMIN_ERROR'): UserAdm
   return new StaffStoreError(message, status, code);
 }
 
+/**
+ * Foto profil hanya boleh data URL hasil kompresi di browser atau tautan https.
+ * Nilai kosong berarti "tidak punya foto" (atau "jangan ubah" saat mengedit).
+ */
+function normalizeAvatarUrl(raw: unknown): string {
+  const value = String(raw ?? '').trim();
+  if (!value) return '';
+  if (value.length > MAX_AVATAR_DATA_URL_LENGTH) {
+    throw fail(
+      'Foto profil terlalu besar. Unggah ulang foto agar otomatis dikompres.',
+      400,
+      'AVATAR_TOO_LARGE'
+    );
+  }
+  if (value.startsWith('data:image/')) return value;
+  if (/^https:\/\/[^\s]{1,1000}$/i.test(value)) return value;
+  throw fail('Format foto profil tidak dikenali.', 400, 'INVALID_AVATAR');
+}
+
 function normalizeAccount(raw: any): AccountInput {
   const username = String(raw?.username ?? '').trim().toLowerCase();
-  if (!/^[a-z0-9][a-z0-9._-]{2,31}$/.test(username)) {
-    throw fail(
-      'Username harus 3-32 karakter (huruf, angka, titik, garis bawah, atau strip) dan diawali huruf/angka.',
-      400,
-      'INVALID_USERNAME'
-    );
+  const usernameProblem = checkUsernameFormat(username);
+  if (usernameProblem) {
+    throw fail(usernameProblem, 400, 'INVALID_USERNAME');
   }
   const name = String(raw?.name ?? '').trim();
   if (name.length < 3) throw fail('Nama lengkap wajib diisi (minimal 3 karakter).', 400, 'INVALID_NAME');
@@ -74,24 +101,30 @@ function normalizeAccount(raw: any): AccountInput {
     createdAt: String(raw?.createdAt ?? '').trim().slice(0, 32) || new Date().toISOString(),
     // Topeng dari UI berarti "tidak diganti".
     password: PASSWORD_MASK_PATTERN.test(supplied) ? '' : supplied,
+    avatarUrl: normalizeAvatarUrl(raw?.avatarUrl),
+    // Flag hanya berarti bila password benar-benar diganti (lihat saveAccount).
+    mustChangePassword: raw?.mustChangePassword === true,
   };
 }
 
-function assertPasswordPolicy(password: string): void {
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    throw fail(
-      `Password minimal ${MIN_PASSWORD_LENGTH} karakter.`,
-      400,
-      'WEAK_PASSWORD'
-    );
-  }
-  if (isDefaultStaffPassword(password)) {
-    throw fail(
-      'Password default sudah dikenal publik. Pilih password lain sebelum akun ini dibuat.',
-      400,
-      'DEFAULT_PASSWORD'
-    );
-  }
+/**
+ * Kebijakan password berlaku di semua mode situs: password default yang ikut
+ * ter-bundle maupun tebakan umum tidak boleh dipakai lagi, sekalipun server
+ * berjalan di mode internal.
+ */
+function assertPasswordPolicy(username: string, password: string): void {
+  const problem = checkPasswordPolicy(username, password);
+  if (problem) throw fail(problem.message, 400, problem.code);
+}
+
+/**
+ * Password sementara (diberikan Developer saat membuat akun / reset) hanya
+ * perlu memenuhi panjang minimum. User wajib menggantinya saat login, dan
+ * penggantian itu memakai kebijakan kuat di atas.
+ */
+function assertTemporaryPassword(_username: string, password: string): void {
+  const problem = checkTemporaryPassword(password);
+  if (problem) throw fail(problem.message, 400, problem.code);
 }
 
 /**
@@ -116,9 +149,28 @@ async function findDirectoryByUsername(
 /* ---------------------------------------------------------------------- */
 
 async function saveAccount(account: AccountInput): Promise<{ id: string; adopted: boolean }> {
+  // Identitas developer bukan akun staf: kredensialnya dari server, jadi baris
+  // direktori berkas id ini tidak boleh dibuat/ditimpa lewat API aplikasi.
+  if (RESERVED_USER_IDS.has(account.id)) {
+    throw fail(
+      'Akun developer dikelola lewat server (DEV_USERNAME / DEV_PASSWORD_HASH), bukan dari aplikasi.',
+      400,
+      'ACCOUNT_RESERVED'
+    );
+  }
   return runAsAdmin(async (pb) => {
     const existing = await findDirectoryByAppId(pb, account.id);
     const sameUsername = await findDirectoryByUsername(pb, account.username, account.id);
+
+    // Username developer diverifikasi lebih dulu saat login, jadi akun staf
+    // dengan username itu tidak akan pernah bisa dipakai — tolak sejak awal.
+    if (account.username === getDevUsername().trim().toLowerCase()) {
+      throw fail(
+        `Username "${account.username}" dicadangkan untuk akun developer.`,
+        400,
+        'USERNAME_RESERVED'
+      );
+    }
 
     // Ganti username ke username milik akun lain tetap ditolak.
     if (existing && sameUsername) {
@@ -127,20 +179,31 @@ async function saveAccount(account: AccountInput): Promise<{ id: string; adopted
 
     if (!existing && !sameUsername && !account.password) {
       throw fail(
-        `Password untuk akun baru minimal ${MIN_PASSWORD_LENGTH} karakter.`,
+        account.mustChangePassword
+          ? `Password sementara untuk akun baru minimal ${MIN_TEMPORARY_PASSWORD_LENGTH} karakter.`
+          : `Password untuk akun baru minimal ${MIN_PASSWORD_LENGTH} karakter.`,
         400,
         'WEAK_PASSWORD'
       );
     }
     // Password backup hanya divalidasi bila memang akan dipakai; adopsi akun
     // cloud yang sudah punya kredensial tidak pernah memakainya.
-    if (account.password && !sameUsername) assertPasswordPolicy(account.password);
+    if (account.password && !sameUsername) {
+      if (account.mustChangePassword) {
+        assertTemporaryPassword(account.username, account.password);
+      } else {
+        assertPasswordPolicy(account.username, account.password);
+      }
+    }
+    const credentialPolicy = account.mustChangePassword
+      ? assertTemporaryPassword
+      : assertPasswordPolicy;
 
     if (sameUsername) {
       // Orang yang sama sudah ada di cloud dengan id lain (restore dari
       // perangkat lain). Profil disamakan, tetapi id cloud, status aktif, dan
       // password yang berlaku tidak ditimpa data backup supaya sesi/perangkat
-      // lain tidak kehilangan akses.
+      // lain tidak kehilangan akses. Foto profil cloud juga dipertahankan.
       const entry: DirectoryEntry = {
         ...account,
         id: sameUsername.id,
@@ -151,6 +214,8 @@ async function saveAccount(account: AccountInput): Promise<{ id: string; adopted
         presence: sameUsername.presence,
         recordId: sameUsername.recordId,
         password: '',
+        avatarUrl: sameUsername.avatarUrl || account.avatarUrl,
+        mustChangePassword: Boolean(sameUsername.mustChangePassword),
       };
 
       if (!entry.authId) {
@@ -161,9 +226,10 @@ async function saveAccount(account: AccountInput): Promise<{ id: string; adopted
             'CREDENTIAL_MISSING'
           );
         }
-        assertPasswordPolicy(account.password);
+        credentialPolicy(account.username, account.password);
         entry.password = account.password;
-        entry.authId = await saveCredential(pb, entry, assertPasswordPolicy);
+        entry.mustChangePassword = account.mustChangePassword;
+        entry.authId = await saveCredential(pb, entry, credentialPolicy);
       }
 
       await writeDirectory(pb, entry);
@@ -175,15 +241,24 @@ async function saveAccount(account: AccountInput): Promise<{ id: string; adopted
       authId: existing?.authId || '',
       presence: existing?.presence || { isOnline: false, lastActiveAt: 0, lastLoginAt: 0 },
       recordId: existing?.recordId,
+      // Foto & flag hanya berubah bila benar-benar dikirim/diganti; penyimpanan
+      // akun dari perangkat lain tidak boleh menghapus profil mandiri user.
+      avatarUrl: account.avatarUrl || existing?.avatarUrl || '',
+      mustChangePassword: account.password
+        ? account.mustChangePassword
+        : Boolean(existing?.mustChangePassword),
     };
 
-    entry.authId = await saveCredential(pb, entry, assertPasswordPolicy);
+    entry.authId = await saveCredential(pb, entry, credentialPolicy);
     await writeDirectory(pb, entry);
     return { id: entry.id, adopted: false };
   });
 }
 
 async function deleteAccount(appId: string): Promise<void> {
+  if (RESERVED_USER_IDS.has(appId)) {
+    throw fail('Akun developer tidak dapat dihapus dari aplikasi.', 400, 'ACCOUNT_RESERVED');
+  }
   await runAsAdmin(async (pb) => {
     const entry = await findDirectoryByAppId(pb, appId);
     if (!entry) throw fail('Akun tidak ditemukan di database cloud.', 404, 'ACCOUNT_NOT_FOUND');
@@ -269,6 +344,9 @@ export async function ensureStaffDirectory(): Promise<{ added: number; kept: num
         password: '',
         authId: String(record.id),
         presence: readPresence(record),
+        avatarUrl: String(record.avatarUrl || mirror.avatarUrl || ''),
+        mustChangePassword:
+          record.mustChangePassword === true || mirror.mustChangePassword === true,
       });
       byAppId.add(legacyId);
       byUsername.add(username);
@@ -286,6 +364,120 @@ export async function ensureStaffDirectory(): Promise<{ added: number; kept: num
 
     return { added, kept, removed };
   });
+}
+
+/* ---------------------------------------------------------------------- */
+/*  Profil mandiri (setiap user)                                           */
+/* ---------------------------------------------------------------------- */
+
+/**
+ * Perubahan profil oleh pemilik akun sendiri. Nama tampilan & foto boleh
+ * diubah bebas; mengganti username atau password wajib menyertakan password
+ * saat ini. Akun developer tidak punya baris direktori, jadi ditolak.
+ */
+async function updateOwnAccount(req: Request, res: Response) {
+  const session = getPosSession(req);
+  const appId = String(session?.uid || '').trim();
+  const role = String(session?.role || '').toUpperCase();
+  if (!session || !appId) throw fail('Sesi dashboard tidak dikenali.', 401, 'AUTH_REQUIRED');
+  if (role === 'DEVELOPER' || RESERVED_USER_IDS.has(appId)) {
+    throw fail(
+      'Akun developer dikelola lewat server (DEV_USERNAME / DEV_PASSWORD_HASH), bukan dari menu profil.',
+      403,
+      'PROFILE_DEVELOPER_LOCKED'
+    );
+  }
+
+  const account = (await loadStaffAccounts()).find((item) => item.id === appId);
+  if (!account) throw fail('Akun tidak ditemukan di database cloud.', 404, 'ACCOUNT_NOT_FOUND');
+  if (!account.isActive) throw fail('Akun ini sedang dinonaktifkan.', 403, 'ACCOUNT_INACTIVE');
+
+  const body = req.body || {};
+  const name = body.name === undefined ? account.name : String(body.name).trim();
+  if (name.length < 3) {
+    throw fail('Nama tampilan wajib diisi (minimal 3 karakter).', 400, 'INVALID_NAME');
+  }
+  if (name.length > 80) {
+    throw fail('Nama tampilan maksimal 80 karakter.', 400, 'INVALID_NAME');
+  }
+
+  const username =
+    body.username === undefined
+      ? account.username
+      : String(body.username).trim().toLowerCase();
+  const usernameProblem = checkUsernameFormat(username);
+  if (usernameProblem) throw fail(usernameProblem, 400, 'INVALID_USERNAME');
+
+  const avatarUrl =
+    body.avatarUrl === undefined ? account.avatarUrl : normalizeAvatarUrl(body.avatarUrl);
+  const newPassword = String(body.newPassword ?? '').trim();
+  const currentPassword = String(body.currentPassword ?? '');
+  const usernameChanged = username !== account.username;
+  // Password sementara + password baru = sesi ini sudah cukup sebagai bukti
+  // identitas. Tanpa pengecualian ini, user yang password-nya baru direset
+  // Developer saat sesi masih berjalan akan terkunci di modal profil.
+  const temporaryBypass =
+    account.mustChangePassword && Boolean(newPassword) && !usernameChanged;
+
+  if ((usernameChanged || newPassword) && !temporaryBypass && !currentPassword) {
+    throw fail(
+      'Masukkan password saat ini untuk mengganti username atau password.',
+      400,
+      'CURRENT_PASSWORD_REQUIRED'
+    );
+  }
+  if ((usernameChanged || newPassword) && !temporaryBypass) {
+    const valid = await verifyStaffPassword(account, currentPassword);
+    if (!valid) throw fail('Password saat ini salah.', 401, 'INVALID_CURRENT_PASSWORD');
+  }
+  if (newPassword) {
+    const problem = checkPasswordPolicy(username, newPassword);
+    if (problem) throw fail(problem.message, 400, problem.code);
+  }
+  if (usernameChanged && username === getDevUsername().trim().toLowerCase()) {
+    throw fail(`Username "${username}" dicadangkan untuk akun developer.`, 400, 'USERNAME_RESERVED');
+  }
+
+  await runAsAdmin(async (pb) => {
+    const entry = await findDirectoryByAppId(pb, appId);
+    if (!entry) throw fail('Akun belum terdaftar di database cloud.', 404, 'ACCOUNT_NOT_FOUND');
+    if (usernameChanged) {
+      const other = await findDirectoryByUsername(pb, username, appId);
+      if (other) throw fail(`Username "${username}" sudah dipakai akun lain.`, 409, 'USERNAME_TAKEN');
+    }
+
+    entry.username = username;
+    entry.name = name;
+    entry.avatarUrl = avatarUrl;
+    if (newPassword) {
+      entry.password = newPassword;
+      // Password baru buatan user sendiri: kewajiban ganti password selesai.
+      entry.mustChangePassword = false;
+    }
+    if (entry.authId || newPassword) {
+      // Email kredensial mengikuti username baru. Bila bentrok, staffStore
+      // mempertahankan email lama; login tidak bergantung pada email.
+      entry.authId = await saveCredential(pb, entry, assertPasswordPolicy);
+    }
+    await writeDirectory(pb, entry);
+  });
+
+  // Sesi lama membawa username/nama lama; terbitkan ulang tanpa memaksa logout.
+  issueStaffSession(req, res, { uid: appId, uname: username, name, role: account.role });
+
+  return {
+    id: appId,
+    username,
+    name,
+    role: account.role,
+    phone: account.phone,
+    spkRoleCategory: account.spkRoleCategory,
+    isActive: account.isActive,
+    createdAt: account.createdAt,
+    password: PASSWORD_MASK,
+    avatarUrl,
+    mustChangePassword: false,
+  };
 }
 
 /* ---------------------------------------------------------------------- */
@@ -377,6 +569,19 @@ export function registerUserAdminRoutes(app: Express): void {
         username: account.username,
         adopted: saved.adopted,
       });
+    } catch (error) {
+      sendUserError(res, error);
+    }
+  });
+
+  // Profil mandiri: setiap staf boleh mengubah nama tampilan, foto, username,
+  // dan password-nya sendiri. Kebijakan kredensial tetap ditegakkan di server.
+  app.post('/api/users/me', requirePosSession, async (req, res) => {
+    try {
+      assertSameOrigin(req);
+      const user = await updateOwnAccount(req, res);
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ success: true, user });
     } catch (error) {
       sendUserError(res, error);
     }

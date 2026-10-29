@@ -24,6 +24,7 @@ import { ReceiptModal } from './components/modals/ReceiptModal';
 import { ShiftModal } from './components/modals/ShiftModal';
 import { CashierGateModal } from './components/modals/CashierGateModal';
 import { UserManagementModal } from './components/modals/UserManagementModal';
+import { MyProfileModal } from './components/modals/MyProfileModal';
 import { BackendErrorBanner } from './components/BackendErrorBanner';
 import { BackendDiagnosticsModal } from './components/BackendDiagnosticsModal';
 import { LocalDatabaseSyncModal } from './components/modals/LocalDatabaseSyncModal';
@@ -246,6 +247,7 @@ export default function App() {
   }, [currentUser]);
   const [users, setUsers] = useState<AppUser[]>(getStoredUsers);
   const [isUserManagementModalOpen, setIsUserManagementModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isBackendDiagnosticsModalOpen, setIsBackendDiagnosticsModalOpen] = useState(false);
   const [isLocalDatabaseModalOpen, setIsLocalDatabaseModalOpen] = useState(false);
 
@@ -395,16 +397,49 @@ export default function App() {
 
   // Sesi dashboard hanya sah bila cookie HttpOnly di server masih valid.
   // Berlaku untuk semua akun (developer & staf), bukan hanya developer.
+  // Profil terbaru (nama, username, foto, flag wajib ganti password) ikut
+  // disegarkan supaya perubahan dari konsol user lain / Developer terlihat.
   useEffect(() => {
     if (!currentUserRef.current) return;
     let cancelled = false;
     getAccountSession()
       .then((session) => {
-        if (cancelled || session.authenticated) return;
-        currentUserRef.current = null;
-        saveStoredAuthUser(null);
-        setCurrentUser(null);
-        setCurrentTab('spk');
+        if (cancelled) return;
+        if (!session.authenticated) {
+          currentUserRef.current = null;
+          saveStoredAuthUser(null);
+          setCurrentUser(null);
+          setCurrentTab('spk');
+          return;
+        }
+        const fresh = session.user;
+        const stored = currentUserRef.current;
+        if (!fresh || !stored) return;
+        const freshIsDeveloper =
+          String(fresh.role || stored.role || '').toUpperCase() === 'DEVELOPER';
+        const merged: AppUser = {
+          ...stored,
+          username: fresh.username || stored.username,
+          name: fresh.name || stored.name,
+          role: (fresh.role as AppUser['role']) || stored.role,
+          phone: fresh.phone ?? stored.phone,
+          spkRoleCategory:
+            (fresh.spkRoleCategory as AppUser['spkRoleCategory']) ?? stored.spkRoleCategory,
+          avatarUrl: fresh.avatarUrl || stored.avatarUrl || '',
+          mustChangePassword: !freshIsDeveloper && fresh.mustChangePassword === true,
+        };
+        if (
+          merged.username === stored.username &&
+          merged.name === stored.name &&
+          merged.role === stored.role &&
+          merged.avatarUrl === stored.avatarUrl &&
+          merged.mustChangePassword === Boolean(stored.mustChangePassword)
+        ) {
+          return;
+        }
+        currentUserRef.current = merged;
+        setCurrentUser(merged);
+        saveStoredAuthUser(merged);
       })
       .catch(() => {
         // Server tidak dapat dihubungi: biarkan sesi lokal agar mode offline tetap berjalan.
@@ -1274,6 +1309,37 @@ export default function App() {
       setCurrentUser(userToSave);
       saveStoredAuthUser(userToSave);
     }
+  };
+
+  /**
+   * Perubahan profil mandiri (nama tampilan, foto, username, password) sudah
+   * disimpan server. Sinkronkan state + penyimpanan lokal agar menu, avatar,
+   * dan sesi langsung memakai data baru tanpa logout.
+   */
+  const handleProfileUpdated = (updated: AppUser) => {
+    const merged: AppUser = {
+      ...(currentUserRef.current || updated),
+      ...updated,
+      isOnline: true,
+      lastActiveAt: Date.now(),
+    };
+    currentUserRef.current = merged;
+    setCurrentUser(merged);
+    saveStoredAuthUser(merged);
+    setUsers((prev) => {
+      const exists = prev.some((u) => u.id === merged.id);
+      const next = exists
+        ? prev.map((u) => (u.id === merged.id ? { ...u, ...merged } : u))
+        : [...prev, merged];
+      saveStoredUsers(next);
+      return next;
+    });
+    recordActivityLog(
+      'USER_MANAGEMENT',
+      'Perbarui Profil Sendiri',
+      `@${merged.username} (${merged.name}) memperbarui profil/kredensial akun sendiri`,
+      merged
+    );
   };
 
   const handleSaveCustomRole = (role: CustomRole) => {
@@ -2269,6 +2335,7 @@ export default function App() {
         currentUser={currentUser}
         onLogout={handleLogout}
         onOpenUserManagement={() => setIsUserManagementModalOpen(true)}
+        onOpenProfile={() => setIsProfileModalOpen(true)}
         onViewLandingPage={() => setIsViewingPublicLanding(true)}
       />
 
@@ -2595,6 +2662,20 @@ export default function App() {
         defaultStoreName={storeInfo.storeName}
         onOpenShift={(cashier, cash, store, shiftName) => handleOpenShift(cashier, shiftName || 'Shift 1', cash, store)}
         onCloseShift={handleCloseShift}
+      />
+
+      {/* Profil mandiri setiap user. Mode terkunci saat password masih sementara.
+          Akun developer tidak pernah dipaksa mengganti password (kredensialnya
+          dari DEV_PASSWORD_HASH, bukan direktori staf). */}
+      <MyProfileModal
+        isOpen={
+          (userRole !== 'DEVELOPER' && Boolean(currentUser.mustChangePassword)) ||
+          isProfileModalOpen
+        }
+        user={currentUser}
+        forced={userRole !== 'DEVELOPER' && Boolean(currentUser.mustChangePassword)}
+        onClose={() => setIsProfileModalOpen(false)}
+        onUpdated={handleProfileUpdated}
       />
 
       {/* Developer User Management Modal */}

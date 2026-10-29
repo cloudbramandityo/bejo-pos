@@ -66,6 +66,31 @@ Akun staf tidak boleh dikenali hanya dari id aplikasi.
 - Hasil restore memisahkan `skippedRecords` (digabungkan) dari `failedRecords`, dan hanya menyarankan "Coba Lagi" bila `retryable` (jaringan/5xx).
 - Uji regresi tanpa database: `npm run check:users` (PocketBase palsu di memori).
 
+## Kebijakan kredensial akun staf (wajib)
+
+Aturan tunggal ada di `src/utils/credentialPolicy.ts` dan dipakai UI **dan** server.
+
+- Password: minimal 10 karakter, memuat huruf dan angka, bukan password default/publik (`admin123`, `agen123`, `kasir123`, dst.), dan tidak sama/diawali username. Aturan berlaku di semua mode situs, bukan hanya `PUBLIC_SITE`.
+- Validasi di UI hanya umpan balik cepat; `POST /api/users` tetap menegakkan aturan yang sama. Jangan melemahkan pengecekan server.
+- Username developer (`DEV_USERNAME`, bawaan `langgo`) tidak boleh dibuat sebagai akun staf karena login selalu memeriksanya lebih dulu.
+- Jangan mengisi form akun dengan password default publik; tombol preset memakai `generateStrongPassword()`.
+- Tambahkan kasus baru ke `scripts/check-credential-policy.mts` (dijalankan lewat `npm run check:users`).
+
+## Profil mandiri & password sementara (wajib)
+
+Setiap staf mengatur sendiri nama tampilan, foto profil, username login, dan password lewat menu **Profil Saya**.
+
+- Endpoint `POST /api/users/me` (sesi server wajib) hanya mengubah baris direktori milik pemanggil. Mengganti username/password **wajib** menyertakan password saat ini; nama tampilan & foto boleh berubah tanpa password.
+- Nama tampilan boleh berbeda dari username login; keduanya milik akun yang sama.
+- Setelah username/password berubah, `issueStaffSession` (dari `server/posAuth.ts`) menerbitkan ulang cookie sesi supaya user tidak perlu logout.
+- `avatarUrl` (data URL JPEG hasil kompresi di browser, maksimum `MAX_AVATAR_DATA_URL_LENGTH`) dan `mustChangePassword` **hanya disimpan di salinan `data` koleksi `app_users`** — jangan menambah kolom skema tanpa memperbarui `scripts/create-pocketbase-collections.mjs` dan verifikasi deploy. Field JSON `data` berukuran 5 MB, tetapi batas avatar tetap dijaga kecil agar muatan realtime ringan.
+- Password sementara dari Developer: `checkTemporaryPassword` (minimal 6 karakter) hanya berlaku saat password **ditulis** bersama `mustChangePassword=true`. Login dengan password publik yang sementara diizinkan di mode publik, tetapi aplikasi langsung menampilkan modal profil terkunci (`forced`) sampai user membuat password sendiri.
+- Password baru buatan user selalu divalidasi kebijakan kuat; menyimpan password baru otomatis menghapus flag `mustChangePassword`.
+- Developer mereset password lewat Hak Akses & Akun (tombol kunci per baris / centang "password sementara"). Reset tersedia di tabel **Hak Akses & Akun** (tab Pengaturan) dan di modal **Kelola Wewenang Pengguna**; keduanya selalu menghasilkan password sementara yang wajib diganti.
+- Jangan menaruh `return null` sebelum seluruh hook pada komponen modal yang selalu ter-mount (mis. `UserManagementModal`): urutan hook berubah saat modal pertama dibuka dan React melempar error #310 (layar blank). Uji buka-tutup modal setiap kali mengubah komponen tersebut.
+- Akun DEVELOPER tidak punya baris direktori; perubahan profilnya ditolak server (`PROFILE_DEVELOPER_LOCKED`) dan diatur lewat `DEV_USERNAME` / `DEV_PASSWORD_HASH`.
+- Aturan wajib ganti password **tidak pernah** berlaku untuk DEVELOPER. Kredensialnya berasal dari `DEV_PASSWORD_HASH`, bukan direktori staf, sehingga flag `mustChangePassword` selalu `false` di respons login/sesi dan modal terkunci tidak boleh muncul — termasuk bila localStorage menyimpan flag lama (`true`); merge sesi di `App.tsx` menimpanya dan modal memakai `forceChange = forced && !isDeveloper`. ID `user_dev`/`sys_core_developer` juga ditolak untuk buat/ubah/hapus akun (`ACCOUNT_RESERVED`).
+
 ## Deploy
 
 Gunakan `deploy/deploy-vps.ps1` yang sudah ada. Jangan membuat skrip deploy baru. Build dan deploy hanya setelah `npm run build` lulus (termasuk check-brand, check-version, dan check-path-fabrication).

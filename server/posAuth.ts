@@ -23,29 +23,12 @@ import {
   verifyDevCredentials,
 } from './devAuth';
 import { loadStaffAccounts, verifyStaffPassword, type StaffAccount } from './staffStore';
+import { isPubliclyKnownPassword } from '../src/utils/credentialPolicy';
 
 const COOKIE_NAME = 'bejo_pos_session';
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
 const MAX_ATTEMPTS = 10;
 const ATTEMPT_WINDOW_MS = 15 * 60_000;
-
-/**
- * Password default yang ikut ter-bundle di aplikasi. Pada mode publik password
- * ini dianggap sudah bocor, sehingga login dari internet ditolak sampai
- * pemilik akun menggantinya.
- */
-const KNOWN_DEFAULT_PASSWORDS = new Set([
-  'admin123',
-  'kasir123',
-  'agen123',
-  'spk123',
-  'desain123',
-  'finishing123',
-  'bejo123',
-  'password',
-  'password123',
-  '12345678',
-]);
 
 class PosAuthError extends Error {
   status: number;
@@ -119,12 +102,11 @@ function allowDefaultStaffPasswords(): boolean {
 
 /**
  * True bila password termasuk default yang sudah ikut ter-bundle sehingga login
- * publik akan menolaknya. Dipakai juga saat MEMBUAT akun agar tidak lahir akun
- * yang langsung gagal login dari internet.
+ * publik akan menolaknya.
  */
 export function isDefaultStaffPassword(password: string): boolean {
   if (!isPublicSite() || allowDefaultStaffPasswords()) return false;
-  return KNOWN_DEFAULT_PASSWORDS.has(String(password || '').trim().toLowerCase());
+  return isPubliclyKnownPassword(password);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -177,6 +159,31 @@ function clearSessionCookie(req: Request, res: Response): void {
     'Set-Cookie',
     `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`
   );
+}
+
+/**
+ * Terbitkan cookie sesi staf. Dipakai login dan saat user mengganti
+ * username/nama di menu Profil Saya agar sesi tidak perlu logout.
+ */
+export function issueStaffSession(
+  req: Request,
+  res: Response,
+  profile: { uid: string; uname: string; name: string; role: string }
+): string {
+  const exp = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
+  setSessionCookie(
+    req,
+    res,
+    signSession({
+      sub: profile.uid,
+      uid: profile.uid,
+      uname: profile.uname,
+      name: profile.name,
+      role: profile.role,
+      exp,
+    })
+  );
+  return new Date(exp * 1000).toISOString();
 }
 
 export function getPosSession(req: Request): PosSessionPayload | null {
@@ -367,6 +374,10 @@ function legacyAccountOf(record: StaffRecord): StaffAccount | null {
     authId: String(record.id || ''),
     email,
     appPassword: String(record.appPassword || mirror.password || ''),
+    // Profil mandiri hanya hidup di salinan `data` / field opsional.
+    avatarUrl: String(record.avatarUrl || mirror.avatarUrl || ''),
+    mustChangePassword:
+      record.mustChangePassword === true || mirror.mustChangePassword === true,
   };
 }
 
@@ -382,6 +393,8 @@ function toAppUser(account: StaffAccount) {
     spkRoleCategory: account.spkRoleCategory,
     isActive: account.isActive,
     createdAt: account.createdAt,
+    avatarUrl: account.avatarUrl,
+    mustChangePassword: account.mustChangePassword,
   };
 }
 
@@ -421,24 +434,64 @@ export function registerPosAuthRoutes(app: Express): void {
     });
   });
 
-  app.get('/api/auth/me', (req, res) => {
+  app.get('/api/auth/me', async (req, res) => {
     const session = getPosSession(req);
     res.setHeader('Cache-Control', 'no-store');
+    if (!session) {
+      res.json({
+        success: true,
+        authenticated: false,
+        user: null,
+        expiresAt: null,
+        publicSite: isPublicSite(),
+      });
+      return;
+    }
+
+    // Profil terbaru dari direktori: nama, foto, dan status "wajib ganti
+    // password" harus ikut terbaca saat halaman dimuat ulang, bukan hanya saat
+    // login. Bila PocketBase tak terbaca, isi cookie sesi tetap dipakai.
+    let user: Record<string, unknown> = {
+      id: session.uid,
+      username: session.uname,
+      name: session.name,
+      role: session.role,
+      isActive: true,
+      avatarUrl: '',
+      mustChangePassword: false,
+    };
+    const isDeveloper =
+      String(session.role).toUpperCase() === 'DEVELOPER' || session.uid === 'sys_core_developer';
+    if (!isDeveloper && adminConfigured()) {
+      try {
+        const account = (await loadStaffAccounts()).find((item) => item.id === session.uid);
+        if (account) {
+          user = {
+            id: account.id,
+            username: account.username,
+            name: account.name,
+            role: account.role,
+            phone: account.phone,
+            spkRoleCategory: account.spkRoleCategory,
+            isActive: account.isActive,
+            createdAt: account.createdAt,
+            avatarUrl: account.avatarUrl,
+            mustChangePassword: account.mustChangePassword,
+          };
+        }
+      } catch (error) {
+        console.warn(
+          '[Auth] Profil terbaru tidak terbaca; memakai isi sesi:',
+          error instanceof Error ? error.message : error
+        );
+      }
+    }
+
     res.json({
       success: true,
-      authenticated: Boolean(session),
-      user: session
-        ? {
-            id: session.uid,
-            username: session.uname,
-            name: session.name,
-            role: session.role,
-            isActive: true,
-          }
-        : null,
-      expiresAt: session
-        ? new Date(session.exp * 1000).toISOString()
-        : null,
+      authenticated: true,
+      user,
+      expiresAt: new Date(session.exp * 1000).toISOString(),
       publicSite: isPublicSite(),
     });
   });
@@ -490,6 +543,10 @@ export function registerPosAuthRoutes(app: Express): void {
           phone: '',
           isActive: true,
           createdAt: 'Permanen Sistem',
+          // Developer tidak pernah wajib ganti password; kredensialnya dari
+          // DEV_PASSWORD_HASH sehingga tidak terpengaruh direktori staf.
+          avatarUrl: '',
+          mustChangePassword: false,
         };
         setSessionCookie(
           req,
@@ -574,10 +631,13 @@ export function registerPosAuthRoutes(app: Express): void {
       if (
         isPublicSite() &&
         !allowDefaultStaffPasswords() &&
-        KNOWN_DEFAULT_PASSWORDS.has(password.toLowerCase())
+        // Password sementara dari Developer memang boleh publik; user dipaksa
+        // menggantinya lewat menu Profil Saya segera setelah login.
+        !account.mustChangePassword &&
+        isPubliclyKnownPassword(password)
       ) {
         throw new PosAuthError(
-          'Password akun ini masih password default yang publik. Ganti password lewat menu Pengguna sebelum login dari internet.',
+          'Password akun ini masih password default yang publik. Minta Developer mengganti password lewat menu Hak Akses & Akun.',
           403,
           'WEAK_PASSWORD'
         );
@@ -587,24 +647,17 @@ export function registerPosAuthRoutes(app: Express): void {
       // Akun staf tidak boleh mewarisi cookie developer dari sesi sebelumnya.
       clearDevSession(req, res);
 
-      const exp = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
-      setSessionCookie(
-        req,
-        res,
-        signSession({
-          sub: user.id,
-          uid: user.id,
-          uname: user.username,
-          name: user.name,
-          role: user.role,
-          exp,
-        })
-      );
+      const expiresAt = issueStaffSession(req, res, {
+        uid: user.id,
+        uname: user.username,
+        name: user.name,
+        role: user.role,
+      });
       res.setHeader('Cache-Control', 'no-store');
       res.json({
         success: true,
         user,
-        expiresAt: new Date(exp * 1000).toISOString(),
+        expiresAt,
         publicSite: isPublicSite(),
         developer: false,
       });

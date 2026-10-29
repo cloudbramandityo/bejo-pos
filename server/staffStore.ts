@@ -67,6 +67,10 @@ export interface AccountInput {
   spkRoleCategory: string;
   createdAt: string;
   password: string;
+  /** Foto profil terkompresi (data URL) atau URL https. */
+  avatarUrl: string;
+  /** Password sementara: user wajib mengganti kredensialnya saat login. */
+  mustChangePassword: boolean;
 }
 
 export interface PresenceInput {
@@ -95,6 +99,8 @@ export interface StaffAccount {
   email: string;
   /** appPassword lama (plaintext) bila record kredensialnya masih menyimpannya. */
   appPassword: string;
+  avatarUrl: string;
+  mustChangePassword: boolean;
 }
 
 /** Hanya id logis aplikasi yang boleh masuk filter PocketBase. */
@@ -140,6 +146,10 @@ export function directoryFromRecord(record: any): DirectoryEntry | null {
     authId: String(record?.authId || mirror.authId || ''),
     presence: readPresence(record),
     recordId: String(record?.id || ''),
+    // Profil mandiri disimpan di salinan `data` agar tidak memerlukan kolom
+    // tambahan pada skema `app_users`.
+    avatarUrl: String(record?.avatarUrl ?? mirror.avatarUrl ?? ''),
+    mustChangePassword: record?.mustChangePassword === true || mirror.mustChangePassword === true,
   };
 }
 
@@ -161,7 +171,14 @@ export function directoryPayload(entry: DirectoryEntry) {
   return {
     ...flat,
     // Salinan utuh untuk aplikasi; sengaja tanpa password/email apa pun.
-    data: { ...flat, id: entry.id },
+    // Profil mandiri (foto & flag ganti password) hanya hidup di sini agar
+    // skema `app_users` tidak perlu kolom baru.
+    data: {
+      ...flat,
+      id: entry.id,
+      avatarUrl: entry.avatarUrl,
+      mustChangePassword: entry.mustChangePassword,
+    },
   };
 }
 
@@ -394,7 +411,7 @@ async function adoptCredential(
 export async function saveCredential(
   pb: PocketBase,
   entry: DirectoryEntry,
-  passwordPolicy?: (password: string) => void
+  passwordPolicy?: (username: string, password: string) => void
 ): Promise<string> {
   const email = credentialEmail(entry.username, entry.id);
   const fallbackEmail = credentialFallbackEmail(entry.username, entry.id);
@@ -441,7 +458,7 @@ export async function saveCredential(
   const fallbackRows = await findCredential(pb, `email = "${filterValue(fallbackEmail)}"`);
   if (fallbackRows[0]) return adoptCredential(pb, String(fallbackRows[0].id), entry);
 
-  if (entry.password && passwordPolicy) passwordPolicy(entry.password);
+  if (entry.password && passwordPolicy) passwordPolicy(entry.username, entry.password);
 
   const base: Record<string, unknown> = {
     name: entry.name,
@@ -507,6 +524,8 @@ export async function loadStaffAccounts(): Promise<StaffAccount[]> {
         authId: entry.authId,
         email: String(auth?.email || credentialEmail(entry.username, entry.id)),
         appPassword: String(auth?.appPassword || ''),
+        avatarUrl: entry.avatarUrl,
+        mustChangePassword: entry.mustChangePassword,
       });
     }
     return out;

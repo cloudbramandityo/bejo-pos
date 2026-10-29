@@ -152,6 +152,7 @@ import { StoreLogo } from './StoreLogo';
 import { OpenAccountGroupCard } from './spk/OpenAccountGroupCard';
 import { groupOpenAccountOrders, OpenAccountCustomerGroup } from '../utils/openAccountStorage';
 import { getPermanentDeveloperUser } from '../utils/authSecurity';
+import { checkPasswordPolicy } from '../utils/credentialPolicy';
 import {
   saveSpkOrderCloud,
   deleteSpkOrderCloud,
@@ -276,7 +277,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
   const [newURole, setNewURole] = useState<'DEVELOPER' | 'ADMIN' | 'KASIR' | 'SPK'>('SPK');
   const [newUSpkCategory, setNewUSpkCategory] = useState<SpkRoleCategory>('OPERATOR_CETAK');
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUName.trim() || !newUUsername.trim() || !newUPassword.trim()) {
       alert('Silakan lengkapi Nama, Username, dan Password!');
@@ -287,6 +288,12 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
 
     if (teamUsers.some((u) => u.username.toLowerCase() === cleanUsername)) {
       alert('Username ini sudah terdaftar! Gunakan username lain.');
+      return;
+    }
+
+    const passwordProblem = checkPasswordPolicy(cleanUsername, newUPassword.trim());
+    if (passwordProblem) {
+      alert(passwordProblem.message);
       return;
     }
 
@@ -303,9 +310,17 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
     };
 
     if (onSaveUser) {
-      onSaveUser(newUserObj);
+      try {
+        await onSaveUser(newUserObj);
+      } catch (err: any) {
+        alert(err?.message || 'Akun gagal disimpan ke database cloud. Coba lagi.');
+        return;
+      }
+    } else {
+      saveUserCloud(newUserObj).catch((err) => {
+        alert(err?.message || 'Akun gagal disimpan ke database cloud. Coba lagi.');
+      });
     }
-    saveUserCloud(newUserObj).catch(console.error);
 
     // Reset Form
     setNewUName('');
@@ -5312,9 +5327,12 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                   required
                   value={newUPassword}
                   onChange={(e) => setNewUPassword(e.target.value)}
-                  placeholder="Minimal 6 karakter"
+                  placeholder="Minimal 10 karakter (huruf + angka)"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:bg-white"
                 />
+                <p className="text-[10px] leading-snug text-slate-500">
+                  Password default (admin123, agen123, dll.) dan yang sama dengan username ditolak.
+                </p>
               </div>
 
               <div className="space-y-1">

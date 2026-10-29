@@ -33,6 +33,7 @@ import {
   LayoutGrid,
   Settings,
   ChevronRight,
+  User,
 } from 'lucide-react';
 import { Shift, AppUser } from '../types';
 import { DeveloperJokerIcon } from './DeveloperJokerIcon';
@@ -139,6 +140,7 @@ interface NavbarProps {
   currentUser: AppUser | null;
   onLogout: () => void;
   onOpenUserManagement?: () => void;
+  onOpenProfile?: () => void;
   onOpenDatabaseModal?: () => void;
   isStoreOnline?: boolean;
   onViewLandingPage?: () => void;
@@ -156,6 +158,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   onLogout,
   onOpenUserManagement,
+  onOpenProfile,
   onOpenDatabaseModal,
   isStoreOnline = true,
   onViewLandingPage,
@@ -261,6 +264,15 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, [drawerOpen]);
 
   const RoleAvatar = () => {
+    if (currentUser?.avatarUrl) {
+      return (
+        <img
+          src={currentUser.avatarUrl}
+          alt={`Foto ${currentUser.name}`}
+          className="w-6 h-6 rounded-md object-cover border border-slate-200 bg-slate-100"
+        />
+      );
+    }
     if (role === 'DEVELOPER') return <DeveloperJokerIcon size="md" rounded="rounded-md" />;
     if (role === 'OWNER')
       return (
@@ -430,7 +442,30 @@ export const Navbar: React.FC<NavbarProps> = ({
                                   : `Role ${role}`}
                     </span>
                   </div>
+                  {currentUser?.mustChangePassword && (
+                    <div className="mt-1">
+                      <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded inline-block border border-amber-300">
+                        Password sementara — wajib diganti
+                      </span>
+                    </div>
+                  )}
                 </div>
+
+                {onOpenProfile && (
+                  <div className="py-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        onOpenProfile();
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-slate-50 text-xs font-semibold text-slate-800 flex items-center gap-2 cursor-pointer"
+                    >
+                      <User className="w-4 h-4 text-slate-600" />
+                      <span>Profil Saya</span>
+                    </button>
+                  </div>
+                )}
 
                 {isDeveloper && onOpenUserManagement && (
                   <div className="py-1">
@@ -608,6 +643,24 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* footer drawer */}
             <div className="border-t border-slate-200 p-3 space-y-1">
+              {onOpenProfile && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDrawerOpen(false);
+                    onOpenProfile();
+                  }}
+                  className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-700 active:bg-slate-100"
+                >
+                  <User className="w-[18px] h-[18px] shrink-0 text-slate-600" />
+                  <span className="text-[13px] font-semibold">Profil Saya</span>
+                  {currentUser?.mustChangePassword && (
+                    <span className="ml-auto text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.5 rounded">
+                      WAJIB GANTI
+                    </span>
+                  )}
+                </button>
+              )}
               {onViewLandingPage && (
                 <button
                   type="button"

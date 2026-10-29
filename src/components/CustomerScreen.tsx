@@ -63,6 +63,7 @@ import { downloadBackupJSON, validateBackupPayload, restoreBackupToStorage, rest
 import { DeveloperJokerIcon } from './DeveloperJokerIcon';
 import { StoreLogo } from './StoreLogo';
 import { isReservedDeveloperUsername } from '../utils/authSecurity';
+import { checkPasswordPolicy, checkTemporaryPassword, generateStrongPassword, isPasswordMasked } from '../utils/credentialPolicy';
 import { runBackendAutoFix, triggerSimulatedBackendError } from '../utils/backendDiagnostics';
 import { GoogleDriveUrlConverter } from './GoogleDriveUrlConverter';
 
@@ -342,6 +343,8 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
   const [uRole, setURole] = useState<UserRole>('SPK');
   const [uPhone, setUPhone] = useState('');
   const [uIsActive, setUIsActive] = useState(true);
+  const [uTemporaryPassword, setUTemporaryPassword] = useState(true);
+  const [uFormNotice, setUFormNotice] = useState<string | null>(null);
   const [showModalPassword, setShowModalPassword] = useState(false);
   const [userFormError, setUserFormError] = useState<string | null>(null);
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
@@ -361,6 +364,8 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
     setURole('SPK');
     setUPhone('');
     setUIsActive(true);
+    setUTemporaryPassword(true);
+    setUFormNotice(null);
     setShowModalPassword(false);
     setUserFormError(null);
     setIsUserModalOpen(true);
@@ -374,9 +379,22 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
     setURole(user.role);
     setUPhone(user.phone || '');
     setUIsActive(user.isActive !== false);
+    setUTemporaryPassword(user.mustChangePassword === true);
+    setUFormNotice(null);
     setShowModalPassword(false);
     setUserFormError(null);
     setIsUserModalOpen(true);
+  };
+
+  /** Reset password dari menu Hak Akses & Akun: password sementara + wajib ganti. */
+  const openResetUserPassword = (user: AppUser) => {
+    openEditUser(user);
+    setUPassword(generateStrongPassword());
+    setUTemporaryPassword(true);
+    setShowModalPassword(true);
+    setUFormNotice(
+      'Password sementara baru sudah dibuat. Salin password di kolom Password dan berikan ke pengguna — ia wajib mengganti sendiri saat login.'
+    );
   };
 
   const handleUserSubmit = (e: React.FormEvent) => {
@@ -417,6 +435,16 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
       return;
     }
 
+    if (cleanPassword && !isPasswordMasked(cleanPassword)) {
+      const passwordProblem = uTemporaryPassword
+        ? checkTemporaryPassword(cleanPassword)
+        : checkPasswordPolicy(cleanUsername, cleanPassword);
+      if (passwordProblem) {
+        setUserFormError(passwordProblem.message);
+        return;
+      }
+    }
+
     const today = new Date();
     const months = [
       'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -433,6 +461,8 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
       phone: uPhone.trim() || undefined,
       isActive: uIsActive,
       createdAt: editingUser ? editingUser.createdAt : dateFormatted,
+      avatarUrl: editingUser?.avatarUrl || '',
+      mustChangePassword: uTemporaryPassword,
     };
 
     if (onSaveUser) {
@@ -3194,6 +3224,14 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                               <div className="flex items-center justify-center gap-1.5">
                                 <button
                                   type="button"
+                                  onClick={() => openResetUserPassword(u)}
+                                  className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                                  title="Reset Password Sementara"
+                                >
+                                  <KeyRound className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
                                   onClick={() => openEditUser(u)}
                                   className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
                                   title="Edit Akun"
@@ -3416,6 +3454,13 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                 </div>
               )}
 
+              {uFormNotice && (
+                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-[11px] rounded-xl flex items-start gap-2">
+                  <KeyRound className="w-4 h-4 shrink-0 text-amber-600" />
+                  <span className="font-semibold leading-snug">{uFormNotice}</span>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -3453,6 +3498,22 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                       {showModalPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
+                  <p className="mt-1 text-[10px] leading-snug text-slate-500">
+                    {uTemporaryPassword
+                      ? 'Password sementara minimal 6 karakter; pengguna wajib menggantinya saat login pertama.'
+                      : 'Minimal 10 karakter, gabungan huruf dan angka. Password default (admin123, agen123, dll.) ditolak.'}
+                  </p>
+                  <label className="mt-2 flex items-start gap-2 text-[10px] leading-snug text-slate-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={uTemporaryPassword}
+                      onChange={(e) => setUTemporaryPassword(e.target.checked)}
+                      className="mt-0.5 accent-purple-600"
+                    />
+                    <span>
+                      Password sementara — pengguna wajib membuat password sendiri setelah login.
+                    </span>
+                  </label>
                 </div>
               </div>
 

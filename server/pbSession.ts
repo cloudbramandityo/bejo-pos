@@ -15,6 +15,7 @@
 import type { Express, Request, Response } from 'express';
 import PocketBase from 'pocketbase/cjs';
 import { requirePosSession } from './posAuth';
+import { ensureSyncAccount } from './staffStore';
 
 const TOKEN_TTL_MS = 10 * 60_000;
 
@@ -40,6 +41,18 @@ function env(name: string): string {
 let cached: PbSession | null = null;
 let inflight: Promise<PbSession> | null = null;
 
+async function loginSync(email: string, password: string): Promise<PbSession> {
+  const url = env('POCKETBASE_UPSTREAM') || 'http://127.0.0.1:8090';
+  const pb = new PocketBase(url);
+  pb.autoCancellation(false);
+  const auth = await pb.collection('users').authWithPassword(email, password);
+  return {
+    token: auth.token,
+    record: auth.record as unknown as Record<string, unknown>,
+    expiresAt: Date.now() + TOKEN_TTL_MS,
+  };
+}
+
 async function createSession(): Promise<PbSession> {
   const email = env('PB_SYNC_EMAIL');
   const password = env('PB_SYNC_PASSWORD');
@@ -54,27 +67,35 @@ async function createSession(): Promise<PbSession> {
   if (inflight) return inflight;
 
   inflight = (async () => {
-    const url = env('POCKETBASE_UPSTREAM') || 'http://127.0.0.1:8090';
-    const pb = new PocketBase(url);
-    pb.autoCancellation(false);
+    let failure: unknown = null;
     try {
-      const auth = await pb.collection('users').authWithPassword(email, password);
-      cached = {
-        token: auth.token,
-        record: auth.record as unknown as Record<string, unknown>,
-        expiresAt: Date.now() + TOKEN_TTL_MS,
-      };
+      cached = await loginSync(email, password);
       return cached;
     } catch (error) {
-      console.error('[PocketBase] Gagal membuat sesi layanan:', error);
-      throw new PbSessionError(
-        'Server tidak dapat terhubung ke PocketBase atau kredensial sinkronisasi ditolak.',
-        503
-      );
-    } finally {
-      inflight = null;
+      failure = error;
     }
-  })();
+
+    // Login ditolak hampir selalu berarti record sinkronisasi tertimpa restore
+    // backup lama. Samakan lagi dengan .env lalu coba sekali lagi.
+    const status = await ensureSyncAccount().catch(() => 'failed' as const);
+    if (status === 'repaired' || status === 'created' || status === 'ok') {
+      try {
+        cached = await loginSync(email, password);
+        console.warn('[PocketBase] Sesi layanan pulih setelah akun sinkronisasi disamakan dengan .env.');
+        return cached;
+      } catch (retryError) {
+        failure = retryError;
+      }
+    }
+
+    console.error('[PocketBase] Gagal membuat sesi layanan:', failure);
+    throw new PbSessionError(
+      'Server tidak dapat terhubung ke PocketBase atau kredensial sinkronisasi ditolak.',
+      503
+    );
+  })().finally(() => {
+    inflight = null;
+  });
 
   return inflight;
 }

@@ -487,6 +487,16 @@ export async function restoreBackupToCloud(
         const recordId = batch[offset]?.id ?? index + offset + 1;
         const message = String(result.reason?.message || result.reason || '');
         const lowerMsg = message.toLowerCase();
+        // Akun sistem (developer/sinkronisasi) memang tidak boleh ditulis dari
+        // restore; bukan kegagalan data user.
+        const systemCode = String(result.reason?.code || '');
+        if (task.label === 'Pengguna' && (systemCode === 'ACCOUNT_RESERVED' || systemCode === 'USERNAME_RESERVED')) {
+          skippedRecords += 1;
+          if (errors.length < 10) {
+            errors.push(`${task.label} #${recordId}: ${message} (dilewati: akun sistem)`);
+          }
+          return;
+        }
         // Username sudah dipakai atau duplikasi diizinkan - jangan anggap gagal total
         if (
           task.label === 'Pengguna' &&

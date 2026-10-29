@@ -14,6 +14,10 @@ import {
 
 type Rec = Record<string, any>;
 
+// Kasus A-F berjalan tanpa akun sinkronisasi; G/H menyetelnya sendiri agar
+// hasil uji tidak bergantung pada environment mesin yang menjalankan.
+delete process.env.PB_SYNC_EMAIL;
+
 class FakePB {
   records: Rec[];
   noLegacyField: boolean;
@@ -151,6 +155,37 @@ function check(label: string, condition: boolean, extra = '') {
     id === pb.creates[0].id && seen === 'budi|CetakPresisi2026',
     seen
   );
+}
+
+// G. Record akun sinkronisasi tidak boleh ditimpa lewat authId (restore backup
+//    pernah menulis ulang email/password-nya dan memutus token semua user).
+{
+  process.env.PB_SYNC_EMAIL = 'sync@bejo.local';
+  const pb: any = new FakePB([{ id: 'rec_sync', email: 'sync@bejo.local', username: 'sync' }]);
+  let code = '';
+  let status = 0;
+  try {
+    await saveCredential(pb, { ...entry('u7', 'budi'), authId: 'rec_sync' } as any);
+  } catch (err: any) {
+    code = String(err?.code || '');
+    status = Number(err?.status || 0);
+  }
+  check('G: authId sinkronisasi ditolak', code === 'ACCOUNT_RESERVED' && status === 400, `${code}/${status}`);
+  check('G: record sinkronisasi tidak tersentuh', pb.records[0].email === 'sync@bejo.local' && pb.creates.length === 0);
+}
+
+// H. Adopsi lewat legacyId juga tidak boleh menyentuh record sinkronisasi.
+{
+  process.env.PB_SYNC_EMAIL = 'sync@bejo.local';
+  const pb: any = new FakePB([{ id: 'rec_sync', email: 'sync@bejo.local', legacyId: 'u8' }]);
+  let code = '';
+  try {
+    await saveCredential(pb, entry('u8', 'sari') as any);
+  } catch (err: any) {
+    code = String(err?.code || '');
+  }
+  check('H: adopsi record sinkronisasi ditolak', code === 'ACCOUNT_RESERVED', code);
+  check('H: email sinkronisasi utuh', pb.records[0].email === 'sync@bejo.local');
 }
 
 console.log(failures === 0 ? 'SEMUA LULUS' : `${failures} GAGAL`);

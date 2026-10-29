@@ -91,6 +91,16 @@ Setiap staf mengatur sendiri nama tampilan, foto profil, username login, dan pas
 - Akun DEVELOPER tidak punya baris direktori; perubahan profilnya ditolak server (`PROFILE_DEVELOPER_LOCKED`) dan diatur lewat `DEV_USERNAME` / `DEV_PASSWORD_HASH`.
 - Aturan wajib ganti password **tidak pernah** berlaku untuk DEVELOPER. Kredensialnya berasal dari `DEV_PASSWORD_HASH`, bukan direktori staf, sehingga flag `mustChangePassword` selalu `false` di respons login/sesi dan modal terkunci tidak boleh muncul — termasuk bila localStorage menyimpan flag lama (`true`); merge sesi di `App.tsx` menimpanya dan modal memakai `forceChange = forced && !isDeveloper`. ID `user_dev`/`sys_core_developer` juga ditolak untuk buat/ubah/hapus akun (`ACCOUNT_RESERVED`).
 
+## Akun sinkronisasi PocketBase (wajib)
+
+`PB_SYNC_EMAIL` / `PB_SYNC_PASSWORD` di `.env` adalah **sumber kebenaran** kredensial akun sinkronisasi yang dipakai broker `/api/pocketbase/session`. Record `users` miliknya dikelola server, bukan staf.
+
+- Akun sinkronisasi **tidak boleh punya baris `app_users`**. Baris seperti itu tampil di Hak Akses dan pernah membuat restore backup menulis ulang email/password akun tersebut, sehingga broker 503 dan aplikasi jatuh ke Mode Lokal.
+- `ensureStaffDirectory` menghapus baris direktori yang `authId`-nya record sinkronisasi; `loadStaffAccounts` menyembunyikan akun ber-email sinkronisasi; `saveCredential` dan `deleteAccount` menolaknya (`ACCOUNT_RESERVED`); username `sync` ditolak (`USERNAME_RESERVED`); restore backup menghitung kedua kode itu sebagai dilewati.
+- `ensureSyncAccount` (`server/staffStore.ts`) menyamakan record dengan `.env` saat boot dan sekali lagi ketika login sinkronisasi ditolak; **jangan** menghapus panggilan ini. Tanpa `PB_ADMIN_EMAIL`/`PB_ADMIN_PASSWORD` yang valid perbaikan dilewati (tidak menebak).
+- Bila live terlanjur Mode Lokal, jalankan di VPS: `powershell -ExecutionPolicy Bypass -File C:\bejo-pos\scripts\repair-sync-account.ps1` (periksa) lalu tambahkan `-Apply` (menulis) atau `-Apply -RestartService`. Skrip tidak pernah merotasi password superuser.
+- Uji regresi penjaga: `npm run check:users` (kasus G/H di `scripts/check-staff-credential.mts`).
+
 ## Deploy
 
 Gunakan `deploy/deploy-vps.ps1` yang sudah ada. Jangan membuat skrip deploy baru. Build dan deploy hanya setelah `npm run build` lulus (termasuk check-brand, check-version, dan check-path-fabrication).

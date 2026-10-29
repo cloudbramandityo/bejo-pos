@@ -202,6 +202,144 @@ export function credentialFallbackEmail(username: string, appId: string): string
   return `${localPart}-${filterValue(appId)}@${CREDENTIAL_EMAIL_DOMAIN}`;
 }
 
+/**
+ * Akun sinkronisasi PocketBase (PB_SYNC_EMAIL) memberi token realtime ke
+ * browser. Record ini BUKAN staf: kalau ikut masuk direktori lalu tersentuh
+ * reset password atau restore backup, seluruh aplikasi kehilangan sesi
+ * PocketBase. Semua jalur tulis kredensial wajib melewati penjaga di bawah.
+ */
+export function syncAccountEmail(): string {
+  return env('PB_SYNC_EMAIL').toLowerCase();
+}
+
+export function isSyncAccountEmail(email: unknown): boolean {
+  const sync = syncAccountEmail();
+  if (!sync) return false;
+  return String(email ?? '').trim().toLowerCase() === sync;
+}
+
+/** Id record auth akun sinkronisasi, atau '' bila belum/tidak ditemukan. */
+export async function findSyncCredentialId(pb: PocketBase): Promise<string> {
+  const sync = syncAccountEmail();
+  if (!sync) return '';
+  const rows = await findCredential(pb, `email = "${filterValue(sync)}"`);
+  return String(rows[0]?.id || '');
+}
+
+export function syncReservedError(): StaffStoreError {
+  return new StaffStoreError(
+    'Akun sinkronisasi PocketBase dikelola server dan tidak boleh diubah lewat aplikasi.',
+    400,
+    'ACCOUNT_RESERVED'
+  );
+}
+
+/** Tolak perubahan pada record auth akun sinkronisasi. */
+export async function assertNotSyncCredential(
+  pb: PocketBase,
+  authId: string
+): Promise<void> {
+  if (!authId) return;
+  const syncId = await findSyncCredentialId(pb);
+  if (syncId && authId === syncId) throw syncReservedError();
+}
+
+async function probeSyncLogin(email: string, password: string): Promise<boolean> {
+  try {
+    const pb = new PocketBase(pbUpstream());
+    pb.autoCancellation(false);
+    await pb.collection(AUTH_COLLECTION).authWithPassword(email, password);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export type SyncAccountStatus = 'ok' | 'created' | 'repaired' | 'skipped' | 'failed';
+
+let syncEnsureInflight: Promise<SyncAccountStatus> | null = null;
+
+/**
+ * Pulihkan akun sinkronisasi agar selalu sama dengan PB_SYNC_EMAIL/PB_SYNC_PASSWORD.
+ *
+ * `.env` adalah sumber kebenaran. Restore backup lama bisa menulis ulang email
+ * atau password record ini (baris direktori yang menunjuk record sinkron),
+ * sehingga broker kehilangan token dan seluruh aplikasi jatuh ke Mode Lokal.
+ * Fungsi ini dipanggil saat boot dan sekali lagi ketika login sinkronisasi
+ * ditolak, jadi gangguan yang sama pulih sendiri tanpa sentuh VPS.
+ */
+export function ensureSyncAccount(): Promise<SyncAccountStatus> {
+  if (syncEnsureInflight) return syncEnsureInflight;
+
+  syncEnsureInflight = (async (): Promise<SyncAccountStatus> => {
+    const email = syncAccountEmail();
+    const password = env('PB_SYNC_PASSWORD');
+    if (!email || !password) return 'skipped';
+    // Tanpa akses superuser tidak ada yang bisa ditulis; biarkan diagnostik
+    // yang melaporkan, jangan menebak.
+    if (!adminConfigured()) return 'skipped';
+    if (await probeSyncLogin(email, password)) return 'ok';
+
+    try {
+      const outcome = await runAsAdmin(async (pb) => {
+        const users = pb.collection(AUTH_COLLECTION);
+        const byEmail = await users.getFullList({
+          filter: `email = "${filterValue(email)}"`,
+          requestKey: null,
+        });
+        let record = byEmail[0];
+        if (!record) {
+          // Email record sempat tertimpa (mis. menjadi ...@staff.bejo.local).
+          const byUsername = await users
+            .getFullList({ filter: `username = "sync"`, requestKey: null })
+            .catch(() => [] as any[]);
+          if (byUsername.length === 1) record = byUsername[0];
+        }
+
+        if (record) {
+          await users.update(record.id, {
+            email,
+            password,
+            passwordConfirm: password,
+            isActive: true,
+          });
+          return 'repaired' as const;
+        }
+
+        const body: Record<string, unknown> = {
+          email,
+          password,
+          passwordConfirm: password,
+          name: 'Bejo Sync Service',
+          isActive: true,
+        };
+        try {
+          await users.create({ ...body, username: 'sync' });
+        } catch (err) {
+          // Skema `users` instalasi lama bisa menolak username; email tetap wajib.
+          if ((err as { status?: number })?.status !== 400) throw err;
+          await users.create(body);
+        }
+        return 'created' as const;
+      });
+
+      if (!(await probeSyncLogin(email, password))) {
+        console.error('[StaffStore] Akun sinkronisasi masih ditolak setelah perbaikan; periksa PB_SYNC_EMAIL/PB_SYNC_PASSWORD.');
+        return 'failed';
+      }
+      console.warn('[StaffStore] Akun sinkronisasi dipulihkan dari .env (email/password disamakan).');
+      return outcome;
+    } catch (err) {
+      console.error('[StaffStore] Perbaikan akun sinkronisasi gagal:', (err as Error)?.message || err);
+      return 'failed';
+    }
+  })().finally(() => {
+    syncEnsureInflight = null;
+  });
+
+  return syncEnsureInflight;
+}
+
 /* ---------------------------------------------------------------------- */
 /*  Klien PocketBase ber-akses superuser                                   */
 /* ---------------------------------------------------------------------- */
@@ -413,10 +551,15 @@ export async function saveCredential(
   entry: DirectoryEntry,
   passwordPolicy?: (username: string, password: string) => void
 ): Promise<string> {
+  const syncId = await findSyncCredentialId(pb);
+  const guardSync = (recordId: string) => {
+    if (syncId && recordId && recordId === syncId) throw syncReservedError();
+  };
   const email = credentialEmail(entry.username, entry.id);
   const fallbackEmail = credentialFallbackEmail(entry.username, entry.id);
 
   if (entry.authId) {
+    guardSync(entry.authId);
     const patch: Record<string, unknown> = { email };
     if (entry.password) {
       patch.password = entry.password;
@@ -447,16 +590,25 @@ export async function saveCredential(
   // tanpa legacyId, dan tanpa pencarian ini setiap percobaan ulang berakhir
   // "Failed to create record." selamanya.
   const byAppId = await findCredential(pb, `legacyId = "${filterValue(entry.id)}"`);
-  if (byAppId[0]) return adoptCredential(pb, String(byAppId[0].id), entry);
+  if (byAppId[0]) {
+    guardSync(String(byAppId[0].id));
+    return adoptCredential(pb, String(byAppId[0].id), entry);
+  }
 
   const emailRows = await findCredential(pb, `email = "${filterValue(email)}"`);
   const linked = emailRows.find(
     (r) => !r.legacyId || String(r.legacyId) === entry.id
   );
-  if (linked) return adoptCredential(pb, String(linked.id), entry);
+  if (linked) {
+    guardSync(String(linked.id));
+    return adoptCredential(pb, String(linked.id), entry);
+  }
 
   const fallbackRows = await findCredential(pb, `email = "${filterValue(fallbackEmail)}"`);
-  if (fallbackRows[0]) return adoptCredential(pb, String(fallbackRows[0].id), entry);
+  if (fallbackRows[0]) {
+    guardSync(String(fallbackRows[0].id));
+    return adoptCredential(pb, String(fallbackRows[0].id), entry);
+  }
 
   if (entry.password && passwordPolicy) passwordPolicy(entry.username, entry.password);
 
@@ -512,6 +664,10 @@ export async function loadStaffAccounts(): Promise<StaffAccount[]> {
     for (const entry of rows) {
       if (RESERVED_USER_IDS.has(entry.id)) continue;
       const auth = entry.authId ? authById.get(entry.authId) : undefined;
+      const email = String(auth?.email || credentialEmail(entry.username, entry.id));
+      // Akun sinkronisasi tidak pernah tampil sebagai staf (pertahanan lapis
+      // kedua bila baris direktori lama masih ada).
+      if (isSyncAccountEmail(email)) continue;
       out.push({
         id: entry.id,
         username: entry.username,
@@ -522,7 +678,7 @@ export async function loadStaffAccounts(): Promise<StaffAccount[]> {
         isActive: entry.isActive,
         createdAt: entry.createdAt,
         authId: entry.authId,
-        email: String(auth?.email || credentialEmail(entry.username, entry.id)),
+        email,
         appPassword: String(auth?.appPassword || ''),
         avatarUrl: entry.avatarUrl,
         mustChangePassword: entry.mustChangePassword,

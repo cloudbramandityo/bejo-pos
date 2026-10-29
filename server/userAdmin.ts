@@ -17,9 +17,11 @@ import {
   DIR_COLLECTION,
   RESERVED_USER_IDS,
   StaffStoreError,
+  assertNotSyncCredential,
   credentialEmail,
   directoryFromRecord,
   findDirectoryByAppId,
+  findSyncCredentialId,
   listAllCredentials,
   listAllDirectory,
   loadStaffAccounts,
@@ -27,6 +29,7 @@ import {
   runAsAdmin,
   safeAppId,
   saveCredential,
+  syncAccountEmail,
   verifyStaffPassword,
   writeDirectory,
   type AccountInput,
@@ -172,6 +175,17 @@ async function saveAccount(account: AccountInput): Promise<{ id: string; adopted
       );
     }
 
+    // Username akun layanan sinkronisasi juga bukan milik staf. Backup lama
+    // pernah memuat baris "sync"; mengembalikannya hanya melahirkan akun palsu.
+    const syncUsername = syncAccountEmail().split('@')[0];
+    if (syncUsername && account.username === syncUsername) {
+      throw fail(
+        `Username "${account.username}" dicadangkan untuk akun layanan sinkronisasi.`,
+        400,
+        'USERNAME_RESERVED'
+      );
+    }
+
     // Ganti username ke username milik akun lain tetap ditolak.
     if (existing && sameUsername) {
       throw fail(`Username "${account.username}" sudah dipakai akun lain.`, 409, 'USERNAME_TAKEN');
@@ -262,6 +276,7 @@ async function deleteAccount(appId: string): Promise<void> {
   await runAsAdmin(async (pb) => {
     const entry = await findDirectoryByAppId(pb, appId);
     if (!entry) throw fail('Akun tidak ditemukan di database cloud.', 404, 'ACCOUNT_NOT_FOUND');
+    await assertNotSyncCredential(pb, entry.authId);
     if (entry.authId) {
       await pb.collection(AUTH_COLLECTION).delete(entry.authId).catch(() => undefined);
     }
@@ -309,6 +324,9 @@ export async function ensureStaffDirectory(): Promise<{ added: number; kept: num
       entries.filter((e) => !e.authId || aliveAuth.has(e.authId)).map((e) => e.username)
     );
     const syncEmail = String(process.env.PB_SYNC_EMAIL || '').trim().toLowerCase();
+    // Record sinkronisasi tidak boleh punya baris direktori: baris itu tampil di
+    // Hak Akses dan bisa direset/di-restore, memutus token realtime semua user.
+    const syncId = await findSyncCredentialId(pb);
 
     let added = 0;
     let kept = 0;
@@ -353,9 +371,15 @@ export async function ensureStaffDirectory(): Promise<{ added: number; kept: num
       added += 1;
     }
 
-    // Baris direktori yang record kredensialnya sudah dihapus dari PocketBase.
+    // Baris direktori yang record kredensialnya sudah dihapus dari PocketBase
+    // atau yang menunjuk akun sinkronisasi (sisa restore lama).
     let removed = 0;
     for (const entry of entries) {
+      if (syncId && entry.authId === syncId) {
+        await pb.collection(DIR_COLLECTION).delete(entry.recordId!).catch(() => undefined);
+        removed += 1;
+        continue;
+      }
       if (entry.authId && !aliveAuth.has(entry.authId)) {
         await pb.collection(DIR_COLLECTION).delete(entry.recordId!).catch(() => undefined);
         removed += 1;

@@ -11,6 +11,7 @@ import { registerDevAuthRoutes } from "./server/devAuth";
 import { registerPbSessionRoutes } from "./server/pbSession";
 import { getPosSession, registerPosAuthRoutes } from "./server/posAuth";
 import { registerUserAdminRoutes, ensureStaffDirectory } from "./server/userAdmin";
+import { ensureSyncAccount } from "./server/staffStore";
 import {
   registerLandingRoutes,
   getPublishedLandingIdentity,
@@ -2045,6 +2046,18 @@ async function setupVite() {
       })
       .catch((err) => {
         console.warn('[UserAdmin] Pembangunan direktori staf ditunda:', err?.message || err);
+      });
+
+    // Restore backup lama bisa menimpa email/password akun sinkronisasi. Samakan
+    // lagi dengan .env saat boot agar aplikasi tidak menunggu keluhan user.
+    ensureSyncAccount()
+      .then((status) => {
+        if (status === 'repaired' || status === 'created') {
+          console.log(`[PocketBase] Akun sinkronisasi diperbaiki saat boot (${status}).`);
+        }
+      })
+      .catch((err) => {
+        console.warn('[PocketBase] Pemeriksaan akun sinkronisasi ditunda:', err?.message || err);
       });
   });
 }

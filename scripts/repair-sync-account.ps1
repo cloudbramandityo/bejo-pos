@@ -5,7 +5,7 @@
   Dipakai saat aplikasi live masuk "Mode Lokal" karena broker
   /api/pocketbase/session menolak kredensial akun sinkronisasi.
 
-  Jalankan DI VPS (PowerShell Administrator) dari folder aplikasi:
+  Jalankan DI VPS (PowerShell Administrator):
 
       # 1) Periksa saja (read-only, tidak mengubah apa pun)
       powershell -ExecutionPolicy Bypass -File C:\bejo-pos\scripts\repair-sync-account.ps1
@@ -21,12 +21,12 @@
       PB_SYNC_EMAIL, PB_SYNC_PASSWORD  (dipakai broker)
       PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD (dipakai perbaikan via superuser)
 
-  CATATAN KEAMANAN:
-    - Nilai rahasia tidak pernah dicetak; hanya status TERISI/KOSONG,
-      panjang, dan email yang disamarkan.
-    - Skrip tidak pernah merotasi password superuser. Bila login admin
-      ditolak, ikuti petunjuk yang dicetak di akhir.
-    - Tanpa -Apply tidak ada satu pun operasi tulis ke PocketBase.
+  .env dibaca dengan paket `dotenv` milik aplikasi, jadi nilai yang dipakai
+  skrip ini identik dengan yang dibaca server POS. Nilai rahasia tidak
+  pernah dicetak; hanya status TERISI/KOSONG, panjang, dan email tersamar.
+
+  Skrip tidak pernah merotasi password superuser. Tanpa -Apply tidak ada
+  satu pun operasi tulis ke PocketBase.
 =======================================================================
 #>
 [CmdletBinding()]
@@ -68,23 +68,18 @@ function MaskEmail([string]$value) {
   return ($value.Substring(0, 1) + '***' + $value.Substring($at))
 }
 
-function Read-EnvFile([string]$path) {
-  $map = @{}
-  if (-not (Test-Path $path)) { return $map }
-  foreach ($line in Get-Content -LiteralPath $path -ErrorAction SilentlyContinue) {
-    if ($line -match '^\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$') {
-      $value = $matches[2].Trim()
-      if ($value -match '^"(.*)"$' -or $value -match "^'(.*)'$") { $value = $matches[1] }
-      $map[$matches[1]] = $value
-    }
-  }
-  return $map
+# Properti JSON yang tidak ada dianggap "tidak ada data", bukan satu baris kosong.
+function As-List($value) {
+  return @($value | Where-Object { $null -ne $_ })
 }
 
 Write-Host ''
 Write-Host '  BEJO Digital Print - Perbaikan akun sinkronisasi PocketBase' -ForegroundColor White
 Write-Host ("  Mode: {0}" -f $(if ($Apply) { 'PERBAIKI (menulis ke PocketBase)' } else { 'PERIKSA SAJA (read-only)' })) -ForegroundColor Gray
 
+# ---------------------------------------------------------------------
+Write-Section '1. BERKAS DAN RUNTIME'
+# ---------------------------------------------------------------------
 if (-not (Test-Path -LiteralPath $AppDir)) {
   Fail "Folder aplikasi tidak ditemukan: $AppDir"
   exit 2
@@ -94,33 +89,7 @@ if (-not (Test-Path -LiteralPath $envPath)) {
   Fail ".env tidak ditemukan di $AppDir"
   exit 2
 }
-
-# ---------------------------------------------------------------------
-Write-Section '1. STATUS KUNCI .ENV'
-# ---------------------------------------------------------------------
-$envMap = Read-EnvFile $envPath
-function Report-EnvKey([string]$key, [string]$kind) {
-  if (-not $envMap.ContainsKey($key)) { Warn "$key tidak ada di .env"; return }
-  $value = [string]$envMap[$key]
-  if ([string]::IsNullOrWhiteSpace($value)) { Warn "$key KOSONG"; return }
-  switch ($kind) {
-    'secret' { Ok ("$key terisi (panjang {0}, nilai disembunyikan)" -f $value.Length) }
-    'email'  { Ok ("$key = {0}" -f (MaskEmail $value)) }
-    default  { Ok ("$key = $value") }
-  }
-}
-Report-EnvKey 'POCKETBASE_UPSTREAM' 'plain'
-Report-EnvKey 'PB_SYNC_EMAIL' 'email'
-Report-EnvKey 'PB_SYNC_PASSWORD' 'secret'
-Report-EnvKey 'PB_ADMIN_EMAIL' 'email'
-Report-EnvKey 'PB_ADMIN_PASSWORD' 'secret'
-
-$pbUrl = $LocalPbUrl
-if ([string]::IsNullOrWhiteSpace($pbUrl)) {
-  $pbUrl = [string]$envMap['POCKETBASE_UPSTREAM']
-  if ([string]::IsNullOrWhiteSpace($pbUrl)) { $pbUrl = 'http://127.0.0.1:8090' }
-}
-$pbUrl = $pbUrl.TrimEnd('/')
+Ok ".env ditemukan: $envPath"
 
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
   Fail 'Node.js tidak ditemukan di PATH.'
@@ -130,25 +99,30 @@ if (-not (Test-Path (Join-Path $AppDir 'node_modules\pocketbase'))) {
   Fail 'Paket pocketbase tidak ditemukan di node_modules.'
   exit 2
 }
+if (-not (Test-Path (Join-Path $AppDir 'node_modules\dotenv'))) {
+  Fail 'Paket dotenv tidak ditemukan di node_modules.'
+  exit 2
+}
+Ok 'Node.js, pocketbase, dan dotenv tersedia.'
 
 # ---------------------------------------------------------------------
-Write-Section '2. PEMERIKSAAN / PERBAIKAN AKUN'
+Write-Section '2. PEMERIKSAAN AKUN'
 # ---------------------------------------------------------------------
 $nodeResult = $null
 $tmpNode = Join-Path $AppDir ".tmp-repair-sync-$stamp.mjs"
 $mode = $(if ($Apply) { 'apply' } else { 'check' })
 
 $nodeScript = @'
-import fs from 'node:fs';
+import dotenv from 'dotenv';
 import PocketBase from 'pocketbase';
 
-const [envPath, pbUrl, mode] = process.argv.slice(2);
+const [envPath, pbUrlArg, mode] = process.argv.slice(2);
 const apply = mode === 'apply';
 const out = {
   mode,
   generatedAt: new Date().toISOString(),
-  pbUrl,
-  configured: {},
+  pbUrl: '',
+  env: {},
   sync: {},
   admin: {},
   record: null,
@@ -157,23 +131,23 @@ const out = {
   errors: [],
 };
 
-const env = {};
-try {
-  for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
-    const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (m) env[m[1]] = m[2].trim().replace(/^"(.*)"$/, '$1');
-  }
-} catch (e) {
-  out.errors.push('baca .env: ' + String(e?.message || e));
-}
+// dotenv dipakai apa adanya supaya hasilnya sama dengan server POS.
+// quiet: true wajib agar dotenv tidak mencetak banner sebelum JSON.
+const parsed = dotenv.config({ path: envPath, override: true, quiet: true }).parsed || {};
+const env = { ...parsed };
+const pbUrl = String(pbUrlArg || env.POCKETBASE_UPSTREAM || 'http://127.0.0.1:8090').trim().replace(/\/+$/, '');
+out.pbUrl = pbUrl;
 
 const syncEmail = String(env.PB_SYNC_EMAIL || '').trim().toLowerCase();
 const syncPass = String(env.PB_SYNC_PASSWORD || '');
 const adminEmail = String(env.PB_ADMIN_EMAIL || '').trim();
 const adminPass = String(env.PB_ADMIN_PASSWORD || '');
-out.configured = {
-  sync: Boolean(syncEmail && syncPass),
-  admin: Boolean(adminEmail && adminPass),
+
+out.env = {
+  keys: Object.keys(env).filter((k) => /^(PB_|POCKETBASE)/.test(k)).sort(),
+  sync: { set: Boolean(syncEmail && syncPass), passwordLength: syncPass.length },
+  admin: { set: Boolean(adminEmail && adminPass), passwordLength: adminPass.length },
+  legacySyncInEnv: Boolean(env.VITE_PB_SYNC_EMAIL || env.VITE_PB_SYNC_PASSWORD),
 };
 
 const newClient = () => {
@@ -187,17 +161,18 @@ const lower = (v) => String(v || '').trim().toLowerCase();
 async function probeLogin(email, password) {
   if (!email || !password) return { status: 'SKIPPED' };
   try {
-    await newClient().collection('users').authWithPassword(email, password);
-    return { status: 'OK' };
+    const auth = await newClient().collection('users').authWithPassword(email, password);
+    return { status: 'OK', id: auth.record?.id || '' };
   } catch (e) {
     return { status: 'FAIL', error: brief(e) };
   }
 }
 
 out.sync.loginBefore = await probeLogin(syncEmail, syncPass);
+const loginId = out.sync.loginBefore.id || '';
 
 let adminPb = null;
-if (!out.configured.admin) {
+if (!out.env.admin.set) {
   out.admin.auth = 'SKIPPED';
 } else {
   adminPb = newClient();
@@ -234,11 +209,14 @@ const byEmail = users.find((r) => lower(r.email) === syncEmail);
 const identity = users.filter(
   (r) => lower(r.username) === 'sync' || /bejo sync service/i.test(String(r.name || ''))
 );
-const record = byEmail || (identity.length === 1 ? identity[0] : null);
+// Login yang berhasil adalah bukti terkuat: id record dari token dipakai lebih
+// dulu daripada menebak dari username/nama yang bisa dipakai record lain.
+const byLoginId = loginId ? users.find((r) => r.id === loginId) : null;
+const record = byEmail || byLoginId || (identity.length === 1 ? identity[0] : null);
 
 out.record = record
   ? {
-      foundBy: byEmail ? 'email' : 'identitas',
+      foundBy: byEmail ? 'email' : byLoginId && record.id === byLoginId.id ? 'login-id' : 'identitas',
       id: record.id,
       email: record.email,
       username: record.username ?? null,
@@ -246,14 +224,14 @@ out.record = record
       updated: record.updated ?? null,
       emailMatchesEnv: lower(record.email) === syncEmail,
     }
-  : { foundBy: 'tidak ditemukan' };
+  : { foundBy: 'tidak ditemukan', id: loginId };
 out.record.candidates = identity
   .filter((r) => !record || r.id !== record.id)
   .map((r) => ({ id: r.id, email: r.email, username: r.username ?? null }));
 out.record.duplicateSyncEmail = users.filter((r) => lower(r.email) === syncEmail).length;
 
+const syncId = (record && record.id) || loginId || '';
 const authIds = new Set(users.map((r) => r.id));
-const syncId = record ? record.id : '';
 const dirOf = (r) => {
   const m = r?.data && typeof r.data === 'object' ? r.data : {};
   return {
@@ -265,9 +243,8 @@ const dirOf = (r) => {
 };
 const dirRows = dirs.map(dirOf);
 out.directory.total = dirRows.length;
-out.directory.pointingToSync = syncId
-  ? dirRows.filter((d) => d.authId === syncId)
-  : [];
+out.directory.syncId = syncId;
+out.directory.pointingToSync = syncId ? dirRows.filter((d) => d.authId === syncId) : [];
 out.directory.orphanNamedSync = dirRows.filter(
   (d) => lower(d.username) === 'sync' && (!d.authId || !authIds.has(d.authId))
 );
@@ -278,8 +255,8 @@ out.directory.deleted = [];
 
 if (apply) {
   try {
-    if (record) {
-      await adminPb.collection('users').update(record.id, {
+    if (syncId) {
+      await adminPb.collection('users').update(syncId, {
         email: syncEmail,
         password: syncPass,
         passwordConfirm: syncPass,
@@ -331,7 +308,10 @@ console.log(JSON.stringify(out, null, 2));
 
 try {
   [System.IO.File]::WriteAllText($tmpNode, $nodeScript, [System.Text.UTF8Encoding]::new($false))
-  $raw = (& node $tmpNode $envPath $pbUrl $mode 2>&1) -join "`n"
+  $raw = (& node $tmpNode $envPath $LocalPbUrl $mode 2>&1) -join "`n"
+  # Buang baris non-JSON yang mungkin dicetak pustaka (mis. banner dotenv).
+  $jsonStart = $raw.IndexOf('{')
+  if ($jsonStart -gt 0) { $raw = $raw.Substring($jsonStart) }
   try {
     $nodeResult = $raw | ConvertFrom-Json
     [System.IO.File]::WriteAllText($JsonPath, ($nodeResult | ConvertTo-Json -Depth 8), [System.Text.UTF8Encoding]::new($false))
@@ -350,14 +330,32 @@ if (-not $nodeResult) {
 }
 
 # ---------------------------------------------------------------------
-Write-Section '3. HASIL'
+Write-Section '3. KUNCI .ENV TERBACA (dotenv, sama seperti aplikasi)'
 # ---------------------------------------------------------------------
-if ($nodeResult.configured.sync) {
-  Ok 'Kredensial sinkronisasi di .env lengkap.'
+$envKeys = As-List $nodeResult.env.keys
+if ($envKeys.Count -gt 0) {
+  Info ("Kunci ditemukan: " + ($envKeys -join ', '))
+} else {
+  Warn 'Tidak ada kunci PB_*/POCKETBASE* yang terbaca dari .env.'
+}
+
+if ([bool]$nodeResult.env.sync.set) {
+  Ok ("PB_SYNC_EMAIL + PB_SYNC_PASSWORD terisi (password panjang {0})." -f $nodeResult.env.sync.passwordLength)
 } else {
   Fail 'PB_SYNC_EMAIL / PB_SYNC_PASSWORD belum lengkap di .env.'
 }
+if ([bool]$nodeResult.env.admin.set) {
+  Ok ("PB_ADMIN_EMAIL + PB_ADMIN_PASSWORD terisi (password panjang {0})." -f $nodeResult.env.admin.passwordLength)
+} else {
+  Warn 'PB_ADMIN_EMAIL / PB_ADMIN_PASSWORD belum lengkap di .env.'
+}
+if ([bool]$nodeResult.env.legacySyncInEnv) {
+  Warn 'VITE_PB_SYNC_* (deprecated) masih ada di .env; hapus agar kredensial tidak lagi ikut bundle browser.'
+}
 
+# ---------------------------------------------------------------------
+Write-Section '4. HASIL'
+# ---------------------------------------------------------------------
 $loginBefore = [string]$nodeResult.sync.loginBefore.status
 if ($loginBefore -eq 'OK') {
   Ok 'Login akun sinkronisasi BERHASIL.'
@@ -369,51 +367,71 @@ if ($loginBefore -eq 'OK') {
 
 $adminAuth = [string]$nodeResult.admin.auth
 if ($adminAuth -like 'OK*') {
-  Ok 'Login superuser PocketBase BERHASIL.'
+  if ($adminAuth -like '*legacy*') {
+    Ok 'Login superuser PocketBase BERHASIL (legacy admins).'
+  } else {
+    Ok 'Login superuser PocketBase BERHASIL.'
+  }
 } elseif ($adminAuth -eq 'SKIPPED') {
-  Warn 'PB_ADMIN_EMAIL / PB_ADMIN_PASSWORD kosong; perbaikan otomatis tidak bisa dijalankan.'
+  Warn 'PB_ADMIN_EMAIL / PB_ADMIN_PASSWORD kosong; perbaikan via superuser tidak bisa dijalankan.'
 } else {
   Fail ("Login superuser PocketBase GAGAL: {0}" -f $nodeResult.admin.error)
+  Info 'Kalau kunci di atas terisi tetapi login ditolak, nilainya memang tidak cocok dengan superuser PocketBase.'
 }
 
 $rec = $nodeResult.record
-switch ([string]$rec.foundBy) {
-  'email' { Ok ("Record sinkronisasi ditemukan dari email (id {0})." -f $rec.id) }
-  'identitas' {
-    Warn ("Record sinkronisasi hanya dikenali dari username/nama (id {0}); emailnya sudah berbeda dari .env." -f $rec.id)
+$foundBy = $(if ($rec) { [string]$rec.foundBy } else { '' })
+switch ($foundBy) {
+  'email'     { Ok ("Record sinkronisasi ditemukan dari email (id {0})." -f $rec.id) }
+  'login-id'  { Ok ("Record sinkronisasi cocok dengan id hasil login (id {0})." -f $rec.id) }
+  'identitas' { Warn ("Record sinkronisasi dikenali dari username/nama (id {0}); emailnya berbeda dari .env." -f $rec.id) }
+  default {
+    if ($rec -and $rec.id) {
+      Warn ("Record sinkronisasi tidak terbaca dari daftar, tetapi login memakai id {0}." -f $rec.id)
+    } else {
+      Warn 'Record akun sinkronisasi tidak ditemukan di koleksi users.'
+    }
   }
-  default { Warn 'Record akun sinkronisasi tidak ditemukan di koleksi users.' }
 }
-if ($rec.emailMatchesEnv -eq $false) { Warn 'Email record sinkronisasi TIDAK sama dengan PB_SYNC_EMAIL.' }
-if ($nodeResult.record.candidates -and @($nodeResult.record.candidates).Count -gt 0) {
-  Warn ("Ada {0} record lain ber-username/nama sync: {1}" -f @($nodeResult.record.candidates).Count, ((@($nodeResult.record.candidates) | ForEach-Object { $_.id }) -join ', '))
+if ($rec -and $rec.emailMatchesEnv -eq $false) { Warn 'Email record sinkronisasi TIDAK sama dengan PB_SYNC_EMAIL.' }
+$candidates = As-List $nodeResult.record.candidates
+if ($candidates.Count -gt 0) {
+  Warn ("Ada {0} record lain ber-username/nama sync: {1}" -f $candidates.Count, (($candidates | ForEach-Object { $_.id }) -join ', '))
 }
 if ($nodeResult.record.duplicateSyncEmail -gt 1) {
   Fail ("Ada {0} record dengan email yang sama dengan PB_SYNC_EMAIL." -f $nodeResult.record.duplicateSyncEmail)
 }
 
-if (@($nodeResult.directory.pointingToSync).Count -gt 0) {
-  Fail ("{0} baris app_users menunjuk record sinkronisasi: {1}" -f @($nodeResult.directory.pointingToSync).Count, ((@($nodeResult.directory.pointingToSync) | ForEach-Object { $_.legacyId }) -join ', '))
+$pointing = As-List $nodeResult.directory.pointingToSync
+$orphans = As-List $nodeResult.directory.orphanNamedSync
+$otherSync = As-List $nodeResult.directory.namedSyncWithOtherAuth
+
+if ($adminAuth -notlike 'OK*') {
+  Info 'Data direktori tidak diperiksa karena login superuser tidak tersedia.'
 } else {
-  Ok 'Tidak ada baris app_users yang menunjuk record sinkronisasi.'
-}
-if (@($nodeResult.directory.orphanNamedSync).Count -gt 0) {
-  Warn ("{0} baris app_users yatim ber-username sync: {1}" -f @($nodeResult.directory.orphanNamedSync).Count, ((@($nodeResult.directory.orphanNamedSync) | ForEach-Object { $_.legacyId }) -join ', '))
-}
-if (@($nodeResult.directory.namedSyncWithOtherAuth).Count -gt 0) {
-  Warn ("{0} baris app_users ber-username sync menunjuk record lain (tidak dihapus otomatis)." -f @($nodeResult.directory.namedSyncWithOtherAuth).Count)
+  Info ("Baris app_users diperiksa: {0}." -f $nodeResult.directory.total)
+  if ($pointing.Count -gt 0) {
+    Fail ("{0} baris app_users menunjuk record sinkronisasi: {1}" -f $pointing.Count, (($pointing | ForEach-Object { $_.legacyId }) -join ', '))
+  } else {
+    Ok 'Tidak ada baris app_users yang menunjuk record sinkronisasi.'
+  }
+  if ($orphans.Count -gt 0) {
+    Warn ("{0} baris app_users yatim ber-username sync: {1}" -f $orphans.Count, (($orphans | ForEach-Object { $_.legacyId }) -join ', '))
+  }
+  if ($otherSync.Count -gt 0) {
+    Warn ("{0} baris app_users ber-username sync menunjuk record lain (tidak dihapus otomatis)." -f $otherSync.Count)
+  }
 }
 
 if ($Apply) {
-  Write-Section '4. TINDAKAN YANG DIJALANKAN'
-  if (@($nodeResult.actions).Count -gt 0) {
-    foreach ($action in @($nodeResult.actions)) { Ok $action }
+  Write-Section '5. TINDAKAN YANG DIJALANKAN'
+  $actions = As-List $nodeResult.actions
+  if ($actions.Count -gt 0) {
+    foreach ($action in $actions) { Ok $action }
   } else {
     Warn 'Tidak ada perubahan yang diperlukan.'
   }
-  if (@($nodeResult.errors).Count -gt 0) {
-    foreach ($err in @($nodeResult.errors)) { Fail $err }
-  }
+  foreach ($err in (As-List $nodeResult.errors)) { Fail $err }
   if ([string]$nodeResult.sync.loginAfter.status -eq 'OK') {
     Ok 'Verifikasi ulang: login akun sinkronisasi BERHASIL.'
   } else {
@@ -422,19 +440,22 @@ if ($Apply) {
 }
 
 # ---------------------------------------------------------------------
-Write-Section '5. LANGKAH SELANJUTNYA'
+Write-Section '6. LANGKAH SELANJUTNYA'
 # ---------------------------------------------------------------------
 $syncOk = [string]$nodeResult.sync.loginAfter.status -eq 'OK'
-$adminOk = [string]$nodeResult.admin.auth -like 'OK*'
+$adminOk = $adminAuth -like 'OK*'
 
 if ($syncOk -and -not $Apply) {
-  Ok 'Kredensial sinkronisasi valid. Broker /api/pocketbase/session seharusnya sudah memberi token.'
-  Info 'Bila aplikasi masih Mode Lokal: restart service lalu periksa lagi.'
-  Info "  Restart-Service $ServiceName"
+  Ok 'Kredensial sinkronisasi valid; broker /api/pocketbase/session seharusnya memberi token.'
+  if (-not $adminOk) {
+    Warn 'Login superuser gagal: bila Hak Akses/akun staf bermasalah, perbaiki PB_ADMIN_* dulu.'
+  }
+  Info 'Bila aplikasi masih Mode Lokal, restart service lalu periksa lagi:'
+  Info ("  Restart-Service {0}" -f $ServiceName)
 } elseif ($syncOk -and $Apply) {
   Ok 'Akun sinkronisasi sudah sehat.'
   if (-not $RestartService) {
-    Info "Restart layanan agar sesi browser meminta token baru: Restart-Service $ServiceName"
+    Info ("Restart layanan agar browser meminta token baru: Restart-Service {0}" -f $ServiceName)
   }
 } elseif (-not $adminOk) {
   Fail 'Tanpa akses superuser, akun sinkronisasi tidak bisa diperbaiki dari skrip ini.'
@@ -444,14 +465,14 @@ if ($syncOk -and -not $Apply) {
   Info '  c) Bila password superuser tidak diketahui, rotasi lewat CLI di VPS:'
   Info '     C:\pocketbase\pocketbase.exe superuser upsert EMAIL_ADMIN PASSWORD_BARU --dir C:\pocketbase\pb_data'
   Info '     Perintah itu MENGGANTI kredensial produksi; ketik nilainya langsung di VPS, jangan di chat.'
-  Info '     Setelah itu samakan PB_ADMIN_EMAIL/PB_ADMIN_PASSWORD di .env lalu jalankan ulang skrip ini dengan -Apply.'
+  Info '     Setelah itu samakan PB_ADMIN_EMAIL/PB_ADMIN_PASSWORD di .env lalu jalankan ulang dengan -Apply.'
 } else {
   Info 'Periksa PB_SYNC_PASSWORD di .env: nilainya harus sama dengan password record sinkronisasi.'
   Info 'Jalankan ulang skrip ini dengan -Apply untuk menyamakannya.'
 }
 
 if ($RestartService -and $syncOk) {
-  Write-Section '6. RESTART SERVICE'
+  Write-Section '7. RESTART SERVICE'
   try {
     Restart-Service -Name $ServiceName -Force -ErrorAction Stop
     Ok "Service $ServiceName direstart."
@@ -464,7 +485,7 @@ if ($RestartService -and $syncOk) {
       } catch { }
     }
     if ($healthy) {
-      Ok 'Aplikasi merespons /api/health setelah restart.'
+      Ok ('Aplikasi merespons /api/health (versi {0}).' -f $health.version)
     } else {
       Warn 'Aplikasi belum merespons /api/health; periksa log service.'
     }

@@ -73,11 +73,20 @@ import { saveAgentNotificationCloud } from '../backend/pocketbaseBackend';
 import { exportStockTransactionsToPDF } from '../utils/pdfExport';
 import { resolveAgentForUser } from '../utils/agentMapping';
 import {
+  buildRecapPeriodLabel,
+  formatRecapDayLabel,
+  getAgentDayKey,
+  getAgentMonthKey,
+  getCurrentLocalMonthKey,
+  matchesRecapPeriod,
+  normalizeAgentDateRange,
+  type RecapPeriodConfig
+} from '../utils/agentHistoryPeriod';
+import {
   formatRupiah,
   formatNumber,
   formatNumberInput,
   parseNumber,
-  convertDdMmYyToYyyyMmDd,
   getTransactionDateTimeEpoch
 } from '../utils/formatters';
 import {
@@ -119,31 +128,7 @@ export interface AgentOrderItem {
   stockFormulaText?: string;
 }
 
-// Tanggal transaksi POS tersimpan DD/MM/YY, sedangkan stok/invoice YYYY-MM-DD.
-// Normalisasi agar filter & rekap bulanan agen tidak melewatkan transaksi POS.
-const toAgentDateKey = (value?: string): string => {
-  const raw = (value || '').trim();
-  if (!raw) return '';
-  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
-  return convertDdMmYyToYyyyMmDd(raw.split(/[T ]/)[0]);
-};
-
-const getAgentMonthKey = (tx: { date?: string; timestamp?: number }): string => {
-  const dateKey = toAgentDateKey(tx.date);
-  if (dateKey) return dateKey.slice(0, 7);
-  if (tx.timestamp && tx.timestamp > 0) {
-    const d = new Date(tx.timestamp);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
-  }
-  return '';
-};
-
-const getCurrentLocalMonthKey = (): string => {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
-};
+// Periode riwayat agen & rekap PDF: normalisasi tanggal ada di utils/agentHistoryPeriod.
 
 interface AgentScreenProps {
   products: Product[];
@@ -291,16 +276,27 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   const [historyAgentFilter, setHistoryAgentFilter] = useState<string>('ALL');
   const [historyTypeFilter, setHistoryTypeFilter] = useState<'ALL' | 'PENGAMBILAN_BAHAN' | 'CETAK_AGEN'>('ALL');
   const [historyMonthFilter, setHistoryMonthFilter] = useState<string>('ALL');
+  const [historyPeriodMode, setHistoryPeriodMode] = useState<'BULAN' | 'RENTANG'>('BULAN');
+  const [historyRangeFrom, setHistoryRangeFrom] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [historyRangeTo, setHistoryRangeTo] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
   const [historyViewMode, setHistoryViewMode] = useState<'list' | 'monthly_summary'>('list');
   const [expandedMonthlyCards, setExpandedMonthlyCards] = useState<Record<string, boolean>>({});
 
   // PDF Download Recap Modal State
   const [showDownloadRecapModal, setShowDownloadRecapModal] = useState(false);
-  const [recapPeriodType, setRecapPeriodType] = useState<'HARIAN' | 'MINGGUAN' | 'BULANAN'>('BULANAN');
+  const [recapPeriodType, setRecapPeriodType] = useState<'HARIAN' | 'MINGGUAN' | 'BULANAN' | 'KUSTOM'>('BULANAN');
   const [recapDate, setRecapDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [recapMonth, setRecapMonth] = useState<number>(new Date().getMonth());
   const [recapYear, setRecapYear] = useState<number>(new Date().getFullYear());
   const [recapAgent, setRecapAgent] = useState<string>('ALL');
+  const [recapRangeFrom, setRecapRangeFrom] = useState<string>(historyRangeFrom);
+  const [recapRangeTo, setRecapRangeTo] = useState<string>(historyRangeTo);
 
   // Receipt / Surat Jalan Modal State
   const [showReceiptModal, setShowReceiptModal] = useState(false);
@@ -329,134 +325,6 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
       }
     }
   }, [showReceiptModal, printedTransactionData?.transactionNumber]);
-
-  // PDF Download Recap Helper
-  const handleDownloadPdfRecap = () => {
-    const selectedAgent = recapAgent;
-
-    // Filter Stock Transactions (type 'PENGAMBILAN')
-    const filteredStockTx = (stockTransactions || []).filter((tx) => {
-      if (tx.type !== 'PENGAMBILAN') return false;
-
-      // Filter by agent
-      if (selectedAgent !== 'ALL') {
-        if (!tx.supplierName || tx.supplierName.toLowerCase().trim() !== selectedAgent.toLowerCase().trim()) {
-          return false;
-        }
-      }
-
-      // Filter by period
-      const txDateObj = new Date(tx.date || new Date().toISOString().slice(0, 10));
-      if (recapPeriodType === 'HARIAN') {
-        return tx.date === recapDate;
-      }
-
-      if (recapPeriodType === 'MINGGUAN') {
-        const targetDate = new Date(recapDate);
-        const day = targetDate.getDay();
-        const diffToMonday = targetDate.getDate() - day + (day === 0 ? -6 : 1);
-        const monday = new Date(targetDate.setDate(diffToMonday));
-        monday.setHours(0, 0, 0, 0);
-        const sunday = new Date(monday);
-        sunday.setDate(monday.getDate() + 6);
-        sunday.setHours(23, 59, 59, 999);
-
-        const txTime = tx.timestamp || new Date(`${tx.date}T${tx.time || '12:00:00'}`).getTime();
-        return txTime >= monday.getTime() && txTime <= sunday.getTime();
-      }
-
-      if (recapPeriodType === 'BULANAN') {
-        return txDateObj.getMonth() === recapMonth && txDateObj.getFullYear() === recapYear;
-      }
-
-      return true;
-    });
-
-    // Filter Cetak Agen Transactions
-    const filteredCetakTx = (transactions || []).filter((tx) => {
-      if (!isPosAgenTransaction(tx)) return false;
-
-      // Filter by agent
-      if (selectedAgent !== 'ALL') {
-        const agentName = tx.customer?.name || '';
-        if (agentName.toLowerCase().trim() !== selectedAgent.toLowerCase().trim()) {
-          return false;
-        }
-      }
-
-      // Filter by period
-      const txDateObj = new Date(tx.date || new Date().toISOString().slice(0, 10));
-      if (recapPeriodType === 'HARIAN') {
-        return tx.date === recapDate;
-      }
-
-      if (recapPeriodType === 'MINGGUAN') {
-        const targetDate = new Date(recapDate);
-        const day = targetDate.getDay();
-        const diffToMonday = targetDate.getDate() - day + (day === 0 ? -6 : 1);
-        const monday = new Date(targetDate.setDate(diffToMonday));
-        monday.setHours(0, 0, 0, 0);
-        const sunday = new Date(monday);
-        sunday.setDate(monday.getDate() + 6);
-        sunday.setHours(23, 59, 59, 999);
-
-        const txTime = tx.timestamp || new Date(`${tx.date}T${tx.time || '12:00:00'}`).getTime();
-        return txTime >= monday.getTime() && txTime <= sunday.getTime();
-      }
-
-      if (recapPeriodType === 'BULANAN') {
-        return txDateObj.getMonth() === recapMonth && txDateObj.getFullYear() === recapYear;
-      }
-
-      return true;
-    });
-
-    if (filteredStockTx.length === 0 && filteredCetakTx.length === 0) {
-      alert('Tidak ada data transaksi untuk kriteria filter dan periode yang dipilih.');
-      return;
-    }
-
-    // Generate period label
-    let periodLabelText = '';
-    if (recapPeriodType === 'HARIAN') {
-      periodLabelText = recapDate;
-    } else if (recapPeriodType === 'MINGGUAN') {
-      const targetDate = new Date(recapDate);
-      const day = targetDate.getDay();
-      const diffToMonday = targetDate.getDate() - day + (day === 0 ? -6 : 1);
-      const monday = new Date(targetDate.setDate(diffToMonday));
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      periodLabelText = `Minggu ${monday.toLocaleDateString('id-ID')} s.d ${sunday.toLocaleDateString('id-ID')}`;
-    } else {
-      const monthNames = [
-        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-      ];
-      periodLabelText = `${monthNames[recapMonth]} ${recapYear}`;
-    }
-
-    const agentLabelText = selectedAgent === 'ALL' ? 'Semua Agen' : selectedAgent;
-    const finalPeriodLabel = `${periodLabelText} (${agentLabelText})`;
-
-    try {
-      exportStockTransactionsToPDF(
-        filteredStockTx,
-        'PENGAMBILAN',
-        {
-          periodType: recapPeriodType,
-          periodLabel: finalPeriodLabel,
-          storeName: storeInfo?.storeName || 'BEJO Digital Print',
-          products: products
-        },
-        filteredCetakTx
-      );
-      setShowDownloadRecapModal(false);
-    } catch (err) {
-      console.error('Download recap PDF error:', err);
-      alert('Gagal membuat file PDF rekap. Silakan coba lagi.');
-    }
-  };
 
   // Success / Alert message
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -903,6 +771,65 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     return false;
   };
 
+  // Konfigurasi periode rekap: satu sumber untuk predikat, pratinjau, dan judul PDF
+  const recapPeriodConfig = useMemo<RecapPeriodConfig>(
+    () => ({
+      periodType: recapPeriodType,
+      date: recapDate,
+      month: recapMonth,
+      year: recapYear,
+      rangeFrom: recapRangeFrom,
+      rangeTo: recapRangeTo,
+    }),
+    [recapPeriodType, recapDate, recapMonth, recapYear, recapRangeFrom, recapRangeTo]
+  );
+
+  // Dataset rekap untuk modal unduh PDF (satu sumber untuk pratinjau dan berkas)
+  const recapDataset = useMemo(() => {
+    const forAgent = (name?: string) =>
+      recapAgent === 'ALL' || (name || '').toLowerCase().trim() === recapAgent.toLowerCase().trim();
+
+    const filteredStockTx = (stockTransactions || []).filter(
+      (tx) => tx.type === 'PENGAMBILAN' && forAgent(tx.supplierName) && matchesRecapPeriod(tx, recapPeriodConfig)
+    );
+    const filteredCetakTx = (transactions || []).filter(
+      (tx) => isPosAgenTransaction(tx) && forAgent(tx.customer?.name) && matchesRecapPeriod(tx, recapPeriodConfig)
+    );
+
+    return { filteredStockTx, filteredCetakTx };
+  }, [stockTransactions, transactions, recapAgent, recapPeriodConfig, isPosAgenTransaction]);
+
+  // PDF Download Recap Helper
+  const handleDownloadPdfRecap = () => {
+    const { filteredStockTx, filteredCetakTx } = recapDataset;
+
+    if (filteredStockTx.length === 0 && filteredCetakTx.length === 0) {
+      alert('Tidak ada data transaksi untuk kriteria filter dan periode yang dipilih.');
+      return;
+    }
+
+    const agentLabelText = recapAgent === 'ALL' ? 'Semua Agen' : recapAgent;
+    const finalPeriodLabel = `${buildRecapPeriodLabel(recapPeriodConfig)} (${agentLabelText})`;
+
+    try {
+      exportStockTransactionsToPDF(
+        filteredStockTx,
+        'PENGAMBILAN',
+        {
+          periodType: recapPeriodType,
+          periodLabel: finalPeriodLabel,
+          storeName: storeInfo?.storeName || 'BEJO Digital Print',
+          products: products
+        },
+        filteredCetakTx
+      );
+      setShowDownloadRecapModal(false);
+    } catch (err) {
+      console.error('Download recap PDF error:', err);
+      alert('Gagal membuat file PDF rekap. Silakan coba lagi.');
+    }
+  };
+
   // Convert StockTransactions and POS Transactions into Unified Agent Transactions (1-to-1 matching Laporan Agen)
   const allUnifiedTransactions = useMemo(() => {
     const list: {
@@ -1042,9 +969,28 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     });
   }, [allUnifiedTransactions, isAgentUser, assignedAgentName, currentUser, historyAgentFilter]);
 
-  // Filtered Unified Agent Transactions (Applying Agent, Type, Month, Search)
-  const filteredUnifiedTransactions = useMemo(() => {
+  // Transaksi agen yang sudah dipotong pilihan periode (rentang tanggal / semua bulan)
+  const periodScopedTransactions = useMemo(() => {
+    if (historyPeriodMode !== 'RENTANG') return scopedAgentTransactions;
+    const bounds = normalizeAgentDateRange(historyRangeFrom, historyRangeTo);
     return scopedAgentTransactions.filter((tx) => {
+      const dayKey = getAgentDayKey(tx);
+      return !!dayKey && dayKey >= bounds.from && dayKey <= bounds.to;
+    });
+  }, [scopedAgentTransactions, historyPeriodMode, historyRangeFrom, historyRangeTo]);
+
+  // Label periode aktif untuk banner riwayat (rentang manual atau bulan terpilih)
+  const historyPeriodLabel = useMemo(() => {
+    if (historyPeriodMode === 'RENTANG') {
+      const bounds = normalizeAgentDateRange(historyRangeFrom, historyRangeTo);
+      return `${formatRecapDayLabel(bounds.from)} s.d ${formatRecapDayLabel(bounds.to)}`;
+    }
+    return formatMonthYearLabel(historyMonthFilter);
+  }, [historyPeriodMode, historyRangeFrom, historyRangeTo, historyMonthFilter]);
+
+  // Filtered Unified Agent Transactions (Applying Agent, Type, Month/Range, Search)
+  const filteredUnifiedTransactions = useMemo(() => {
+    return periodScopedTransactions.filter((tx) => {
       // 1. Transaction Type Filter (Pengambilan Bahan vs Cetak Agen)
       if (historyTypeFilter !== 'ALL') {
         if (tx.kind !== historyTypeFilter) {
@@ -1052,8 +998,8 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         }
       }
 
-      // 2. Month Filter (YYYY-MM)
-      if (historyMonthFilter !== 'ALL') {
+      // 2. Bulan hanya dipakai sebagai filter pada mode periode 'BULAN'
+      if (historyPeriodMode === 'BULAN' && historyMonthFilter !== 'ALL') {
         const txMonth = getAgentMonthKey(tx);
         if (txMonth !== historyMonthFilter) {
           return false;
@@ -1071,7 +1017,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
 
       return matchId || matchAgent || matchNotes || matchItems;
     });
-  }, [scopedAgentTransactions, historyTypeFilter, historyMonthFilter, historySearch]);
+  }, [periodScopedTransactions, historyTypeFilter, historyPeriodMode, historyMonthFilter, historySearch]);
 
   // Monthly Aggregated Summary Engine for Pengambilan Bahan & Cetak Agen
   const monthlyBahanSummary = useMemo(() => {
@@ -1093,11 +1039,11 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         totalAmount: number;
         timesTaken: number;
       }>;
-      transactions: typeof scopedAgentTransactions;
+      transactions: typeof periodScopedTransactions;
     }>();
 
     // Group transactions by month
-    scopedAgentTransactions.forEach((tx) => {
+    periodScopedTransactions.forEach((tx) => {
       const monthKey = getAgentMonthKey(tx);
       if (!monthKey) return;
 
@@ -1172,7 +1118,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
 
     // Sort newest month first
     return result.sort((a, b) => b.monthKey.localeCompare(a.monthKey));
-  }, [scopedAgentTransactions]);
+  }, [periodScopedTransactions]);
 
   // Overall Stats based on current month filter or all
   const statsBahan = useMemo(() => {
@@ -1956,23 +1902,69 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                 />
               </div>
 
-              {/* Month Selector Filter (Pengambilan Bahan Tiap Bulan) */}
-              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 font-semibold focus-within:ring-2 focus-within:ring-slate-900 shadow-2xs">
-                <CalendarDays className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                <select
-                  value={historyMonthFilter}
-                  onChange={(e) => setHistoryMonthFilter(e.target.value)}
-                  className="bg-transparent text-xs text-slate-800 font-bold focus:outline-none cursor-pointer"
-                  title="Filter pengambilan bahan berdasarkan bulan"
+              {/* Periode Riwayat: per bulan ATAU rentang tanggal manual */}
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setHistoryPeriodMode('BULAN')}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                    historyPeriodMode === 'BULAN' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Saring riwayat berdasarkan bulan"
                 >
-                  <option value="ALL">📅 Semua Bulan ({availableMonths.length} Periode)</option>
-                  {availableMonths.map((mKey) => (
-                    <option key={mKey} value={mKey}>
-                      📅 {formatMonthYearLabel(mKey)} {mKey === getCurrentLocalMonthKey() ? '• Bulan Ini' : ''}
-                    </option>
-                  ))}
-                </select>
+                  Per Bulan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryPeriodMode('RENTANG')}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                    historyPeriodMode === 'RENTANG' ? 'bg-indigo-700 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Saring riwayat berdasarkan tanggal awal - akhir"
+                >
+                  Rentang Tanggal
+                </button>
               </div>
+
+              {historyPeriodMode === 'BULAN' ? (
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 font-semibold focus-within:ring-2 focus-within:ring-slate-900 shadow-2xs">
+                  <CalendarDays className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  <select
+                    value={historyMonthFilter}
+                    onChange={(e) => setHistoryMonthFilter(e.target.value)}
+                    className="bg-transparent text-xs text-slate-800 font-bold focus:outline-none cursor-pointer"
+                    title="Filter pengambilan bahan berdasarkan bulan"
+                  >
+                    <option value="ALL">📅 Semua Bulan ({availableMonths.length} Periode)</option>
+                    {availableMonths.map((mKey) => (
+                      <option key={mKey} value={mKey}>
+                        📅 {formatMonthYearLabel(mKey)} {mKey === getCurrentLocalMonthKey() ? '• Bulan Ini' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-indigo-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 font-semibold focus-within:ring-2 focus-within:ring-slate-900 shadow-2xs">
+                  <CalendarDays className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  <input
+                    type="date"
+                    value={historyRangeFrom}
+                    max={historyRangeTo}
+                    onChange={(e) => setHistoryRangeFrom(e.target.value)}
+                    className="bg-transparent text-xs text-slate-800 font-bold focus:outline-none"
+                    title="Tanggal awal riwayat"
+                  />
+                  <span className="text-slate-400 font-bold">s/d</span>
+                  <input
+                    type="date"
+                    value={historyRangeTo}
+                    min={historyRangeFrom}
+                    onChange={(e) => setHistoryRangeTo(e.target.value)}
+                    className="bg-transparent text-xs text-slate-800 font-bold focus:outline-none"
+                    title="Tanggal akhir riwayat"
+                  />
+                </div>
+              )}
 
               {/* Agent Filter */}
               {isDeveloperOrAdminOrOwner ? (
@@ -2005,7 +1997,11 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                 type="button"
                 onClick={() => {
                   setRecapAgent(historyAgentFilter);
-                  if (historyMonthFilter !== 'ALL') {
+                  if (historyPeriodMode === 'RENTANG') {
+                    setRecapPeriodType('KUSTOM');
+                    setRecapRangeFrom(historyRangeFrom);
+                    setRecapRangeTo(historyRangeTo);
+                  } else if (historyMonthFilter !== 'ALL') {
                     const [yStr, mStr] = historyMonthFilter.split('-');
                     const mIdx = parseInt(mStr, 10) - 1;
                     const y = parseInt(yStr, 10);
@@ -2116,13 +2112,13 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
             </div>
           </div>
 
-          {/* Active Month Filter Info Banner */}
-          {historyMonthFilter !== 'ALL' && (
+          {/* Active Period Filter Info Banner */}
+          {(historyPeriodMode === 'RENTANG' || historyMonthFilter !== 'ALL') && (
             <div className="bg-indigo-50/80 border border-indigo-200 rounded-xl px-3.5 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
               <div className="flex items-center gap-2 text-indigo-950 font-medium">
                 <CalendarDays className="w-4 h-4 text-indigo-600 shrink-0" />
                 <span>
-                  Menampilkan data periode: <strong className="font-bold text-indigo-900">{formatMonthYearLabel(historyMonthFilter)}</strong>
+                  Menampilkan data periode: <strong className="font-bold text-indigo-900">{historyPeriodLabel}</strong>
                 </span>
                 <span className="text-slate-400">•</span>
                 <span className="text-indigo-800 font-bold">
@@ -2131,7 +2127,10 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => setHistoryMonthFilter('ALL')}
+                onClick={() => {
+                  if (historyPeriodMode === 'RENTANG') setHistoryPeriodMode('BULAN');
+                  setHistoryMonthFilter('ALL');
+                }}
                 className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 underline flex items-center gap-1 cursor-pointer"
               >
                 <span>Tampilkan Semua Bulan</span>
@@ -2151,7 +2150,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                 </div>
               ) : (
                 monthlyBahanSummary
-                  .filter((m) => historyMonthFilter === 'ALL' || m.monthKey === historyMonthFilter)
+                  .filter((m) => historyPeriodMode !== 'BULAN' || historyMonthFilter === 'ALL' || m.monthKey === historyMonthFilter)
                   .map((monthData) => {
                     const isExpanded = expandedMonthlyCards[monthData.monthKey] !== false; // default expanded
                     const isCurrentMonth = monthData.monthKey === getCurrentLocalMonthKey();
@@ -3215,7 +3214,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   2. Pilih Rentang Periode:
                 </label>
-                <div className="grid grid-cols-3 gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold">
                   <button
                     type="button"
                     onClick={() => setRecapPeriodType('HARIAN')}
@@ -3248,6 +3247,17 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                     }`}
                   >
                     Bulanan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRecapPeriodType('KUSTOM')}
+                    className={`py-2 rounded-lg text-center transition-all cursor-pointer ${
+                      recapPeriodType === 'KUSTOM'
+                        ? 'bg-indigo-700 text-white font-bold shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-950 hover:bg-slate-200/50'
+                    }`}
+                  >
+                    Rentang Tanggal
                   </button>
                 </div>
               </div>
@@ -3320,6 +3330,49 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                   </div>
                 </div>
               )}
+
+              {recapPeriodType === 'KUSTOM' && (
+                <div className="grid grid-cols-2 gap-2.5 animate-in fade-in slide-in-from-top-1 duration-100">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-700">
+                      3. Tanggal Awal:
+                    </label>
+                    <input
+                      type="date"
+                      value={recapRangeFrom}
+                      max={recapRangeTo}
+                      onChange={(e) => setRecapRangeFrom(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Tanggal Akhir:
+                    </label>
+                    <input
+                      type="date"
+                      value={recapRangeTo}
+                      min={recapRangeFrom}
+                      onChange={(e) => setRecapRangeTo(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    />
+                  </div>
+                  <p className="col-span-2 text-[10px] text-slate-500">
+                    Rekap PDF berisi pengambilan bahan &amp; cetak agen pada {buildRecapPeriodLabel(recapPeriodConfig)}
+                    {recapAgent === 'ALL' ? ' untuk semua agen.' : ` milik agen ${recapAgent}.`}
+                  </p>
+                </div>
+              )}
+
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-700 space-y-0.5">
+                <div className="font-bold text-slate-800">
+                  Isi rekap: {recapDataset.filteredStockTx.length} transaksi pengambilan bahan
+                  {recapDataset.filteredCetakTx.length > 0 && ` + ${recapDataset.filteredCetakTx.length} transaksi cetak agen`}
+                </div>
+                <div className="text-slate-500">
+                  PDF berisi baris yang sama dengan yang sedang ditampilkan bila periode dan agennya identik.
+                </div>
+              </div>
 
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px] flex gap-2">
                 <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />

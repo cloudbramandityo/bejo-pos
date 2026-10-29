@@ -7,7 +7,7 @@ import { downloadPdfFile, normalizeTransactionForPdf } from './pdfDownload';
 
 
 interface PDFExportOptions {
-  periodType: 'HARIAN' | 'MINGGUAN' | 'BULANAN' | 'SEMUA';
+  periodType: 'HARIAN' | 'MINGGUAN' | 'BULANAN' | 'KUSTOM' | 'SEMUA';
   periodLabel: string;
   storeName?: string;
   shiftFilter?: string;

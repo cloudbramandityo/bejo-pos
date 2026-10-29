@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "4.8.0",
+  "version": "4.9.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -11,6 +11,7 @@
     "check:paths": "node scripts/check-path-fabrication.mjs",
     "check:users": "tsx scripts/check-staff-credential.mts && tsx scripts/check-credential-policy.mts",
     "check:trend": "tsx scripts/check-asset-trend.mts",
+    "check:agent-period": "tsx scripts/check-agent-period.mts",
     "dev-password:set": "node scripts/set-dev-password.mjs --prompt --no-backup --min-length 10",
     "dev-password:verify": "node scripts/set-dev-password.mjs --verify",
     "version:show": "node scripts/version.mjs --show",

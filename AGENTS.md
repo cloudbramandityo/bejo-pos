@@ -138,6 +138,18 @@ Aturan turun-temurun:
 - Panel "Pergerakan Aset" harus menulis dasar perhitungannya apa adanya (rekonstruksi mundur, tanggal awal penelusuran, baris item yang produknya sudah dihapus dilaporkan sebagai tidak dinilai — bukan diam-diam diabaikan).
 - Uji regresi: `npm run check:trend` (kasus 9–17 di `scripts/check-asset-trend.mts`).
 
+## Periode riwayat agen & rekap PDF (wajib)
+
+Lihat dan unduh memakai predikat periode yang sama; jangan menulis ulang perbandingan tanggal di komponen.
+
+- Aturan tunggal ada di `src/utils/agentHistoryPeriod.ts` (`matchesRecapPeriod`, `buildRecapPeriodLabel`). Daftar Riwayat Pengambilan, pratinjau "Isi rekap", dan `exportStockTransactionsToPDF` semuanya memanggil `recapPeriodConfig` yang sama — kalau salah satu punya predikat sendiri, PDF tidak lagi sama dengan tabel.
+- Perbandingan selalu lewat kunci hari `YYYY-MM-DD` hasil normalisasi. Transaksi Kasir POS tersimpan `DD/MM/YY`, mutasi stok `YYYY-MM-DD`; membandingkan string mentah atau `new Date(tx.date)` membuat baris lama hilang dari hasil (gejala: jumlah PDF < jumlah di layar).
+- Rentang tanggal bersifat inklusif di kedua ujung dan input terbalik dinormalkan (`normalizeAgentDateRange`); baris tanpa tanggal yang terbaca **tidak boleh** ikut masuk periode.
+- Mode `RENTANG` pada filter riwayat mengabaikan pilihan bulan (`historyMonthFilter`) dan berlaku untuk tampilan list maupun kartu Rekap Bahan; mode `BULAN` mengabaikan rentang. Tombol unduh PDF meniru periode aktif (`KUSTOM` saat rentang, `BULANAN` saat bulan terpilih).
+- `periodType: 'KUSTOM'` wajib tetap ada di `PDFExportOptions` (`src/utils/pdfExport.ts`) dan label periode ditulis dari `buildRecapPeriodLabel`, bukan digabung manual.
+- Tambah mode periode baru → perluas `RecapPeriodType` + kasus di `scripts/check-agent-period.mts` (`npm run check:agent-period`), jangan menambah cabang `if` di `AgentScreen.tsx`.
+- Uji regresi: `npm run check:agent-period` (format lama, batas minggu Senin–Minggu, inklusivitas rentang, dan label periode).
+
 ## Deploy
 
 Gunakan `deploy/deploy-vps.ps1` yang sudah ada. Jangan membuat skrip deploy baru. Build dan deploy hanya setelah `npm run build` lulus (termasuk check-brand, check-version, dan check-path-fabrication).

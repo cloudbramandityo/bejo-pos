@@ -56,30 +56,39 @@ function Redact([string]$text) {
   return ($text -replace '(?i)(password|passwd|token|secret|authorization|api[_-]?key)\s*[:=]\s*[^\s,;"'']+', '$1=***')
 }
 
-function Read-EnvFile([string]$path) {
-  $map = @{}
-  if (-not (Test-Path $path)) { return $map }
-  foreach ($line in Get-Content -LiteralPath $path -ErrorAction SilentlyContinue) {
-    if ($line -match '^\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$') {
-      $value = $matches[2].Trim()
-      if ($value -match '^"(.*)"$' -or $value -match "^'(.*)'$") { $value = $matches[1] }
-      $map[$matches[1]] = $value
-    }
-  }
-  return $map
+# .env dibaca lewat dotenv (parser yang sama dengan server) supaya password
+# ber-escape tidak membuat laporan berbeda dari kenyataan. Nilai rahasia hanya
+# keluar sebagai panjang; nilai biasa (APP_URL, PUBLIC_SITE, dst.) apa adanya.
+function Get-EnvInfo([string]$path, [string]$appDir) {
+  $tmp = Join-Path $appDir ('.tmp-diagnose-env-' + [guid]::NewGuid().ToString('N') + '.mjs')
+  $script = @'
+import dotenv from 'dotenv';
+const [envPath] = process.argv.slice(2);
+const env = dotenv.config({ path: envPath, override: true, quiet: true }).parsed || {};
+const plain = ['APP_URL', 'POCKETBASE_UPSTREAM', 'VITE_POCKETBASE_URL', 'PUBLIC_SITE', 'ALLOW_DEFAULT_STAFF_PASSWORDS', 'DEV_USERNAME'];
+const secret = ['PB_SYNC_EMAIL', 'PB_SYNC_PASSWORD', 'PB_ADMIN_EMAIL', 'PB_ADMIN_PASSWORD', 'DEV_PASSWORD_HASH', 'APP_SESSION_SECRET', 'GEMINI_API_KEY', 'REMOTE_ACCESS_PASS'];
+const legacy = ['VITE_PB_SYNC_EMAIL', 'VITE_PB_SYNC_PASSWORD'];
+const out = {};
+for (const key of [...plain, ...secret, ...legacy]) {
+  const present = Object.prototype.hasOwnProperty.call(env, key);
+  out[key] = {
+    present,
+    length: String(env[key] ?? '').length,
+    value: plain.includes(key) ? String(env[key] ?? '') : null,
+  };
 }
-
-function Show-EnvKey($map, [string]$key, [bool]$secret) {
-  if (-not $map.ContainsKey($key)) { Warn "Env $key tidak ada di .env"; return }
-  $value = [string]$map[$key]
-  if ([string]::IsNullOrWhiteSpace($value)) {
-    Warn "Env $key KOSONG"
-    return
-  }
-  if ($secret) {
-    Ok ("Env $key terisi (panjang {0}, nilai disembunyikan)" -f $value.Length)
-  } else {
-    Ok ("Env $key = $value")
+console.log(JSON.stringify(out));
+'@
+  try {
+    [System.IO.File]::WriteAllText($tmp, $script, [System.Text.UTF8Encoding]::new($false))
+    $raw = (& node $tmp $path 2>&1) -join "`n"
+    $start = $raw.IndexOf('{')
+    if ($start -gt 0) { $raw = $raw.Substring($start) }
+    return ($raw | ConvertFrom-Json)
+  } catch {
+    return $null
+  } finally {
+    Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
   }
 }
 
@@ -194,22 +203,29 @@ try {
   # ------------------------------------------------------------------
   Write-Section 'B. KONFIGURASI .env (NILAI RAHASIA DISEMBUNYIKAN)'
   # ------------------------------------------------------------------
-  $envMap = Read-EnvFile $envPath
-  if ($envMap.Count -eq 0) {
-    Fail 'Tidak ada variabel yang terbaca dari .env'
+  $envInfo = Get-EnvInfo $envPath $AppDir
+  if (-not $envInfo) {
+    Fail 'Tidak dapat membaca .env lewat dotenv (Node atau paket dotenv tidak tersedia).'
   } else {
     foreach ($key in @('APP_URL', 'POCKETBASE_UPSTREAM', 'VITE_POCKETBASE_URL', 'PUBLIC_SITE', 'ALLOW_DEFAULT_STAFF_PASSWORDS', 'DEV_USERNAME')) {
-      Show-EnvKey $envMap $key $false
+      $info = $envInfo.$key
+      if (-not $info.present) { Warn "Env $key tidak ada di .env" }
+      elseif ([string]::IsNullOrWhiteSpace([string]$info.value)) { Warn "Env $key KOSONG" }
+      else { Ok "Env $key = $($info.value)" }
     }
     foreach ($key in @('PB_SYNC_EMAIL', 'PB_SYNC_PASSWORD', 'PB_ADMIN_EMAIL', 'PB_ADMIN_PASSWORD', 'DEV_PASSWORD_HASH', 'APP_SESSION_SECRET', 'GEMINI_API_KEY', 'REMOTE_ACCESS_PASS')) {
-      Show-EnvKey $envMap $key $true
+      $info = $envInfo.$key
+      if (-not $info.present) { Warn "Env $key tidak ada di .env" }
+      elseif ($info.length -le 0) { Warn "Env $key KOSONG" }
+      else { Ok ("Env $key terisi (panjang {0}, nilai disembunyikan)" -f $info.length) }
     }
     foreach ($legacy in @('VITE_PB_SYNC_EMAIL', 'VITE_PB_SYNC_PASSWORD')) {
-      if ($envMap.ContainsKey($legacy) -and -not [string]::IsNullOrWhiteSpace([string]$envMap[$legacy])) {
+      $info = $envInfo.$legacy
+      if ($info.present -and $info.length -gt 0) {
         Warn "$legacy masih ada di .env (kredensial lama ikut bundle browser). Hapus setelah broker berjalan."
       }
     }
-    if ((($envMap['ALLOW_DEFAULT_STAFF_PASSWORDS'] + '').Trim().ToLower()) -eq 'true') {
+    if (([string]$envInfo.ALLOW_DEFAULT_STAFF_PASSWORDS.value).Trim().ToLower() -eq 'true') {
       Warn 'ALLOW_DEFAULT_STAFF_PASSWORDS=true (password default publik diizinkan).'
     }
   }
@@ -329,19 +345,22 @@ try {
     Fail 'Paket pocketbase tidak ditemukan di node_modules; pemeriksaan akun dilewati.'
   } else {
     $nodeScript = @'
-import fs from 'node:fs';
+import dotenv from 'dotenv';
 import PocketBase from 'pocketbase';
 
 const [envPath, pbUrl] = process.argv.slice(2);
 const out = { pbUrl, generatedAt: new Date().toISOString(), sync: {}, admin: {}, users: {}, appUsers: {}, collections: {}, risk: {} };
-const env = {};
+// dotenv dipakai apa adanya supaya hasilnya sama dengan server POS. Parser
+// buatan sendiri tidak menangani escape (\" dan \\) sehingga password ber-escape
+// dikirim salah dan login admin dilaporkan gagal padahal kredensialnya benar.
+let env = {};
 try {
-  for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
-    const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (m) env[m[1]] = m[2].trim().replace(/^"(.*)"$/, '$1');
-  }
+  env = { ...(dotenv.config({ path: envPath, override: true, quiet: true }).parsed || {}) };
 } catch (e) {
   out.envError = String(e?.message || e);
+}
+if (!/^https?:\/\//i.test(String(pbUrl || ''))) {
+  out.configError = `URL PocketBase tidak valid: "${pbUrl}"`;
 }
 
 const syncEmail = (env.PB_SYNC_EMAIL || '').trim().toLowerCase();
@@ -350,6 +369,15 @@ out.sync.configured = Boolean(syncEmail && syncPass);
 out.sync.emailDomain = syncEmail.includes('@') ? syncEmail.split('@')[1] : null;
 
 const newClient = () => { const pb = new PocketBase(pbUrl); pb.autoCancellation(false); return pb; };
+// Pesan SDK "Something went wrong." tidak memberi tahu apakah itu 400 (kredensial)
+// atau jaringan; status dan pesan asli diteruskan agar tidak salah diagnosa.
+const brief = (e) => {
+  const status = Number(e?.status) || 0;
+  const original = String(e?.originalError?.message || '').trim();
+  const message = String(e?.message || e || '').trim() || 'galat tanpa pesan';
+  if (status) return original && original !== message ? `${status} ${message} (${original})` : `${status} ${message}`;
+  return original ? `jaringan ${original}` : message;
+};
 
 try {
   const auth = await newClient().collection('users').authWithPassword(syncEmail, syncPass);
@@ -370,7 +398,7 @@ try {
   };
 } catch (e) {
   out.sync.auth = 'FAIL';
-  out.sync.error = `${e?.status || ''} ${e?.message || e}`.trim();
+  out.sync.error = brief(e);
 }
 
 const adminEmail = (env.PB_ADMIN_EMAIL || '').trim();
@@ -389,12 +417,12 @@ if (out.admin.configured) {
         out.admin.auth = 'OK (legacy admins)';
       } else {
         out.admin.auth = 'FAIL';
-        out.admin.error = `${e1?.status || ''} ${e1?.message || e1}`.trim();
+        out.admin.error = brief(e1);
         adminPb = null;
       }
     } catch (e2) {
       out.admin.auth = 'FAIL';
-      out.admin.error = `${e2?.status || ''} ${e2?.message || e2}`.trim();
+      out.admin.error = brief(e2);
       adminPb = null;
     }
   }
@@ -407,7 +435,7 @@ if (adminPb) {
   let dirRows = [];
   try {
     userRows = await adminPb.collection('users').getFullList({
-      fields: 'id,email,username,name,role,isActive,verified,legacyId,created,updated',
+      fields: 'id,email,username,name,role,isActive,verified,legacyId,appPassword,created,updated',
       requestKey: null,
     });
   } catch (e) {
@@ -452,6 +480,19 @@ if (adminPb) {
     if (u) usersByUsername.set(u, (usersByUsername.get(u) || 0) + 1);
   }
   out.users.duplicateUsernames = [...usersByUsername.entries()].filter(([, n]) => n > 1).map(([username, count]) => ({ username, count }));
+
+  // Record lama masih menyimpan password plaintext di `appPassword`, dan
+  // verifikasi login memakai field itu lebih dulu. Bila tidak dikosongkan,
+  // password baru dari Developer tidak pernah berlaku — login tetap memakai
+  // password lama. Nilai tidak pernah dicetak, hanya keberadaannya.
+  out.users.legacyPlaintextPasswords = userRows
+    .filter((r) => String(r.appPassword || '').length > 0)
+    .map((r) => ({
+      id: r.id,
+      email: r.email,
+      username: r.username ?? null,
+      updated: r.updated,
+    }));
 
   out.appUsers.total = dirRows.length;
   const dirOf = (r) => {
@@ -603,6 +644,14 @@ console.log(JSON.stringify(out, null, 2));
       if ($recent.Count -gt 0) {
         Info 'app_users terbaru diubah (indikasi aktivitas restore/profil):'
         $recent | ForEach-Object { Info "  - $($_.updated) | $($_.username) ($($_.role)) mustChangePassword=$($_.mustChangePassword)" }
+      }
+
+      $legacyPass = @($nodeResult.users.legacyPlaintextPasswords)
+      if ($legacyPass.Count -gt 0) {
+        Warn ("{0} record kredensial masih menyimpan password plaintext lama (appPassword): {1}" -f $legacyPass.Count, (($legacyPass | ForEach-Object { $_.username }) -join ', '))
+        Info 'Login memakai appPassword itu lebih dulu, sehingga password baru dari Developer tidak berlaku. Perbaiki lewat Hak Akses & Akun (isi password baru) atau jalankan ulang reset password.'
+      } else {
+        Ok 'Tidak ada record kredensial yang menyimpan password plaintext lama (appPassword).'
       }
     } elseif ($nodeResult.admin.auth -eq 'SKIPPED') {
       Warn 'PB_ADMIN_EMAIL/PB_ADMIN_PASSWORD tidak diset: pemeriksaan users/app_users mendalam dilewati.'

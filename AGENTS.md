@@ -94,3 +94,11 @@ Setiap staf mengatur sendiri nama tampilan, foto profil, username login, dan pas
 ## Deploy
 
 Gunakan `deploy/deploy-vps.ps1` yang sudah ada. Jangan membuat skrip deploy baru. Build dan deploy hanya setelah `npm run build` lulus (termasuk check-brand, check-version, dan check-path-fabrication).
+
+Untuk memeriksa kondisi aplikasi live (koneksi PocketBase, akun sinkronisasi, `app_users`, log, disk), jalankan skrip read-only yang sudah ada **di VPS**:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\bejo-pos\scripts\diagnose-live.ps1
+```
+
+Skrip hanya membaca (tidak menulis database), menyembunyikan nilai rahasia, dan menghasilkan laporan `.txt` + `.json` di `%TEMP%`. Jangan mendiagnosis live dari workstation: `.env` lokal bisa berbeda dari VPS.

@@ -91,6 +91,16 @@ Setiap staf mengatur sendiri nama tampilan, foto profil, username login, dan pas
 - Akun DEVELOPER tidak punya baris direktori; perubahan profilnya ditolak server (`PROFILE_DEVELOPER_LOCKED`) dan diatur lewat `DEV_USERNAME` / `DEV_PASSWORD_HASH`.
 - Aturan wajib ganti password **tidak pernah** berlaku untuk DEVELOPER. Kredensialnya berasal dari `DEV_PASSWORD_HASH`, bukan direktori staf, sehingga flag `mustChangePassword` selalu `false` di respons login/sesi dan modal terkunci tidak boleh muncul — termasuk bila localStorage menyimpan flag lama (`true`); merge sesi di `App.tsx` menimpanya dan modal memakai `forceChange = forced && !isDeveloper`. ID `user_dev`/`sys_core_developer` juga ditolak untuk buat/ubah/hapus akun (`ACCOUNT_RESERVED`).
 
+## Wewenang ADMIN atas data operasional (wajib)
+
+ADMIN = akses operasional penuh terhadap **data** di tab SPK Cetak, Laporan, dan Invoice. Aturan tunggal ada di `src/utils/recordAccess.ts` (`canManageRecords(role)` → DEVELOPER atau ADMIN) dan dipakai `SpkScreen`, `TransactionHistoryScreen`, `InvoiceScreen`.
+
+- Yang termasuk wewenang ADMIN: hapus order SPK (kartu Kanban, baris tabel, modal detail), purge arsip SPK Selesai, edit/hapus transaksi penjualan, edit/hapus mutasi stok, dan hapus dokumen PI/INV termasuk status Lunas.
+- Yang **tetap** khusus DEVELOPER: antrean/status mesin cetak, status tim, kelola akun SPK, panel diagnostik backend, dan **modul Jurnal** — server menolak selain sesi DEVELOPER (`requireDeveloper` di `server/journalApi.ts`), jadi jangan membuka tombol edit Jurnal di UI karena akan selalu gagal HTTP 401.
+- Gerbang ini ada di sisi UI; hak tulis data ke PocketBase tidak berubah. Bagian yang benar-benar ditegakkan server hanyalah manajemen akun (`requireManageRole`, DEVELOPER/ADMIN/OWNER) dan profil mandiri.
+- Label tombol tidak boleh lagi berbunyi "Khusus DEVELOPER" bila aksinya sudah dipakai bersama ADMIN — tulisan yang menyesatkan membuat operator mengira akunnya rusak.
+- Ubah wewenang cukup di `canManageRecords`; jangan menambah pemeriksaan `role === 'DEVELOPER'` baru di komponen.
+
 ## Akun sinkronisasi PocketBase (wajib)
 
 `PB_SYNC_EMAIL` / `PB_SYNC_PASSWORD` di `.env` adalah **sumber kebenaran** kredensial akun sinkronisasi yang dipakai broker `/api/pocketbase/session`. Record `users` miliknya dikelola server, bukan staf.

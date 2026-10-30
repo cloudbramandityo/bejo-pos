@@ -385,6 +385,27 @@ const COLLECTIONS = [
     ],
   },
   {
+    // Hasil Rekonsiliasi di tab Laporan: analisis varians (rencana vs capaian)
+    // dan analisis komparatif (dua periode). Isian baris + hasil hitungannya
+    // disimpan bersama supaya bisa dibuka lagi dan dicetak dari perangkat lain.
+    name: 'reconciliation_runs',
+    type: 'base',
+    fields: [
+      T('title', true),
+      SEL('kind', ['VARIANS', 'KOMPARATIF'], true),
+      T('labelA'),
+      T('labelB'),
+      J('columns'),
+      J('rows'),
+      J('analysis'),
+      T('notes', false, 1000),
+      T('authorId', false, 60),
+      T('authorName'),
+      N('createdAt'),
+      N('updatedAt'),
+    ],
+  },
+  {
     name: 'spk_orders',
     type: 'base',
     fields: [

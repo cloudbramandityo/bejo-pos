@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "4.9.2",
+  "version": "4.10.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -12,6 +12,7 @@
     "check:users": "tsx scripts/check-staff-credential.mts && tsx scripts/check-credential-policy.mts",
     "check:trend": "tsx scripts/check-asset-trend.mts",
     "check:agent-period": "tsx scripts/check-agent-period.mts",
+    "check:reconciliation": "tsx scripts/check-reconciliation.mts",
     "check:copy": "node scripts/check-ui-language.mjs",
     "check:copy:strict": "node scripts/check-ui-language.mjs --strict",
     "dev-password:set": "node scripts/set-dev-password.mjs --prompt --no-backup --min-length 10",

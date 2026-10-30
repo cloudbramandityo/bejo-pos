@@ -48,6 +48,7 @@ import {
   TaxpayerProfile,
   MonthlyBillingsByYear
 } from '../types/tax';
+import type { ReconciliationRun } from '../types/reconciliation';
 import {
   StoreInfo,
   DEFAULT_STORE_INFO,
@@ -79,6 +80,7 @@ export const PB_COLLECTIONS = {
   transactions: 'transactions',
   stock_transactions: 'stock_transactions',
   asset_adjustments: 'asset_adjustments',
+  reconciliation_runs: 'reconciliation_runs',
   shifts: 'shifts',
   cashiers: 'cashiers',
   users: 'users',
@@ -1625,6 +1627,48 @@ export async function saveBatchAssetAdjustmentsCloud(items: AssetAdjustment[]): 
     }
     if (firstError) throw firstError;
   }, OperationType.WRITE, 'asset_adjustments');
+}
+
+/* -------------------------------------------------------------------------- */
+/*  10c. Rekonsiliasi (analisis varians & komparatif)                          */
+/* -------------------------------------------------------------------------- */
+export function subscribeReconciliationRuns(
+  onData: (items: ReconciliationRun[]) => void
+): () => void {
+  return createSafeSubscription('reconciliation_runs', OperationType.LIST, (onError) =>
+    subscribeCollection('reconciliation_runs', (items) => {
+      const list = (items as ReconciliationRun[]).filter(Boolean);
+      list.sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+      onData(list);
+    }, onError)
+  );
+}
+
+export async function saveReconciliationRunCloud(run: ReconciliationRun): Promise<void> {
+  return safeCloudWrite(async () => {
+    await upsertRecord('reconciliation_runs', run.id, run as any);
+  }, OperationType.WRITE, `reconciliation_runs/${run.id}`);
+}
+
+export async function saveAllReconciliationRunsCloud(runs: ReconciliationRun[]): Promise<void> {
+  if (!runs || runs.length === 0) return;
+  return safeCloudWrite(async () => {
+    let firstError: any = null;
+    for (const run of runs) {
+      try {
+        await upsertRecord('reconciliation_runs', run.id, run as any);
+      } catch (err) {
+        if (!firstError) firstError = err;
+      }
+    }
+    if (firstError) throw firstError;
+  }, OperationType.WRITE, 'reconciliation_runs');
+}
+
+export async function deleteReconciliationRunCloud(runId: string): Promise<void> {
+  return safeCloudWrite(async () => {
+    await removeRecord('reconciliation_runs', runId);
+  }, OperationType.DELETE, `reconciliation_runs/${runId}`);
 }
 
 /* -------------------------------------------------------------------------- */

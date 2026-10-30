@@ -1,13 +1,14 @@
 /**
- * Tab "Laporan" — wadah untuk dua jenis laporan:
+ * Tab "Laporan" — wadah untuk tiga jenis laporan:
  *   1. Laporan Penjualan (seluruh fitur riwayat & analisis transaksi lama)
  *   2. Laporan Keuangan (Laba Rugi, Perubahan Modal, Neraca, Arus Kas — PSAK 1/2015)
+ *   3. Rekonsiliasi (analisis varians & analisis komparatif)
  *
  * Tab "Laporan Penjualan" lama dipindahkan ke dalam tab ini sebagai sub-tab,
  * sehingga navigasi navbar lebih ringkas (satu tab "Laporan" untuk semua laporan).
  */
 import React, { useState } from 'react';
-import { Receipt, Landmark, BookOpen } from 'lucide-react';
+import { Receipt, Landmark, BookOpen, Scale } from 'lucide-react';
 import { TransactionHistoryScreen } from '../TransactionHistoryScreen';
 import { LaporanKeuanganScreen } from './LaporanKeuanganScreen';
 import {
@@ -29,6 +30,12 @@ import { getJournalAccess } from '../journal/journalAccess';
 const LaporanJurnalScreen = React.lazy(() =>
   import('../journal/LaporanJurnalScreen').then((module) => ({
     default: module.LaporanJurnalScreen,
+  }))
+);
+
+const ReconciliationScreen = React.lazy(() =>
+  import('../reconciliation/ReconciliationScreen').then((module) => ({
+    default: module.ReconciliationScreen,
   }))
 );
 
@@ -54,9 +61,11 @@ interface LaporanScreenProps {
   onDeleteTransaction?: (transactionId: string) => Promise<void> | void;
   financialSettings: FinancialSettings;
   onSaveFinancialSettings: (s: FinancialSettings) => void;
+  currentUserId?: string;
+  currentUserName?: string;
 }
 
-type LaporanSubTab = 'penjualan' | 'keuangan' | 'jurnal';
+type LaporanSubTab = 'penjualan' | 'keuangan' | 'rekonsiliasi' | 'jurnal';
 
 export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
   const [activeSubTab, setActiveSubTab] = useState<LaporanSubTab>('penjualan');
@@ -66,6 +75,12 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
   const subTabs: { key: LaporanSubTab; label: string; icon: React.ElementType; desc: string }[] = [
     { key: 'penjualan', label: 'Laporan Penjualan', icon: Receipt, desc: 'Riwayat & analisis transaksi penjualan' },
     { key: 'keuangan', label: 'Laporan Keuangan', icon: Landmark, desc: 'Laba Rugi, Modal, Neraca & Arus Kas' },
+    {
+      key: 'rekonsiliasi',
+      label: 'Rekonsiliasi',
+      icon: Scale,
+      desc: 'Analisis varians & analisis komparatif',
+    },
     ...(canAccessJurnal
       ? [{
           key: 'jurnal' as const,
@@ -153,6 +168,21 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
           onUpdateTransaction={props.onUpdateTransaction}
           onDeleteTransaction={props.onDeleteTransaction}
         />
+      ) : activeSubTab === 'rekonsiliasi' ? (
+        <React.Suspense
+          fallback={
+            <div className="flex items-center justify-center py-24 text-sm text-slate-500">
+              Memuat modul Rekonsiliasi...
+            </div>
+          }
+        >
+          <ReconciliationScreen
+            userRole={props.userRole}
+            storeName={props.storeName}
+            authorId={props.currentUserId}
+            authorName={props.currentUserName}
+          />
+        </React.Suspense>
       ) : (
         <LaporanKeuanganScreen
           transactions={props.transactions}

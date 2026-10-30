@@ -2572,6 +2572,8 @@ export default function App() {
             onDeleteTransaction={handleDeleteTransaction}
             financialSettings={financialSettings}
             onSaveFinancialSettings={handleSaveFinancialSettings}
+            currentUserId={currentUser.id}
+            currentUserName={currentUser.name || currentUser.username}
           />
         )}
 

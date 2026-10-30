@@ -307,13 +307,13 @@ Write-Header "J. KOLEKSI POCKETBASE DAN DATA UTAMA"
 $expectedCollections = @(
     'products', 'product_categories', 'customers', 'customer_categories',
     'suppliers', 'agents', 'transactions', 'shifts', 'stock_transactions',
-    'asset_adjustments',
+    'asset_adjustments', 'reconciliation_runs',
     'users', 'cashiers', 'activity_logs', 'settings',
     'store_profiles', 'custom_roles', 'agent_notifications',
     'spk_orders', 'machines', 'invoices', 'invoice_settings',
     'taxpayer_profile', 'tax_annual_returns', 'tax_monthly_billings'
 )
-Add-Result "PB Data" "27 koleksi dibuat" $false "Perlu cek via Admin UI atau script" "Jalankan: node scripts/create-pocketbase-collections.mjs --drop"
+Add-Result "PB Data" "28 koleksi dibuat" $false "Perlu cek via Admin UI atau script" "Jalankan: node scripts/create-pocketbase-collections.mjs --drop"
 Add-Result "PB Data" "Data original terimport" $false "Perlu cek via Admin UI" "Jalankan: node scripts/import-original-data.mjs"
 Add-Result "PB Auth" "Sync user (sync@bejo.local) exists" $false "" "Buat user di Admin UI atau via script"
 Add-Result "PB Auth" "Admin user exists" $false "" "pocketbase.exe superuser create admin@$Domain <password>"

@@ -165,7 +165,9 @@ Semua kalimat yang dibaca operator/pemilik toko harus bahasa Indonesia awam: **s
 
 ## Deploy
 
-Gunakan `deploy/deploy-vps.ps1` yang sudah ada. Jangan membuat skrip deploy baru. Build dan deploy hanya setelah `npm run build` lulus (termasuk check-brand, check-version, dan check-path-fabrication).
+Gunakan `deploy/deploy-vps.ps1` yang sudah ada. Jangan membuat skrip deploy baru. Build dan deploy hanya setelah `npm run build` lulus (termasuk check-brand, check-version, check-path-fabrication, dan check-ui-language --strict).
+
+Penyalinan source memakai `robocopy /E` (tanpa purge), sehingga berkas versi lama yang sudah dihapus dari branch tetap tertinggal di `C:\bejo-pos`. Tambahkan `-PurgeSource` bila build di VPS gagal karena berkas yang tidak ada di `main` (gejala: penjaga teks atau tsc menyingkap nama berkas yang tidak muncul di repo); opsinya hanya mengosongkan `src/` lalu menulis ulang dari arsip — `.env`, `data/`, `logs/`, `backups/`, `dist/`, dan `node_modules/` tidak disentuh.
 
 Untuk memeriksa kondisi aplikasi live (koneksi PocketBase, akun sinkronisasi, `app_users`, log, disk), jalankan skrip read-only yang sudah ada **di VPS**:
 

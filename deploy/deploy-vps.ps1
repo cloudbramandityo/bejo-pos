@@ -42,6 +42,10 @@
     -Branch main                 Branch GitHub
     -PublicUrl <url>             Override APP_URL untuk verifikasi publik
     -Force                       Timpa perubahan lokal tracked (patch tetap dibackup)
+    -PurgeSource                 Kosongkan src/ sebelum source ditulis ulang, supaya
+                                 berkas versi lama yang sudah dihapus dari branch tidak
+                                 ikut terbawa pemeriksaan/build. .env, data/, logs/,
+                                 backups/, dist/, node_modules/ tetap tidak disentuh.
     -SkipSourceUpdate            Pakai source lokal di VPS
     -SkipCaddy                   Jangan ubah/restart Caddy
     -SkipPbHardening             Jangan perketat aturan akses koleksi PocketBase
@@ -99,6 +103,7 @@ param(
   [switch]$SkipMarketingCheck,
   [switch]$RequireMarketing,
   [switch]$Force,
+  [switch]$PurgeSource,
   [switch]$KeepSourceArchive,
   [switch]$EnablePublicSite,
   [switch]$ConfigurePbAdmin,
@@ -728,6 +733,23 @@ if (-not $SkipSourceUpdate) {
     Where-Object { Test-Path (Join-Path $_.FullName 'package.json') } |
     Select-Object -First 1
   if (-not $sourceRoot) { Fail 'Struktur source tidak valid (package.json tidak ditemukan).' }
+
+  # robocopy /E tidak pernah menghapus berkas yang sudah hilang dari branch, jadi
+  # sisa versi lama bisa ikut diperiksa (dan menggagalkan build) di VPS.
+  if ($PurgeSource) {
+    $sourceSrcDir = Join-Path $sourceRoot.FullName 'src'
+    $appSrcDir = Join-Path $AppDir 'src'
+    if (-not (Test-Path -LiteralPath $sourceSrcDir)) {
+      Fail "-PurgeSource dibatalkan: folder src tidak ada di arsip $RepoOwner/$RepoName#$Branch (src/ tidak dihapus)."
+    }
+    if (Test-Path -LiteralPath $appSrcDir) {
+      $srcFileCount = @(Get-ChildItem -LiteralPath $appSrcDir -Recurse -File -ErrorAction SilentlyContinue).Count
+      Remove-Item -LiteralPath $appSrcDir -Recurse -Force
+      Write-Ok "src/ dikosongkan ($srcFileCount berkas) lalu ditulis ulang dari source $Branch."
+    } else {
+      Write-Warn2 'src/ belum ada di folder aplikasi; akan dibuat dari source.'
+    }
+  }
 
   # Hanya folder runtime di root aplikasi yang dilindungi.
   $excludeDirs = @(

@@ -101,14 +101,12 @@ export default function AssetMovementPanel({
             </div>
             <div>
               <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                Pergerakan Total Aset Toko (Harga Kulak / HPP)
+                Pergerakan Total Aset Toko (Harga Kulak)
               </h3>
               <p className="text-[11px] text-slate-500 mt-0.5 max-w-2xl leading-relaxed">
-                Nilai stok bahan toko per akhir periode. Riwayat nilai tidak disimpan sebagai snapshot,
-                jadi tiap titik dihitung mundur dari nilai kini dikurangi seluruh kejadian setelah tanggal
-                titik tersebut: mutasi stok (Pembelian masuk / Pengambilan agen keluar) dinilai dengan HPP
-                produk saat ini, ditambah penyesuaian aset yang tersimpan dalam rupiah saat kejadiannya
-                (harga kulak berubah, koreksi stok manual, penjualan kasir, produk baru/hapus).
+                Nilai barang dihitung berdasarkan harga modal saat ini, ditambah/dikurangi dengan
+                penyesuaian uang yang tercatat saat kejadian (seperti perubahan harga kulak, koreksi
+                stok manual, penjualan, atau produk baru).
               </p>
             </div>
           </div>
@@ -118,7 +116,7 @@ export default function AssetMovementPanel({
               {formatRupiah(liveValue)}
             </div>
             <div className="text-[10.5px] text-slate-500 font-medium">
-              {trend.points.length} titik &bull; mutasi terakhir {lastPoint?.endDate || '-'}
+              {trend.points.length} periode &bull; catatan terakhir {lastPoint?.endDate || '-'}
             </div>
           </div>
         </div>
@@ -136,7 +134,7 @@ export default function AssetMovementPanel({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <MiniStat
           icon={periodChange >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-          label="Perubahan sepanjang rentang"
+          label="Perubahan selama periode ini"
           value={formatRupiah(periodChange)}
           tone={periodChange >= 0 ? 'emerald' : 'rose'}
           hint={`${firstPoint?.label || '-'} -> ${lastPoint?.label || '-'}`}
@@ -146,21 +144,21 @@ export default function AssetMovementPanel({
           label="Bahan masuk (Pembelian)"
           value={formatRupiah(totalAdded)}
           tone="blue"
-          hint={`${trend.points.reduce((acc, p) => acc + p.mutationRows, 0)} baris mutasi stok`}
+          hint={`${trend.points.reduce((acc, p) => acc + p.mutationRows, 0)} catatan stok`}
         />
         <MiniStat
           icon={<TrendingDown className="w-4 h-4" />}
           label="Bahan keluar (Pengambilan Agen)"
           value={formatRupiah(totalRemoved)}
           tone="amber"
-          hint="Dinilai dengan harga kulak, bukan harga agen"
+          hint="Dihitung dengan harga kulak, bukan harga agen"
         />
         <MiniStat
           icon={<SlidersHorizontal className="w-4 h-4" />}
-          label="Penyesuaian aset"
+          label="Penyesuaian nilai"
           value={formatRupiah(totalAdjusted)}
           tone={totalAdjusted >= 0 ? 'emerald' : 'rose'}
-          hint={`${totalAdjustmentRows} kejadian harga kulak / koreksi / penjualan kasir`}
+          hint={`${totalAdjustmentRows} catatan: harga kulak berubah, koreksi stok, penjualan`}
         />
       </div>
 
@@ -177,7 +175,7 @@ export default function AssetMovementPanel({
 
         {chartData.length === 0 ? (
           <div className="py-10 text-center text-xs text-slate-500">
-            Belum ada mutasi stok yang bisa dihitung pada rentang ini.
+            Belum ada catatan stok pada rentang ini.
           </div>
         ) : (
           <div className="h-72 w-full">
@@ -261,14 +259,14 @@ export default function AssetMovementPanel({
                 <th className="text-right font-bold px-2.5 py-2">Bahan Masuk</th>
                 <th className="text-right font-bold px-2.5 py-2">Bahan Keluar</th>
                 <th className="text-right font-bold px-2.5 py-2">Penyesuaian</th>
-                <th className="text-right font-bold px-2.5 py-2 rounded-r-lg">Kejadian</th>
+                <th className="text-right font-bold px-2.5 py-2 rounded-r-lg">Catatan</th>
               </tr>
             </thead>
             <tbody>
               {trend.points.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-2.5 py-6 text-center text-slate-400">
-                    Tidak ada periode untuk ditampilkan.
+                    Belum ada data untuk ditampilkan.
                   </td>
                 </tr>
               )}
@@ -323,13 +321,14 @@ export default function AssetMovementPanel({
         <div className="flex items-start gap-2 text-[10.5px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
           <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
           <span>
-            Titik pertama memakai level aset awal penelusuran ({trend.rangeFrom})
+            Nilai tiap periode dihitung mundur dari nilai hari ini. Catatan paling awal yang tersedia
+            adalah {trend.rangeFrom}
             {trend.untrackedItemRows > 0
-              ? ` • ${trend.untrackedItemRows} baris item mutasi tidak ditemukan produknya di inventory sehingga tidak ikut dinilai`
+              ? ` • ${trend.untrackedItemRows} barang di catatan stok sudah tidak ada di daftar produk, jadi nilainya tidak ikut dihitung`
               : ''}
-            . Perubahan harga kulak, koreksi stok manual, dan penjualan kasir dicatat sebagai penyesuaian
-            aset sejak fitur ini aktif; kejadian sebelum tanggal {trend.rangeFrom} belum punya catatan
-            penyesuaian, jadi bagian itu garis hanya mengikuti mutasi stok.
+            . Perubahan harga kulak, koreksi stok manual, dan penjualan baru dicatat sebagai penyesuaian
+            nilai sejak fitur ini aktif, jadi sebelum tanggal {trend.rangeFrom} garis hanya mengikuti stok
+            masuk dan keluar.
           </span>
         </div>
       </div>

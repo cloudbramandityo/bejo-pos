@@ -171,7 +171,7 @@ export const StockScreen: React.FC<StockScreenProps> = ({
   // Handle selecting a product from dropdown
   const handleSelectProduct = (product: Product) => {
     if (!isStockEligibleProduct(product, productCategories)) {
-      setErrorMessage('Hanya produk dengan kategori Bahan, Stiker Vinyl, atau Production Supplies yang dapat digunakan dalam transaksi Pembelian / Pengambilan Bahan.');
+      setErrorMessage('Hanya produk kategori Bahan, Stiker Vinyl, atau Production Supplies yang bisa dipakai untuk Pembelian / Pengambilan Bahan.');
       return;
     }
     setSelectedProduct(product);
@@ -267,7 +267,7 @@ export const StockScreen: React.FC<StockScreenProps> = ({
     }
 
     if (!isStockEligibleProduct(selectedProduct, productCategories)) {
-      setErrorMessage('Hanya produk dengan kategori Bahan, Stiker Vinyl, atau Production Supplies yang dapat dimasukkan dalam transaksi Pembelian / Pengambilan Bahan.');
+      setErrorMessage('Hanya produk kategori Bahan, Stiker Vinyl, atau Production Supplies yang bisa dimasukkan ke Pembelian / Pengambilan Bahan.');
       return;
     }
 
@@ -534,7 +534,7 @@ export const StockScreen: React.FC<StockScreenProps> = ({
             Kelola Stok Bahan & Produk
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Pilih tanggal transaksi dan input beberapa produk sekaligus dalam satu transaksi mutasi stok.
+            Pilih tanggal, lalu masukkan beberapa produk sekaligus dalam satu catatan stok masuk/keluar.
           </p>
         </div>
 
@@ -711,7 +711,7 @@ export const StockScreen: React.FC<StockScreenProps> = ({
                       }
                     }}
                     onFocus={() => setShowProductDropdown(true)}
-                    placeholder="Ketik nama produk atau SKU (Bahan / Stiker Vinyl / Production Supplies)..."
+                    placeholder="Ketik nama produk atau kode barang (Bahan / Stiker Vinyl / Production Supplies)..."
                     className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   />
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -750,7 +750,7 @@ export const StockScreen: React.FC<StockScreenProps> = ({
                       })
                     ) : (
                       <div className="p-3.5 text-center text-xs text-slate-400">
-                        Tidak ada produk yang cocok pada kategori <span className="font-semibold text-slate-600">Bahan</span>, <span className="font-semibold text-slate-600">Stiker Vinyl</span>, atau <span className="font-semibold text-slate-600">Production Supplies</span>.
+                        Produk tidak ada di kategori <span className="font-semibold text-slate-600">Bahan</span>, <span className="font-semibold text-slate-600">Stiker Vinyl</span>, atau <span className="font-semibold text-slate-600">Production Supplies</span>.
                       </div>
                     )}
                   </div>
@@ -1022,7 +1022,7 @@ export const StockScreen: React.FC<StockScreenProps> = ({
                     <div>
                       <p className="text-xs font-bold text-slate-800">Daftar Produk Masih Kosong</p>
                       <p className="text-[11px] text-slate-500 max-w-sm mx-auto mt-1">
-                        Cari produk pada form sebelah kiri, atur jumlah dan harga, lalu klik <strong>+ Tambah Produk ke Daftar</strong> untuk menambahkan beberapa produk dalam laporan.
+                        Cari produk di sebelah kiri, atur jumlah dan harga, lalu klik <strong>+ Tambah Produk ke Daftar</strong>. Boleh lebih dari satu produk.
                       </p>
                     </div>
                   </div>

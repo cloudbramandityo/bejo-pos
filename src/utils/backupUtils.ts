@@ -272,11 +272,11 @@ export function downloadBackupJSON(customStoreName?: string): { fileName: string
  */
 export function validateBackupPayload(parsed: any): { isValid: boolean; error?: string; payload?: PosBackupPayload } {
   if (!parsed || typeof parsed !== 'object') {
-    return { isValid: false, error: 'File cadangan tidak valid atau rusak (format bukan JSON objek).' };
+    return { isValid: false, error: 'Berkas cadangan tidak valid atau rusak. Pilih berkas .json hasil simpan dari aplikasi ini.' };
   }
 
   if (!parsed.data || typeof parsed.data !== 'object') {
-    return { isValid: false, error: 'Struktur file backup tidak sesuai (field data tidak ditemukan).' };
+    return { isValid: false, error: 'Berkas cadangan tidak sesuai. Bagian data utamanya tidak ditemukan.' };
   }
 
   const { data } = parsed;
@@ -390,7 +390,7 @@ export async function restoreBackupToCloud(
       failedRecords: 0,
       skippedRecords: 0,
       retryable: false,
-      errors: ['Struktur file backup tidak memuat field data.'],
+      errors: ['Berkas cadangan tidak memuat bagian data utama.'],
     };
   }
 
@@ -403,7 +403,7 @@ export async function restoreBackupToCloud(
       failedRecords: 0,
       skippedRecords: 0,
       retryable: true,
-      errors: ['Tidak dapat terhubung ke database cloud PocketBase. Periksa koneksi internet lalu coba lagi.'],
+      errors: ['Tidak dapat terhubung ke server. Periksa koneksi internet lalu coba lagi.'],
     };
   }
 

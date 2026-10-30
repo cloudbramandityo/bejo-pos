@@ -60,7 +60,7 @@ export function useJournalDraft(input: DraftInput) {
       return;
     }
     if (!navigator.clipboard?.readText) {
-      showToast('Browser tidak mendukung tempel otomatis. Gunakan Ctrl+V di kolom tautan.', 'error');
+      showToast('Tempel otomatis tidak didukung di perangkat ini. Tekan Ctrl+V di kolom tautan.', 'error');
       return;
     }
     try {
@@ -78,7 +78,7 @@ export function useJournalDraft(input: DraftInput) {
         parsed.isValid ? 'ok' : 'error'
       );
     } catch {
-      showToast('Browser menolak akses clipboard. Tempel manual dengan Ctrl+V.', 'error');
+      showToast('Perangkat ini menolak menempel otomatis. Tempel manual dengan Ctrl+V.', 'error');
     }
   }, [canEdit, settingsRef, showToast]);
 

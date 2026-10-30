@@ -441,7 +441,7 @@ export const TaxDashboard: React.FC<TaxDashboardProps> = ({
               <span>Fasilitas UMKM (PP 55/2022)</span>
             </div>
             <p className="text-xs text-amber-800 leading-relaxed mb-3">
-              Wajib Pajak Orang Pribadi UMKM mendapat pembebasan pajak untuk peredaran bruto hingga <strong>Rp 500 Juta</strong> per tahun. Omzet di atas ambang batas hanya dikenakan <strong>PPh Final 0.5%</strong>.
+              UMKM orang pribadi tidak kena pajak untuk omzet sampai <strong>Rp 500 Juta</strong> setahun. Selebihnya kena <strong>PPh Final 0,5%</strong>.
             </p>
 
             <div className="space-y-2 text-xs">

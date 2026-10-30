@@ -46,8 +46,8 @@ export const JournalWorkspace: React.FC<JournalWorkspaceProps> = ({ model, userR
         />
         <p className="text-[10px] text-slate-400 px-1 leading-relaxed">
           {model.canEdit
-            ? 'Tautan tersimpan otomatis di LocalStorage. Bila server mendukung, konfigurasi juga disinkronkan ke PocketBase (jurnal_config) dan dipulihkan saat reload.'
-            : 'Konfigurasi tautan dan daftar tahun dikelola oleh akun DEVELOPER melalui PocketBase (jurnal_config). Pilihan tahun dan mode tampilan Anda tersimpan di browser ini.'}
+            ? 'Tautan tersimpan otomatis di perangkat ini. Bila server mendukung, pengaturan ikut terkirim ke server dan muncul lagi saat halaman dimuat ulang.'
+            : 'Tautan dan daftar tahun diatur akun DEVELOPER di server. Pilihan tahun dan mode tampilan Anda tersimpan di perangkat ini.'}
         </p>
       </div>
       <JournalYearDialogs

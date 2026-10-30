@@ -4027,7 +4027,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                 <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                 <h3 className="text-base font-bold text-slate-800">Daftar Dokumen Masih Kosong</h3>
                 <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
-                  Belum ada dokumen invoice atau proforma. Anda dapat mulai menerbitkan invoice baru, perhatikan kode Proforma Invoice (PI) & Invoice Final (INV).
+                  Belum ada dokumen. Tekan tombol di bawah untuk membuat baru: PI untuk penawaran, INV untuk tagihan.
                 </p>
                 <button
                   type="button"
@@ -4320,7 +4320,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                   Alur Konversi Proforma ke Invoice Final (Relasi Data Induk)
                 </p>
                 <p className="text-[11px] text-indigo-800">
-                  Nomor urut invoice berjalan maju secara kronologis (Running Global Number). Relasi ke PI Induk disimpan di database dan dicantumkan pada UI & layout PDF.
+                  Nomor invoice bertambah otomatis mengikuti urutan pembuatan. Kaitannya dengan PI induk ikut tampil di layar dan PDF.
                 </p>
               </div>
 
@@ -4641,7 +4641,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                     <ShieldCheck className="w-4 h-4 text-amber-700" /> Mekanisme Pembatalan Proforma Invoice (PI):
                   </div>
                   <p className="text-[11px] leading-relaxed text-amber-900/90">
-                    Proforma Invoice bukanlah dokumen legal akuntansi atau faktur pajak resmi, melainkan penawaran atau komitmen awal (perkiraan tagihan). Pembatalan dilakukan secara internal (status <strong>Cancelled / Void</strong>) tanpa memerlukan tindakan hukum atau nota retur eksternal. Sisa tagihan (piutang) otomatis menjadi Rp 0.
+                    Proforma Invoice adalah penawaran awal sekaligus perkiraan tagihan, bukan faktur pajak resmi. Cukup ubah status jadi <strong>Cancelled / Void</strong>, tanpa tindakan hukum atau nota retur; sisa piutang otomatis Rp 0.
                   </p>
                 </div>
               ) : (
@@ -4650,7 +4650,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                     <Receipt className="w-4 h-4 text-rose-700" /> Mekanisme Pembatalan Invoice Final (INV) & Credit Note:
                   </div>
                   <p className="text-[11px] leading-relaxed text-rose-900/90">
-                    Invoice Final adalah dokumen penagihan resmi yang telah dicatat sebagai piutang. Pembatalan mewajibkan penerbitan <strong>Credit Note (Nota Kredit)</strong> untuk mendebit kembali akun piutang sehingga saldo piutang pelanggan menjadi <strong>Rp 0</strong>.
+                    Invoice Final adalah tagihan resmi yang sudah dicatat sebagai piutang. Pembatalannya wajib menerbitkan <strong>Credit Note (Nota Kredit)</strong> untuk mengurangi piutang sampai saldo pelanggan <strong>Rp 0</strong>.
                   </p>
                 </div>
               )}
@@ -4722,7 +4722,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
                   />
                   <span className="text-[10px] text-slate-500 mt-0.5 block">
-                    User dapat menginput link drive surat atau email pernyataan pembatalan dari pelanggan sebagai bukti pendukung mengapa transaksi tidak berlanjut.
+                    Isi tautan Drive surat atau email pembatalan dari pelanggan sebagai bukti transaksi tidak dilanjutkan.
                   </span>
                 </div>
               </div>
@@ -4780,7 +4780,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                           className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium bg-white focus:ring-2 focus:ring-rose-500 focus:outline-hidden"
                         />
                         <span className="text-[10px] text-slate-600 mt-0.5 block">
-                          Jika barang/jasa sempat diserahkan, pihak pelanggan harus menerbitkan Nota Retur atau Nota Pembatalan resmi agar PPN yang sudah dibayarkan bisa disesuaikan dalam pelaporan pajak kedua belah pihak.
+                          Jika barang atau jasa sempat diserahkan, pelanggan menerbitkan Nota Retur atau Nota Pembatalan resmi. PPN yang sudah dibayar bisa disesuaikan di laporan pajak kedua pihak.
                         </span>
                       </div>
                     </div>

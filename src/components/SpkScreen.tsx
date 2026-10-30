@@ -314,12 +314,12 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
       try {
         await onSaveUser(newUserObj);
       } catch (err: any) {
-        alert(err?.message || 'Akun gagal disimpan ke database cloud. Coba lagi.');
+        alert(err?.message || 'Akun gagal tersimpan ke server. Coba lagi.');
         return;
       }
     } else {
       saveUserCloud(newUserObj).catch((err) => {
-        alert(err?.message || 'Akun gagal disimpan ke database cloud. Coba lagi.');
+        alert(err?.message || 'Akun gagal tersimpan ke server. Coba lagi.');
       });
     }
 
@@ -365,29 +365,29 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
   const formatUserPresence = useCallback((u: AppUser): { isOnline: boolean; statusText: string; timeText: string } => {
     const online = isUserOnline(u);
     if (currentUser && currentUser.id === u.id) {
-      return { isOnline: true, statusText: 'Online (Perangkat Ini)', timeText: 'Sedang Aktif' };
+      return { isOnline: true, statusText: 'Aktif (Perangkat Ini)', timeText: 'Sedang Aktif' };
     }
     if (online) {
       if (u.lastActiveAt) {
         const diffMins = Math.max(0, Math.floor((Date.now() - u.lastActiveAt) / 60000));
         const timeLabel = diffMins === 0 ? 'Baru saja' : `${diffMins}m lalu`;
-        return { isOnline: true, statusText: 'Terhubung / Logged In', timeText: `Aktif ${timeLabel}` };
+        return { isOnline: true, statusText: 'Sedang Login', timeText: `Aktif ${timeLabel}` };
       }
-      return { isOnline: true, statusText: 'Terhubung / Logged In', timeText: 'Sedang Aktif' };
+      return { isOnline: true, statusText: 'Sedang Login', timeText: 'Sedang Aktif' };
     }
     if (u.lastActiveAt) {
       const dateStr = new Date(u.lastActiveAt).toLocaleDateString('id-ID', {
         day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
       });
-      return { isOnline: false, statusText: 'Belum Login / Offline', timeText: `Terakhir aktif: ${dateStr}` };
+      return { isOnline: false, statusText: 'Tidak Sedang Login', timeText: `Terakhir aktif: ${dateStr}` };
     }
     if (u.lastLoginAt) {
       const dateStr = new Date(u.lastLoginAt).toLocaleDateString('id-ID', {
         day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
       });
-      return { isOnline: false, statusText: 'Belum Login / Offline', timeText: `Terakhir login: ${dateStr}` };
+      return { isOnline: false, statusText: 'Tidak Sedang Login', timeText: `Terakhir login: ${dateStr}` };
     }
-    return { isOnline: false, statusText: 'Belum Login / Offline', timeText: 'Belum login hari ini' };
+    return { isOnline: false, statusText: 'Tidak Sedang Login', timeText: 'Belum login hari ini' };
   }, [currentUser, isUserOnline]);
 
   // Team SPK Live Metrics
@@ -689,7 +689,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
   const toggleMachineInForm = (machineId: string) => {
     const targetMch = machines.find((m) => m.id === machineId);
     if (targetMch && targetMch.status !== 'READY') {
-      alert(`Mesin "${targetMch.name}" sedang dalam status UNDER MAINTENANCE dan tidak dapat digunakan untuk produksi.`);
+      alert(`Mesin "${targetMch.name}" sedang UNDER MAINTENANCE, jadi tidak bisa dipakai produksi.`);
       return;
     }
     setNewMachines((prev) => {
@@ -883,7 +883,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
       return { label: 'Memeriksa izin...', cls: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400' };
     }
     if (!grantStatus.supported) {
-      return { label: 'Browser Tidak Dukung', cls: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400' };
+      return { label: 'Chrome/Edge Dibutuhkan', cls: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400' };
     }
     if (!grantStatus.configuredPath) {
       return { label: 'Folder Belum Disetel', cls: 'bg-rose-50 text-rose-800 border-rose-200', dot: 'bg-rose-500' };
@@ -926,7 +926,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
       const rootFolder = relPath.split('/')[0] || files[0].name;
       setTempLanDirInput((prev) => prev || `${rootFolder}/`);
       showFileToast(
-        `Folder "${rootFolder}" terbaca, tetapi browser ini tidak dapat memberi izin tulis. Gunakan Chrome/Edge di komputer tersebut lalu klik "Hubungkan Folder".`,
+        `Folder "${rootFolder}" terbaca, tetapi belum bisa ditulis dari komputer ini. Buka Chrome/Edge di komputer itu, lalu klik "Hubungkan Folder di Perangkat Ini".`,
         'info'
       );
     }
@@ -949,7 +949,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
       await refreshGrantStatus();
       setIsLanFolderModalOpen(false);
       if (res.cloudError) {
-        showFileToast(`Folder disetel ke ${savedPath}, tetapi belum tersimpan ke cloud: ${res.cloudError}`, 'error');
+        showFileToast(`Folder disetel ke ${savedPath}, tetapi belum tersimpan ke server: ${res.cloudError}`, 'error');
       } else {
         showFileToast(`Folder bersama tersimpan untuk semua perangkat: ${savedPath}`, 'success');
       }
@@ -1077,9 +1077,9 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
     if (!path) return;
     const ok = await copyLocalShortcutToClipboard(path);
     if (ok) {
-      showFileToast(`Shortcut path disalin ke clipboard: "${path}"`, 'success');
+      showFileToast(`Lokasi berkas disalin: "${path}"`, 'success');
     } else {
-      showFileToast('Gagal menyalin shortcut ke clipboard', 'error');
+      showFileToast('Lokasi berkas gagal disalin', 'error');
     }
   };
 
@@ -1093,7 +1093,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
         if (!grantStatus?.granted || grantStatus?.needsPermission) {
           setIsLanNetworkHubModalOpen(true);
           showFileToast(
-            `Berkas "${fileAttachment.fileName}" ada di folder bersama. Buka modal LAN, sambungkan folder di perangkat ini, lalu klik "Buka dari Folder LAN".`,
+            `Berkas "${fileAttachment.fileName}" ada di folder bersama. Sambungkan folder itu di perangkat ini, lalu klik "Buka dari Folder LAN".`,
             'info'
           );
           return;
@@ -1108,23 +1108,23 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
       // 2. Salinan lokal perangkat yang dulu mengunggah
       const ok = await openOrDownloadPrintFile(fileAttachment);
       if (ok) {
-        showFileToast(`Membuka file cetak dari vault perangkat: ${fileAttachment.fileName}`, 'info');
+        showFileToast(`File cetak dibuka dari salinan di perangkat ini: ${fileAttachment.fileName}`, 'info');
       } else {
         if (fileAttachment.localPath) {
           await copyLocalShortcutToClipboard(fileAttachment.localPath);
-          showFileToast(`Berkas tidak tersedia di perangkat ini. Path disalin: ${fileAttachment.localPath}`, 'info');
+          showFileToast(`Berkas tidak ada di perangkat ini. Lokasinya disalin: ${fileAttachment.localPath}`, 'info');
         } else {
-          showFileToast('File tidak ditemukan di folder bersama maupun vault perangkat', 'error');
+          showFileToast('File tidak ditemukan di folder bersama maupun di perangkat ini', 'error');
         }
       }
     } else if (localPath) {
       await copyLocalShortcutToClipboard(localPath);
-      showFileToast(`Shortcut lokasi disalin: ${localPath}`, 'info');
+      showFileToast(`Lokasi berkas disalin: ${localPath}`, 'info');
     } else if (fallbackName) {
       const cleanDir = newLocalDir.endsWith('/') || newLocalDir.endsWith('\\') ? newLocalDir : `${newLocalDir}/`;
       const path = `${cleanDir}${fallbackName}`;
       await copyLocalShortcutToClipboard(path);
-      showFileToast(`Shortcut lokasi disalin: ${path}`, 'info');
+      showFileToast(`Lokasi berkas disalin: ${path}`, 'info');
     }
   };
 
@@ -1136,7 +1136,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
     await refreshGrantStatus();
     showFileToast(
       res.cloudError
-        ? `Folder diubah ke ${savedPath}, tetapi belum tersimpan ke cloud: ${res.cloudError}`
+        ? `Folder diubah ke ${savedPath}, tetapi belum tersimpan ke server: ${res.cloudError}`
         : `Folder bersama diubah ke ${savedPath} untuk semua perangkat.`,
       res.cloudError ? 'error' : 'success'
     );
@@ -1215,7 +1215,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
       await replaceOrderAttachments(order, nextFiles, `Salin ke folder bersama: ${updated.fileName}`);
       showFileToast(
         result.renamed
-          ? `Tersalin sebagai "${updated.fileName}" (nama diberi imbuhan SPK agar tidak menimpa).`
+          ? `Tersalin sebagai "${updated.fileName}" (nama disesuaikan agar tidak menimpa berkas lain).`
           : `Berkas "${updated.fileName}" tersalin ke folder bersama.`,
         'success'
       );
@@ -1319,7 +1319,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
     if (grantStatus && (!grantStatus.granted || grantStatus.needsPermission)) {
       setIsLanNetworkHubModalOpen(true);
       showFileToast(
-        'Folder LAN belum tersambung di perangkat ini. Buka modal Folder File Asli (LAN), sambungkan folder, lalu pilih file dari folder bersama.',
+        'Folder LAN belum tersambung di perangkat ini. Buka "Folder File Asli (LAN)", sambungkan folder, lalu pilih file lagi.',
         'info'
       );
       return;
@@ -1371,7 +1371,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
 
     const handleAutoCleaned = (e: any) => {
       if (e.detail && e.detail.count > 0) {
-        showFileToast(`Pembersihan Otomatis: ${e.detail.count} SPK Arsip Selesai telah dihapus (Jadwal 19.00 WIB)`, 'info');
+        showFileToast(`Pembersihan otomatis: ${e.detail.count} SPK Selesai (Arsip) terhapus sesuai jadwal 19.00 WIB.`, 'info');
         setOrders(getStoredSpkOrders());
       }
     };
@@ -1398,13 +1398,13 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
   const handleManualPurgeArchive = async () => {
     const completedList = orders.filter((o) => o.status === 'SELESAI_LUNAS');
     if (completedList.length === 0) {
-      alert('Tidak ada SPK berstatus SELESAI (ARSIP) dalam list.');
+      alert('Tidak ada SPK berstatus SELESAI (ARSIP) di daftar.');
       return;
     }
 
     if (
       !confirm(
-        `PERINGATAN DEVELOPER:\n\nApakah Anda yakin ingin menghapus seluruh ${completedList.length} SPK berstatus SELESAI (ARSIP) dari database & list?\n\nTindakan ini permanen. SPK yang masih dalam proses produksi tidak akan terpengaruh.`
+        `PERINGATAN DEVELOPER:\n\nHapus seluruh ${completedList.length} SPK berstatus SELESAI (ARSIP) dari daftar dan server?\n\nData yang dihapus tidak bisa dikembalikan. SPK yang masih dalam produksi tidak terpengaruh.`
       )
     ) {
       return;
@@ -1413,7 +1413,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
     const res = await cleanupCompletedSpkManual(currentUser?.name || 'Developer');
     if (res.success) {
       setOrders(getStoredSpkOrders());
-      showFileToast(`Berhasil membersihkan ${res.count} SPK berstatus Selesai (Arsip) dari sistem!`, 'success');
+      showFileToast(`${res.count} SPK Selesai (Arsip) berhasil dihapus.`, 'success');
     } else {
       alert('Gagal menghapus arsip SPK.');
     }
@@ -1493,12 +1493,12 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
     // Check that every item in orderItems has a product selected
     const unselectedIdx = orderItems.findIndex((it) => !it.productId);
     if (unselectedIdx !== -1) {
-      alert(`Mohon pilih jenis Order Cetak (Katalog Produk) pada Item #${unselectedIdx + 1}.`);
+      alert(`Pilih produk cetak pada item nomor ${unselectedIdx + 1}.`);
       return;
     }
 
     if (newMachines.length === 0) {
-      alert('Wajib memilih minimal 1 target mesin produksi (status READY) sebelum menerbitkan SPK.');
+      alert('Pilih minimal 1 mesin berstatus READY sebelum menerbitkan SPK.');
       return;
     }
 
@@ -1519,7 +1519,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
       .filter((m) => m && m.status !== 'READY');
 
     if (nonReadySelected.length > 0) {
-      alert(`Mesin berikut sedang tidak READY (Under Maintenance): ${nonReadySelected.map((m) => m?.name).join(', ')}. Silakan pilih mesin yang berstatus READY.`);
+      alert(`Mesin berikut sedang maintenance: ${nonReadySelected.map((m) => m?.name).join(', ')}. Pilih mesin lain yang berstatus READY.`);
       return;
     }
 
@@ -1749,7 +1749,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
 
   // Delete SPK Handler (Developer & Admin)
   const handleDeleteSpk = (orderId: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus SPK ini dari sistem secara permanen?')) return;
+    if (!confirm('Hapus SPK ini? Data yang dihapus permanen tidak bisa dikembalikan.')) return;
     const updated = deleteStoredSpkOrder(orderId);
     setOrders(updated);
     deleteSpkOrderCloud(orderId).catch(console.error);
@@ -1939,7 +1939,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
               SPK & ALUR KERJA CETAK DIGITAL
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-              Monitoring alur kerja produksi: <strong className="text-white font-bold">1. File Masuk / Setting ➔ 2. Antrean Mesin ➔ 3. Finishing ➔ 4. Siap Ambil / Bayar di Kasir</strong>.
+              Alur kerja cetak: <strong className="text-white font-bold">1. File Masuk / Setting ➔ 2. Antrean Mesin ➔ 3. Finishing ➔ 4. Siap Ambil / Bayar di Kasir</strong>.
             </p>
           </div>
 
@@ -1955,7 +1955,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                     setIsLanNetworkHubModalOpen(true);
                   }}
                   className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer transition-all active:scale-95 shadow-xs"
-                  title="Akses folder penyimpanan berkas asli SPK di jaringan LAN toko"
+                  title="Buka folder tempat berkas asli SPK disimpan di jaringan toko"
                 >
                   <FolderOpen className="w-4 h-4 text-indigo-400" />
                   <span>Folder File Asli (LAN)</span>
@@ -1969,7 +1969,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                     setIsLanNetworkHubModalOpen(true);
                   }}
                   className="px-3.5 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer transition-all active:scale-95 shadow-xs"
-                  title="Deteksi mesin cetak & cutting yang online di jaringan LAN"
+                  title="Cari mesin cetak dan potong yang tersambung di jaringan toko"
                 >
                   <span className={`w-2 h-2 rounded-full ${machines.some((m) => m.lanStatus === 'ONLINE') ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`}></span>
                   <Wifi className="w-4 h-4 text-emerald-400" />
@@ -2412,7 +2412,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                 </span>
               </div>
               <p className="text-[10px] text-amber-900 font-medium leading-tight">
-                Rekening Terbuka: Barang diserahkan, tagihan dikonsolidasi per ID Pelanggan.
+                Open Account: barang diserahkan lebih dulu, tagihannya digabung per pelanggan.
               </p>
             </div>
 
@@ -2435,7 +2435,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                 <div className="text-center py-10 px-3 bg-white/70 rounded-xl border border-dashed border-amber-300 text-amber-800 text-xs">
                   <p className="font-bold">Belum ada tagihan Open Account.</p>
                   <p className="text-[10px] text-slate-500 mt-1">
-                    Klik tombol kuning <span className="bg-yellow-400 text-black px-1.5 py-0.5 rounded font-black">Open Account</span> di bawah Tarik ke POS pada kolom Siap Ambil / Bayar.
+                    Klik tombol kuning <span className="bg-yellow-400 text-black px-1.5 py-0.5 rounded font-black">Open Account</span> di bawah "Tarik ke POS" pada kolom Siap Ambil / Bayar.
                   </p>
                 </div>
               )}
@@ -2698,7 +2698,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                 Input SPK & Order Cetak Digital Baru
               </h2>
               <p className="text-xs text-slate-500 mt-0.5 font-normal">
-                Kalkulasi otomatis tarif cetak, pemilihan mesin, dan opsi finishing terpadu.
+                Harga cetak, pilihan mesin, dan finishing dihitung otomatis.
               </p>
             </div>
             <button
@@ -2736,7 +2736,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                       <Search className="w-3.5 h-3.5 text-indigo-600" />
                       Cari Pelanggan Terdaftar / Input Baru
                     </span>
-                    <span className="text-[11px] text-slate-500 font-normal">Pencarian Real-Time ({customers.length} Terdaftar)</span>
+                    <span className="text-[11px] text-slate-500 font-normal">Pencarian Langsung ({customers.length} Terdaftar)</span>
                   </label>
 
                   <div className="relative">
@@ -2905,7 +2905,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                   <div className="bg-indigo-50/60 p-2.5 rounded-lg border border-indigo-100 text-[11px] text-indigo-900 font-medium flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                      Pelanggan baru akan otomatis tersimpan di Daftar Pelanggan & Database.
+                      Pelanggan baru otomatis tersimpan di Daftar Pelanggan.
                     </span>
                     <span className="bg-indigo-100 text-indigo-800 text-[9.5px] font-mono px-2 py-0.5 rounded border border-indigo-200 shrink-0">AUTO-SYNC</span>
                   </div>
@@ -3421,7 +3421,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                           if (isReady) {
                             toggleMachineInForm(m.id);
                           } else {
-                            alert(`Mesin "${m.name}" sedang status UNDER MAINTENANCE dan tidak dapat dipilih.`);
+                            alert(`Mesin "${m.name}" sedang UNDER MAINTENANCE, jadi tidak bisa dipilih.`);
                           }
                         }}
                         className={`p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-1.5 select-none ${
@@ -3655,7 +3655,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                           onClick={() => retryCopyNewFileToFolder(fIdx)}
                                           disabled={isSharedFolderBusy}
                                           className="text-amber-700 font-medium flex items-center gap-1 hover:underline cursor-pointer disabled:cursor-wait disabled:opacity-60"
-                                          title="Klik untuk menyalinkan berkas ini ke folder bersama"
+                                          title="Klik untuk menyalin berkas ini ke folder bersama"
                                         >
                                           <AlertTriangle className="w-3 h-3" />
                                           {isSharedFolderBusy ? 'Menyalinkan...' : 'Baru di perangkat ini, salinkan'}
@@ -3670,7 +3670,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                     type="button"
                                     onClick={() => handleOpenFile(fileObj)}
                                     className="p-1.5 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 cursor-pointer flex items-center gap-1 shadow-2xs"
-                                    title={fileObj.sharedCopy ? 'Buka dari folder bersama' : 'Buka berkas dari vault perangkat ini'}
+                                    title={fileObj.sharedCopy ? 'Buka dari folder bersama' : 'Buka berkas salinan di perangkat ini'}
                                   >
                                     <ExternalLink className="w-3.5 h-3.5" />
                                   </button>
@@ -3695,7 +3695,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                     </span>
                                   ) : (
                                     <span className="text-slate-500 text-[11px]">
-                                      Berkas hanya ada di vault perangkat ini
+                                      Berkas hanya ada di perangkat ini
                                     </span>
                                   )}
                                 </div>
@@ -3704,7 +3704,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                   onClick={() => handleCopyShortcut(shortcutPath)}
                                   disabled={!fileObj.sharedCopy}
                                   className="px-2 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[10.5px] font-medium rounded border border-slate-200 cursor-pointer shrink-0 flex items-center gap-1 shadow-2xs active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  title={fileObj.sharedCopy ? 'Salin path lokasi bersama' : 'Salinkan dulu ke folder bersama agar path tersedia'}
+                                  title={fileObj.sharedCopy ? 'Salin lokasi berkas di folder bersama' : 'Salin dulu berkasnya ke folder bersama agar lokasinya muncul'}
                                 >
                                   <Copy className="w-3 h-3" />
                                   <span>Salin Path</span>
@@ -3832,7 +3832,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                         type="button"
                         onClick={() => handleCopyShortcut(buildSharedFilePath(newFileName))}
                         className="px-2.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-medium rounded-lg border border-slate-200 hover:border-slate-300 cursor-pointer shrink-0 flex items-center gap-1 shadow-2xs active:scale-95"
-                        title="Salin shortcut path lokasi lokal"
+                        title="Salin lokasi berkas di perangkat ini"
                       >
                         <Copy className="w-3.5 h-3.5" />
                         <span>Salin Path</span>
@@ -3914,7 +3914,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                 </h2>
               </div>
               <p className="text-xs text-slate-400 font-medium">
-                Pantau status online mesin di LAN (<strong className="text-emerald-400">ONLINE</strong> / <strong className="text-amber-400">MAINTENANCE</strong>), latency soket port 9100/IPP, dan RIP hotfolder spooler.
+                Pantau status mesin di jaringan (<strong className="text-emerald-400">ONLINE</strong> / <strong className="text-amber-400">MAINTENANCE</strong>), waktu respons, dan antrean berkas cetak.
               </p>
             </div>
 
@@ -3935,7 +3935,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                 }}
                 disabled={isScanningLan}
                 className="px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-                title="Pindai koneksi socket TCP mesin di subnet LAN"
+                title="Cek koneksi ke mesin di jaringan toko"
               >
                 <RefreshCw className={`w-4 h-4 ${isScanningLan ? 'animate-spin' : ''}`} />
                 <span>{isScanningLan ? 'Scanning LAN...' : 'Scan Mesin di LAN'}</span>
@@ -4082,7 +4082,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                           showFileToast(`Respon ${m.name}: ${res.status} (${res.latencyMs}ms)`, 'success');
                         }}
                         className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-200 cursor-pointer"
-                        title="Test ping koneksi LAN mesin"
+                        title="Cek koneksi ke mesin ini"
                       >
                         <RefreshCw className="w-3.5 h-3.5" />
                       </button>
@@ -4122,10 +4122,10 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
             <div>
               <h2 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
                 <Users className="w-5 h-5 text-indigo-600" />
-                Status Koneksi & Logged-In User Tim SPK Cetak
+                Status Koneksi & Login Tim SPK Cetak
               </h2>
               <p className="text-xs text-slate-600 font-medium mt-0.5">
-                Pengecekan real-time status login tiap pengguna di posisi alur SPK (<strong className="text-emerald-700">Desainer, Operator Cetak, Finishing, Kasir/Admin, Supervisor</strong>).
+                Lihat pengguna yang login di tiap posisi alur SPK: <strong className="text-emerald-700">Desainer, Operator Cetak, Finishing, Kasir/Admin, Supervisor</strong>.
               </p>
             </div>
 
@@ -4194,31 +4194,31 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
             {
               id: 'DESAINER',
               title: '🎨 1. DESAINER & SETTING FILE',
-              desc: 'Tugas: Penyiapan file cetak, layouting, proofing ke pelanggan, & approval cetak.',
+              desc: 'Tugas: Siapkan file cetak, atur tata letak, kirim pratinjau ke pelanggan, dan tunggu persetujuan cetak.',
               bgHeader: 'bg-amber-500/10 border-amber-300 text-amber-950'
             },
             {
               id: 'OPERATOR_CETAK',
               title: '🖨️ 2. OPERATOR CETAK MESIN',
-              desc: 'Tugas: Pengoperasian mesin cetak Outdoor, Indoor, UV, DTF, & Plotter.',
+              desc: 'Tugas: Menjalankan mesin cetak Outdoor, Indoor, UV, DTF, dan Plotter.',
               bgHeader: 'bg-indigo-500/10 border-indigo-300 text-indigo-950'
             },
             {
               id: 'FINISHING',
               title: '✂️ 3. OPERATOR FINISHING & POTONG',
-              desc: 'Tugas: Laminasi, cutting presisi, laser acrylic, klem mata ayam, & packing.',
+              desc: 'Tugas: Laminasi, potong presisi, laser akrilik, pasang mata ayam, dan kemas pesanan.',
               bgHeader: 'bg-purple-500/10 border-purple-300 text-purple-950'
             },
             {
               id: 'KASIR_ADMIN',
               title: '💰 4. KASIR & ADMINISTRASI SPK',
-              desc: 'Tugas: Terima order SPK, pencatatan DP, pelunasan POS, & pendaftaran pelanggan.',
+              desc: 'Tugas: Terima order SPK, catat DP, lunasi di kasir, dan daftarkan pelanggan.',
               bgHeader: 'bg-emerald-500/10 border-emerald-300 text-emerald-950'
             },
             {
               id: 'SUPERVISOR',
               title: '🛡️ 5. SUPERVISOR & DEVELOPER OPERASIONAL',
-              desc: 'Tugas: Kontrol kelancaran sistem, penugasan mesin, & manajemen alur produksi.',
+              desc: 'Tugas: Mengawasi kelancaran produksi dan pembagian mesin.',
               bgHeader: 'bg-slate-800/10 border-slate-300 text-slate-950'
             }
           ]
@@ -4264,7 +4264,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                   <div className="p-4">
                     {categoryUsers.length === 0 ? (
                       <div className="text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-500 text-xs font-semibold">
-                        Belum ada user terdaftar di posisi ini atau tidak cocok dengan filter pencarian.
+                        Belum ada pengguna di posisi ini, atau namanya tidak cocok dengan pencarian.
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
@@ -4316,7 +4316,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                       className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white ${
                                         isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
                                       }`}
-                                      title={isOnline ? 'Online / Logged In' : 'Offline'}
+                                      title={isOnline ? 'Sedang login di perangkatnya' : 'Tidak sedang login'}
                                     ></span>
                                   </div>
 
@@ -4906,7 +4906,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                       className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black rounded-lg cursor-pointer transition-all shadow-xs flex items-center gap-1.5 active:scale-95"
                                       title={fileObj?.sharedCopy
                                         ? 'Buka berkas yang ada di folder bersama LAN'
-                                        : 'Buka preview / unduh dari vault perangkat ini'}
+                                        : 'Buka atau unduh berkas salinan di perangkat ini'}
                                     >
                                       <ExternalLink className="w-3.5 h-3.5" />
                                       <span>{fileObj?.sharedCopy ? 'Buka dari Folder LAN' : 'Buka / Download'}</span>
@@ -4942,7 +4942,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                                       type="button"
                                       onClick={() => handleCopyShortcut(shortcut)}
                                       className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 text-xs font-bold rounded-lg border border-slate-300 cursor-pointer flex items-center gap-1.5 active:scale-95"
-                                      title="Salin path shortcut lokasi lokal"
+                                      title="Salin lokasi berkas di perangkat ini"
                                     >
                                       <Copy className="w-3.5 h-3.5 text-indigo-600" />
                                       <span>Salin Path</span>
@@ -5423,7 +5423,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                 <div>
                   <h3 className="text-sm font-black tracking-tight">PILIH LOKASI FOLDER JARINGAN LAN</h3>
                   <p className="text-[11px] text-slate-300">
-                    Folder bersama (LAN / Network Share) untuk penyimpanan & akses file cetak SPK.
+                    Folder bersama di jaringan toko tempat berkas cetak SPK disimpan.
                   </p>
                 </div>
               </div>
@@ -5450,7 +5450,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-600 leading-relaxed">
-                  Buka dialog pemilih folder untuk memilih folder penyimpanan di drive komputer lokal atau folder yang sudah dimount dalam jaringan.
+                  Pilih folder di komputer ini atau folder jaringan toko lewat jendela File Explorer.
                 </p>
                 <button
                   type="button"
@@ -5465,7 +5465,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
               {/* Opsi 2: Input Path Jaringan LAN / UNC Path */}
               <div className="space-y-1.5">
                 <label className="font-bold text-slate-900 block text-xs">
-                  2. Ketik / Tempel (Paste) Path Jaringan LAN (UNC / IP / Mapped Drive):
+                  2. Ketik atau tempel lokasi folder jaringan toko:
                 </label>
                 <input
                   type="text"
@@ -5475,7 +5475,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                   className="w-full bg-slate-50 border-2 border-slate-300 focus:border-indigo-600 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
                 />
                 <p className="text-[10.5px] text-slate-500">
-                  Mendukung format folder Windows UNC (<code className="bg-slate-100 px-1 py-0.5 rounded text-indigo-900 font-bold font-mono">\\SERVER\Folder\</code>), IP Network Share (<code className="bg-slate-100 px-1 py-0.5 rounded text-indigo-900 font-bold font-mono">\\192.168.1.50\Share\</code>), maupun Mapped Drive (<code className="bg-slate-100 px-1 py-0.5 rounded text-indigo-900 font-bold font-mono">Z:\DATA_CETAK\</code>).
+                  Tulis lokasi folder dengan salah satu cara: nama server (<code className="bg-slate-100 px-1 py-0.5 rounded text-indigo-900 font-bold font-mono">\\SERVER\Folder\</code>), alamat IP (<code className="bg-slate-100 px-1 py-0.5 rounded text-indigo-900 font-bold font-mono">\\192.168.1.50\Share\</code>), atau drive yang tersambung (<code className="bg-slate-100 px-1 py-0.5 rounded text-indigo-900 font-bold font-mono">Z:\DATA_CETAK\</code>).
                 </p>
               </div>
 
@@ -5507,7 +5507,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                   ))}
                 </div>
                 <p className="text-[10.5px] text-slate-500">
-                  Contoh di atas hanya menunjukkan cara menulis path. Path yang benar adalah lokasi share milik toko Anda.
+                  Contoh di atas hanya cara menulisnya. Isi dengan lokasi folder milik toko Anda.
                 </p>
               </div>
 
@@ -5608,7 +5608,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
           onLanDirChange={async (newDir) => {
             const saved = await saveSharedFolderConfig(newDir, currentUser?.name || 'Pengguna');
             if (!saved.ok) {
-              showFileToast('Lokasi folder bersama tidak valid. Contoh: \\\\SERVER\\DATA_CETAK\\ atau D:/DATA_CETAK/', 'error');
+              showFileToast('Lokasi folder belum benar. Contoh: \\\\SERVER\\DATA_CETAK\\ atau D:/DATA_CETAK/', 'error');
               return;
             }
             setNewLocalDir(saved.path);

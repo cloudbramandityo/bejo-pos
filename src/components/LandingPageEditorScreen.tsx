@@ -1004,7 +1004,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
         <div className="min-w-0 space-y-4">
           {/* ============================ IDENTITAS ============================ */}
           {active === 'brand' && (
-            <SectionCard title="Identitas & Logo" description="Logo, favicon, dan deskripsi website yang tampil pada header, tab browser, dan mesin pencari. Perubahan identitas tayang live setelah Simpan & Publish.">
+            <SectionCard title="Identitas & Logo" description="Logo, favicon, dan deskripsi website yang tampil di header, tab Chrome/Edge, dan hasil pencarian. Perubahan tampil setelah Simpan & Publish.">
               <div className="grid gap-5 md:grid-cols-2">
                 <ImageField
                   label="Logo (PNG transparan)"
@@ -1026,7 +1026,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                       maxH={256}
                       aspect="1 / 1"
                       output="png"
-                      hint="PNG transparan agar ikon tetap rapi di tab browser."
+                      hint="Pakai PNG transparan agar ikon rapi di tab Chrome/Edge."
                     />
                   </div>
                   {/* Pratinjau favicon + judul tab browser */}
@@ -1046,7 +1046,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                     </span>
                     <Field
                       label="Judul Website (Teks Tab Browser)"
-                      hint="Tampil di sebelah favicon pada tab browser dan sebagai judul di hasil pencarian."
+                      hint="Judul ini tampil di tab Chrome/Edge dan di hasil pencarian."
                     >
                       <input
                         value={config.brand.siteTitle || ''}
@@ -1251,7 +1251,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                     <div className="space-y-4">
                       <Field
                         label="Mode Tampilan Banner"
-                        hint="Mode 1 menampilkan gambar beserta tulisan dengan gradient gelap agar tulisan mudah dibaca. Mode 2 hanya menampilkan gambar tanpa gradient maupun bayangan."
+                        hint="Mode 1: gambar dengan tulisan di atas latar gelap, tulisan lebih jelas. Mode 2: hanya gambar, tanpa latar gelap."
                       >
                         <div className="grid gap-2 sm:grid-cols-2">
                           <button
@@ -2079,7 +2079,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
                   <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Video Profil (Kolom Kiri)</p>
                   <Field
                     label="URL Video"
-                    hint="Tempel tautan YouTube (watch, youtu.be, Shorts) atau Google Drive yang dibagikan sebagai 'Siapa saja yang memiliki link'. Video diputar otomatis tanpa suara dan selalu looping. Kosongkan untuk memakai Foto Workshop dari Tentang Kami."
+                    hint="Tempel tautan YouTube atau Google Drive yang sudah dibuka untuk 'Siapa saja yang memiliki link'. Video berputar otomatis, tanpa suara, dan berulang. Kosongkan untuk memakai Foto Workshop."
                   >
                     <input
                       value={config.whyVideo?.url || ''}
@@ -2411,7 +2411,7 @@ export const LandingPageEditorScreen: React.FC<LandingPageEditorScreenProps> = (
 
           {/* ============================== ABOUT ============================= */}
           {active === 'about' && (
-            <SectionCard title="Tentang Kami" description="Konten halaman Tentang Kami. Foto Workshop juga menjadi cadangan kolom video di Mengapa Kami.">
+            <SectionCard title="Tentang Kami" description="Isi halaman Tentang Kami. Foto Workshop dipakai bila kolom video di Mengapa Kami kosong.">
               <div className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <ImageField

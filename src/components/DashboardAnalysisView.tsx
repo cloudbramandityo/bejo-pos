@@ -871,7 +871,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
               Ringkasan Kinerja & Alur Finansial {storeName}
             </h2>
             <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl leading-relaxed">
-              Analisis menyeluruh mencakup penjualan ritel kasir POS, pengambilan stok bahan oleh agen rekanan, kulakan belanja supplier, dan estimasi arus kas bersih.
+              Penjualan kasir, belanja bahan, pengambilan oleh agen, dan sisa uang kas selama periode ini.
             </p>
           </div>
 
@@ -1306,7 +1306,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Status Toko:</span>
-                  <span className="text-emerald-700 font-bold">Online & Sinkron</span>
+                  <span className="text-emerald-700 font-bold">Tercatat di aplikasi</span>
                 </div>
               </div>
             </div>
@@ -1349,7 +1349,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
                 </div>
                 <h4 className="font-bold text-slate-900 text-sm">Laba Bersih & Kas Toko</h4>
                 <p className="text-[11px] text-slate-600 leading-relaxed">
-                  Uang tunai, QRIS, dan transfer bank setelah dikurangi seluruh HPP bahan.
+                  Uang tunai, QRIS, dan transfer bank setelah dikurangi seluruh harga modal bahan.
                 </p>
               </div>
 

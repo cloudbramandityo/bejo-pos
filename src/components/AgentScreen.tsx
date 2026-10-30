@@ -804,7 +804,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     const { filteredStockTx, filteredCetakTx } = recapDataset;
 
     if (filteredStockTx.length === 0 && filteredCetakTx.length === 0) {
-      alert('Tidak ada data transaksi untuk kriteria filter dan periode yang dipilih.');
+      alert('Belum ada transaksi untuk pilihan agen dan periode ini.');
       return;
     }
 
@@ -1271,7 +1271,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
       {/* Quick Status Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white border border-slate-200 p-3.5 rounded-xl shadow-xs">
-          <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Database Produk</div>
+          <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Katalog Produk</div>
           <div className="text-base sm:text-lg font-bold text-slate-900 mt-0.5">{products.length} Item</div>
         </div>
 
@@ -1316,7 +1316,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                 <div>
                   <h2 className="text-sm font-bold text-slate-900 uppercase flex items-center gap-2">
                     <Layers className="w-4 h-4 text-slate-700" />
-                    Katalog Database & Stok Produk
+                    Katalog & Stok Produk
                   </h2>
                   <p className="text-[11px] text-slate-500">
                     Klik tombol "Ambil Bahan" untuk memasukkan produk ke daftar pesanan agen
@@ -1565,7 +1565,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                                 Harga Produk Agen
                               </div>
                               <div className="text-xs font-bold text-slate-700 italic">
-                                Status: Tersinkronisasi
+                                Status: Diperbarui otomatis
                               </div>
                             </div>
 
@@ -1933,7 +1933,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                     value={historyMonthFilter}
                     onChange={(e) => setHistoryMonthFilter(e.target.value)}
                     className="bg-transparent text-xs text-slate-800 font-bold focus:outline-none cursor-pointer"
-                    title="Filter pengambilan bahan berdasarkan bulan"
+                    title="Saring pengambilan bahan per bulan"
                   >
                     <option value="ALL">📅 Semua Bulan ({availableMonths.length} Periode)</option>
                     {availableMonths.map((mKey) => (
@@ -2104,7 +2104,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                     ? 'bg-slate-900 text-white shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
-                title="Tampilkan rekapitulasi analitik pengambilan bahan per bulan"
+                title="Tampilkan rekap pengambilan bahan per bulan"
               >
                 <CalendarDays className="w-3.5 h-3.5 text-amber-400" />
                 <span>Rekap Bahan</span>
@@ -2145,7 +2145,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                 <div className="p-10 text-center text-slate-400 space-y-2 bg-slate-50 border border-slate-200 rounded-xl">
                   <CalendarDays className="w-8 h-8 mx-auto opacity-50 text-slate-400" />
                   <div className="font-semibold text-xs text-slate-600">
-                    Belum ada data rekapitulasi bulanan untuk agen ini.
+                    Belum ada rekap bulanan pengambilan untuk agen ini.
                   </div>
                 </div>
               ) : (
@@ -2441,7 +2441,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                       : 'Belum ada riwayat transaksi pengambilan bahan atau cetak agen.'}
                   </div>
                   <p className="text-[11px] text-slate-400">
-                    Gunakan tombol di atas untuk mengganti periode bulan atau ubah kata kunci pencarian.
+                    Ganti periode bulan atau ubah kata kunci pencarian di atas.
                   </p>
                 </div>
               ) : (
@@ -3131,7 +3131,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                   type="button"
                   onClick={handleCopyMessage}
                   className="px-3.5 py-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs"
-                  title="Salin teks pesan ke clipboard"
+                  title="Salin teks pesan"
                 >
                   <Copy className="w-3.5 h-3.5" />
                   <span>{isCopied ? 'Tersalin' : 'Salin'}</span>
@@ -3164,7 +3164,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                 </div>
                 <div>
                   <h3 className="font-bold text-sm text-white">Unduh Rekap PDF Agen</h3>
-                  <p className="text-[10px] text-slate-300">Ekspor laporan rekapitulasi transaksi dalam format PDF</p>
+                  <p className="text-[10px] text-slate-300">Unduh rekap transaksi agen dalam format PDF</p>
                 </div>
               </div>
               <button
@@ -3370,7 +3370,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                   {recapDataset.filteredCetakTx.length > 0 && ` + ${recapDataset.filteredCetakTx.length} transaksi cetak agen`}
                 </div>
                 <div className="text-slate-500">
-                  PDF berisi baris yang sama dengan yang sedang ditampilkan bila periode dan agennya identik.
+                  Isi PDF sama dengan daftar yang tampil, selama agen dan periodenya sama.
                 </div>
               </div>
 

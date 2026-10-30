@@ -46,7 +46,7 @@ export const DEFAULT_INVOICE_STORE_IDENTITY: InvoiceStoreIdentity = {
   invoicePrefix: 'INV/BJP',
   proformaPrefix: 'PI/BJP',
   creditNotePrefix: 'CN/BJP',
-  defaultTerms: '1. Pembayaran DP minimal 50% sebelum proses cetak & cutting dimulai.\n2. Pelunasan sisa tagihan wajib diselesaikan saat pesanan selesai / sebelum serah terima barang.\n3. Barang yang sudah dicetak/dipotong sesuai acc desain tidak dapat dibatalkan atau dikembalikan.',
+  defaultTerms: '1. DP minimal 50% dibayar sebelum proses cetak & cutting dimulai.\n2. Sisa tagihan dilunasi saat pesanan selesai, sebelum barang diserahkan.\n3. Barang yang sudah dicetak/dipotong sesuai acc desain tidak dapat dibatalkan atau dikembalikan.',
   authorizedSignerName: 'Ahmad Irdianto',
   authorizedSignerRole: 'Owner / Pimpinan'
 };

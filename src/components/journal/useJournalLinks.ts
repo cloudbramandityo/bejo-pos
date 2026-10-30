@@ -35,7 +35,7 @@ export function useJournalLinks(
       await navigator.clipboard.writeText(link);
       showToast('Tautan Google Sheet disalin.');
     } catch {
-      showToast('Browser menolak akses clipboard. Salin manual dari kolom tautan.', 'error');
+      showToast('Perangkat ini menolak menyalin otomatis. Salin manual dari kolom tautan.', 'error');
     }
   }, [savedUrl, embed.embedUrl, showToast]);
 

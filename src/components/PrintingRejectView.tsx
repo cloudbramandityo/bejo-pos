@@ -374,7 +374,7 @@ export const PrintingRejectView: React.FC<PrintingRejectViewProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-medium">
-                Catatan operator untuk bahan gagal produksi (Adjustment, Jamming, & Human Error)
+                Catatan operator untuk bahan gagal produksi: Adjustment, Jamming, atau Human Error
               </p>
             </div>
           </div>
@@ -653,7 +653,7 @@ export const PrintingRejectView: React.FC<PrintingRejectViewProps> = ({
             </div>
             <div className="text-sm font-bold text-slate-800">Tidak ada catatan printing reject pada periode ini</div>
             <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Produksi berjalan lancar tanpa ada bahan terbuang pada filter waktu yang dipilih. Klik tombol <strong>+ Catat Reject Baru</strong> jika terjadi kegagalan cetak.
+              Produksi lancar, tidak ada bahan terbuang pada periode ini. Tekan tombol <strong>+ Catat Reject Baru</strong> jika ada cetak gagal.
             </p>
           </div>
         ) : (

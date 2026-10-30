@@ -285,9 +285,9 @@ export function handleBackendError(
           new CustomEvent('app:backend-error', {
             detail: {
               source: 'POCKETBASE',
-              title: 'Database Offline (Mode Lokal Aktif)',
+              title: 'Server Terputus (Mode Lokal Aktif)',
               message:
-                'Server PocketBase tidak dapat dijangkau. Seluruh data tetap AMAN dan beroperasi penuh menggunakan Mode Lokal (Local Storage) berkecepatan tinggi. Data akan otomatis tersinkronisasi ketika server online kembali.',
+                'Server sedang tidak bisa dihubungi. Data tetap aman dan aplikasi berjalan penuh dalam Mode Lokal. Perubahan disimpan di perangkat ini dan dikirim ke server begitu koneksi kembali.',
               code: 'ERR_POCKETBASE_UNAVAILABLE',
             },
           })
@@ -322,7 +322,7 @@ export function handleBackendError(
       new CustomEvent('app:backend-error', {
         detail: {
           source: 'POCKETBASE',
-          title: `PocketBase DB ${operationType} Error (${path || 'Koleksi'})`,
+          title: `Gagal memproses data di server (${path || 'data'})`,
           message: errMessage,
           code: `ERR_POCKETBASE_${operationType.toUpperCase()}`,
         },

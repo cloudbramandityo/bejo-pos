@@ -49,7 +49,7 @@ export const BackendErrorBanner: React.FC<BackendErrorBannerProps> = ({
     try {
       const report = await runBackendAutoFix();
       if (report.success) {
-        setFixSuccessMessage(report.message || 'Sistem backend & koneksi berhasil dinormalisasi.');
+        setFixSuccessMessage(report.message || 'Sistem dan koneksi berhasil dipulihkan.');
         setTimeout(() => {
           setFixSuccessMessage(null);
           dismissActiveBackendNotification();
@@ -181,7 +181,7 @@ export const BackendErrorBanner: React.FC<BackendErrorBannerProps> = ({
               onClick={handleFixNow}
               disabled={isFixing}
               className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 active:scale-95 text-white text-xs font-black transition-all cursor-pointer shadow-md flex items-center gap-1.5 disabled:opacity-50"
-              title="Jalankan perbaikan otomatis backend dan reset koneksi"
+              title="Jalankan perbaikan otomatis dan sambungkan ulang koneksi"
             >
               {isFixing ? (
                 <RefreshCw className="w-3.5 h-3.5 animate-spin text-white" />

@@ -323,10 +323,16 @@ export const BackendDiagnosticsModal: React.FC<BackendDiagnosticsModalProps> = (
                       className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
                         diagnostics?.aiApiStatus === 'ready'
                           ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-amber-100 text-amber-700'
+                          : diagnostics?.aiApiStatus === 'degraded'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-slate-100 text-slate-600'
                       }`}
                     >
-                      {diagnostics?.aiApiStatus === 'ready' ? 'Siap Digunakan' : 'Degraded'}
+                      {diagnostics?.aiApiStatus === 'ready'
+                        ? 'Siap Digunakan'
+                        : diagnostics?.aiApiStatus === 'degraded'
+                          ? 'Terbatas (kunci AI belum diisi)'
+                          : 'Belum tersambung'}
                     </span>
                   </div>
                   <div>
@@ -353,10 +359,16 @@ export const BackendDiagnosticsModal: React.FC<BackendDiagnosticsModalProps> = (
                       className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
                         diagnostics?.pocketbaseStatus === 'connected'
                           ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-rose-100 text-rose-700'
+                          : diagnostics?.pocketbaseStatus === 'checking'
+                            ? 'bg-slate-100 text-slate-600'
+                            : 'bg-rose-100 text-rose-700'
                       }`}
                     >
-                      {diagnostics?.pocketbaseStatus === 'connected' ? 'Tersambung' : 'Offline'}
+                      {diagnostics?.pocketbaseStatus === 'connected'
+                        ? 'Tersambung'
+                        : diagnostics?.pocketbaseStatus === 'checking'
+                          ? 'Masih diperiksa'
+                          : 'Offline'}
                     </span>
                   </div>
                   <div>
@@ -598,7 +610,7 @@ export const BackendDiagnosticsModal: React.FC<BackendDiagnosticsModalProps> = (
             <span className="font-mono text-slate-800 font-semibold">
               {diagnostics?.lastChecked
                 ? new Date(diagnostics.lastChecked).toLocaleTimeString('id-ID') + ' WIB'
-                : 'Baru saja'}
+                : 'Belum pernah diperiksa'}
             </span>
           </div>
 

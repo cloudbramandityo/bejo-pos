@@ -44,7 +44,7 @@ export const TaxForeignIncomeView: React.FC<TaxForeignIncomeViewProps> = ({
         <Globe className="w-10 h-10 text-slate-300 mx-auto mb-2" />
         <h3 className="text-sm font-bold text-slate-700">Tidak Ada Penghasilan Luar Negeri Tercatat</h3>
         <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
-          Apabila Anda tidak memiliki dividen saham bursa luar negeri atau pendapatan cabang di luar Indonesia, bagian ini diisi Nihil (Rp 0).
+          Kalau Anda tidak punya dividen dari bursa luar negeri atau cabang usaha di luar Indonesia, isi bagian ini Nihil (Rp 0).
         </p>
       </div>
     </div>

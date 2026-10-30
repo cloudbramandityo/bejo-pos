@@ -398,8 +398,8 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
     onSaveProduct(productData);
     setNotificationMsg(
       editingProduct
-        ? `Perubahan produk "${productData.name}" berhasil disimpan ke database cloud.`
-        : `Produk baru "${productData.name}" berhasil ditambahkan ke database cloud.`
+        ? `Perubahan produk "${productData.name}" berhasil tersimpan ke server.`
+        : `Produk baru "${productData.name}" berhasil ditambahkan ke server.`
     );
     setIsModalOpen(false);
   };
@@ -546,11 +546,11 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[11px] font-semibold">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 <Cloud className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Cloud Sync Aktif</span>
+                <span>Terhubung ke Server</span>
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Kelola data produk & harga. Seluruh produk selalu tersedia (tanpa batasan stok) dan tersinkron otomatis ke database cloud.
+              Kelola data produk & harga. Semua produk selalu tersedia (tanpa batas stok) dan otomatis tersimpan ke server.
             </p>
           </div>
         </div>
@@ -841,7 +841,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                                 id={`btn-delete-product-${product.id}`}
                                 onClick={() => setProductToDelete(product)}
                                 className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                                title="Hapus Produk dari Database (Developer Only)"
+                                title="Hapus Produk Permanen (Khusus Developer)"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -1003,7 +1003,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                         </span>
                       </div>
                       <p className="text-[10px] text-blue-700/90 mt-0.5 leading-relaxed font-medium">
-                        Secara default stok Digital Printing <strong>Selalu Tersedia</strong>. Centang opsi ini jika produk ingin diinput stok manual dan dihitung ke dalam <strong>Total Aset Toko</strong>.
+                        Stok Digital Printing biasanya <strong>Selalu Tersedia</strong>. Centang bila stok diisi manual dan ingin dihitung sebagai <strong>Total Aset Toko</strong>.
                       </p>
                     </label>
                   </div>
@@ -1821,7 +1821,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                   {showCustomPackaging && (
                     <div className="mt-2 p-3 bg-white border border-slate-200 rounded-xl space-y-3">
                       <p className="text-[10.5px] text-slate-500">
-                        Ubah kolom teks di bawah ini hanya jika produk Anda menggunakan satuan selain Roll, Pak, atau Botol (misal: <em>rim, pcs, kaleng, set</em>).
+                        Isi kolom di bawah hanya bila satuan produk bukan Roll, Pak, atau Botol (misal: <em>rim, pcs, kaleng, set</em>).
                       </p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
@@ -1914,7 +1914,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                       <div className="p-2.5 bg-blue-50/90 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-center gap-2 font-medium">
                         <Package className="w-4 h-4 text-blue-600 shrink-0" />
                         <span>
-                          <strong>Opsi Aset Toko Aktif:</strong> Stok produk ini dapat diinput secara manual dan dihitung ke dalam kalkulasi <strong>Total Aset Toko</strong>.
+                          <strong>Aset Toko Aktif:</strong> stok produk ini diisi manual dan ikut dihitung ke <strong>Total Aset Toko</strong>.
                         </span>
                       </div>
                     )}
@@ -1986,7 +1986,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                   className="px-5 py-2.5 bg-[#1e295d] hover:bg-[#151e44] text-white font-bold text-xs rounded-xl shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
                   <Save className="w-4 h-4 text-sky-400" />
-                  {editingProduct ? 'Simpan Perubahan' : 'Simpan ke Database'}
+                  {editingProduct ? 'Simpan Perubahan' : 'Simpan ke Server'}
                 </button>
               </div>
             </form>
@@ -2194,7 +2194,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="text-base font-bold text-slate-900 mb-1">
-                  Hapus Produk dari Database?
+                  Hapus Produk Permanen?
                 </h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
                   Apakah Anda yakin ingin menghapus produk{' '}
@@ -2202,7 +2202,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                   <span className="font-mono font-bold text-slate-800">{productToDelete.code}</span>)?
                 </p>
                 <div className="mt-3 p-2.5 bg-red-100/70 border border-red-200 rounded-xl text-[11px] text-red-800 font-medium">
-                  Produk akan dihapus permanen dari inventori dan langsung terupdate di cloud database PocketBase.
+                  Produk dihapus permanen dari daftar barang dan tidak bisa dikembalikan lagi. Perubahannya langsung tersimpan ke server.
                 </div>
               </div>
             </div>
@@ -2219,7 +2219,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                 id="btn-confirm-delete-product"
                 onClick={() => {
                   onDeleteProduct(productToDelete.id);
-                  setNotificationMsg(`Produk "${productToDelete.name}" berhasil dihapus dari database.`);
+                  setNotificationMsg(`Produk "${productToDelete.name}" berhasil dihapus permanen.`);
                   setProductToDelete(null);
                 }}
                 className="px-5 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"

@@ -696,7 +696,7 @@ const ShopeeCampaignSetup: React.FC<{
 
       <div className="flex items-start gap-2 rounded-lg bg-[#F5F5F5] px-3 py-2.5 text-[11px] text-slate-600">
         <Tag className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#EE4D2D]" />
-        <p>Foto, judul, dan harga iklan disinkronkan otomatis dari Shopee. Materi tidak perlu diunggah manual.</p>
+        <p>Foto, judul, dan harga iklan mengikuti data dari Shopee. Tidak perlu unggah materi manual.</p>
       </div>
     </div>
   );
@@ -799,7 +799,7 @@ const ShopeeBudgetBidding: React.FC<{
         </div>
       ) : (
         <div className="mt-3 rounded-md bg-[#F5F5F5] px-3 py-2 text-[11px] text-slate-600">
-          Iklan berjalan terus selama saldo Shopee Ads masih mencukupi. Saldo dapat dipantau pada langkah tinjau.
+          Iklan jalan terus selama saldo Shopee Ads cukup. Saldo terlihat pada langkah Tinjau.
         </div>
       )}
     </div>
@@ -808,7 +808,7 @@ const ShopeeBudgetBidding: React.FC<{
       <p className="text-xs font-bold text-slate-800">Strategi bid (CPC)</p>
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
         {([
-          { value: 'AUTO' as BidMode, label: 'Otomatis', desc: 'Shopee mengoptimasi bid sesuai performa' },
+          { value: 'AUTO' as BidMode, label: 'Otomatis', desc: 'Shopee yang mengatur bid, ikut performa iklan' },
           { value: 'MANUAL' as BidMode, label: 'Manual', desc: 'Tentukan biaya per klik sendiri' },
         ]).map((opt) => (
           <button
@@ -861,7 +861,7 @@ const ShopeeBudgetBidding: React.FC<{
               className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 focus:border-[#EE4D2D] focus:outline-none focus:ring-2 focus:ring-[#EE4D2D]/30"
             />
             <p className="mt-1 text-[10px] text-slate-500">
-              Pisahkan dengan koma. Setiap keyword dikirim ke Shopee dengan match type broad dan bid yang sama.
+              Pisahkan kata kunci dengan koma. Semua kata kunci memakai pola broad dan bid yang sama.
             </p>
           </div>
         </div>
@@ -884,7 +884,7 @@ const ShopeePlacement: React.FC<{
       <ShopeeStepHeader
         step={4}
         title="Penempatan iklan"
-        description="Pilih posisi Discovery Ads. Penempatan dikirim ke API Shopee saat strategi bid manual."
+        description="Pilih posisi iklan. Pilihan ini dikirim ke Shopee saat bid diatur manual."
       />
 
       <div className="rounded-lg border border-slate-200 bg-white p-4">
@@ -936,20 +936,19 @@ const ShopeePlacement: React.FC<{
 
       {form.bidMode === 'AUTO' ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800">
-          Pada bid otomatis, Shopee menentukan penempatan dan bid sendiri. Pilihan penempatan di atas hanya
-          dikirim saat strategi bid manual.
+          Saat bid otomatis, Shopee yang menentukan posisi dan bid sendiri. Pilihan posisi di atas hanya
+          terpakai saat bid diatur manual.
         </div>
       ) : (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[11px] leading-relaxed text-emerald-800">
-          Penempatan yang dipilih dikirim ke Shopee bersama bid per klik pada strategi manual.
+          Posisi yang dipilih dikirim ke Shopee bersama bid per klik saat bid diatur manual.
         </div>
       )}
 
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <p className="text-xs font-bold text-slate-800">Premium rate</p>
         <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
-          Premium rate belum tersedia pada Shopee Open Platform API. Setelah iklan aktif, atur premium rate
-          langsung melalui Shopee Ads Manager.
+          Fitur premium rate belum tersedia di Shopee Open Platform. Setelah iklan aktif, atur premium rate di Shopee Ads Manager.
         </p>
       </div>
     </div>
@@ -1044,7 +1043,7 @@ const ShopeePublishReview: React.FC<{
         </div>
         <div className="divide-y divide-slate-100 px-3 text-xs">
           <Row label="Akun toko" value={business.connected ? business.shopeeSellerId : 'Belum terhubung'} />
-          <Row label="Status" value={business.simulated ? 'Simulasi (belum live)' : 'Live API Shopee'} />
+          <Row label="Status" value={business.simulated ? 'Simulasi (belum live)' : 'Live di Shopee'} />
           <Row label="Saldo iklan" value={business.connected ? formatRupiah(business.shopeeAdsBalance) : '—'} />
           <Row label="Nama iklan" value={form.adName || '—'} />
           <Row

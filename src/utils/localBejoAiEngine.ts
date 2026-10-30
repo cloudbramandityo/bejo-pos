@@ -158,12 +158,12 @@ export function generateLocalBejoAiReply(userMessage: string, ctx: LocalAiContex
       shiftInfo = `Shift aktif: **${activeShift.shiftName || 'Shift 1'}** oleh **${activeShift.cashierName || 'Kasir'}** (Modal Awal: ${formatRupiah(modalAwal)}).`;
     }
 
-    return `${greeting}\n\nBerikut ringkasan data penjualan real-time di **${storeName}**: 📊\n\n` +
+    return `${greeting}\n\nBerikut ringkasan penjualan terbaru di **${storeName}**: 📊\n\n` +
       `• **Status Shift:** ${shiftInfo}\n` +
       `• **Total Transaksi Hari Ini:** **${totalTodayCount} transaksi**\n` +
       `• **Total Omset Terkumpul:** **${formatRupiah(totalTodayRevenue)}**\n` +
       `• **Metode Pembayaran:** Tunai (Cash), Transfer Bank, dan QRIS aktif.\n\n` +
-      `Semua mutasi tercatat aman di database lokal & sinkronisasi otomatis. Ada rincian kasir lain yang mau dicek, ${prefixTitle}? 💰✨`;
+      `Semua transaksi tercatat otomatis dan tersimpan aman. Ada rincian kasir lain yang mau dicek, ${prefixTitle}? 💰✨`;
   }
 
   // 3. CHECK STOCK SPECIFIC PRODUCT
@@ -183,7 +183,7 @@ export function generateLocalBejoAiReply(userMessage: string, ctx: LocalAiContex
     const priceGrosir = matchedProduct.hargaMeterGrosir ? formatRupiah(matchedProduct.hargaMeterGrosir) : (matchedProduct.hargaGrosir ? formatRupiah(matchedProduct.hargaGrosir) : pricePcs);
     const statusText = stockVal > 10 ? '🟢 Stok Aman' : (stockVal > 0 ? '🟡 Stok Menipis' : '🔴 Stok Habis');
 
-    return `${greeting}\n\nInformasi stok real-time untuk **${matchedProduct.name}** (${matchedProduct.code || 'SKU'}): 📦\n\n` +
+    return `${greeting}\n\nInformasi stok terkini **${matchedProduct.name}** (kode ${matchedProduct.code || 'SKU'}): 📦\n\n` +
       `• **Sisa Stok:** **${stockVal} ${unit}** (${statusText})\n` +
       `• **Kategori:** ${matchedProduct.category.toUpperCase()}\n` +
       `• **Harga Satuan / Eceran:** ${pricePcs}\n` +
@@ -200,7 +200,7 @@ export function generateLocalBejoAiReply(userMessage: string, ctx: LocalAiContex
     }
 
     const itemsSummary = lowStockList.slice(0, 6).map((p) => `• **${p.name}**: Sisa **${p.stock || 0} ${p.unit || 'unit'}**`).join('\n');
-    return `${greeting}\n\n⚠️ **Peringatan Stok Menipis / Perlu Restock Segera:**\n\n${itemsSummary}\n\nTotal ada **${lowStockList.length} produk** yang stoknya perlu segera di-reorder ke supplier agar proses cetak & penjualan tidak terhambat. Mau dibuatkan catatan order ke supplier, ${prefixTitle}? 📋`;
+    return `${greeting}\n\n⚠️ **Stok Menipis, Perlu Segera Kulakan:**\n\n${itemsSummary}\n\nTotal ada **${lowStockList.length} produk** yang perlu segera dipesan ke supplier agar cetak dan penjualan tidak terhambat. Mau dibuatkan catatan order ke supplier, ${prefixTitle}? 📋`;
   }
 
   // 5. SPK CETAK & PIPELINE
@@ -218,7 +218,7 @@ export function generateLocalBejoAiReply(userMessage: string, ctx: LocalAiContex
       `• ⚡ **2. Antrean / Proses Cetak:** ${inPrinting} mesin aktif\n` +
       `• ✂️ **3. Proses Finishing:** ${inFinishing} pesanan\n` +
       `• 🛍️ **4. Siap Ambil / Kasir:** ${readyPickup} pesanan siap bayar\n\n` +
-      `Folder berkas asli LAN dan mesin cetak online terhubung real-time. Ada nomor SPK tertentu yang ingin dicek statusnya, ${prefixTitle}? 😊`;
+      `Folder berkas asli (LAN) dan mesin cetak terhubung, statusnya terpantau langsung. Ada nomor SPK tertentu yang ingin dicek statusnya, ${prefixTitle}? 😊`;
   }
 
   // 6. AGEN & PENGAMBILAN BAHAN
@@ -227,7 +227,7 @@ export function generateLocalBejoAiReply(userMessage: string, ctx: LocalAiContex
     return `${greeting}\n\nInformasi kemitraan **Toko Cabang & Agen Resmi ${storeName}**: 🤝📦\n\n` +
       `• **Total Agen Terdaftar:** **${agents.length} Mitra Cabang**\n` +
       `• **Jadwal Update Stok Agen:** Otomatis tiap pukul 16.00 WIB setiap hari.\n` +
-      `• **Fitur Agen:** Pemesanan bahan per roll/meter, riwayat pengambilan bahan bulanan, dan order cetak langsung tersinkronisasi.\n\n` +
+      `• **Fitur Agen:** Pesan bahan per roll/meter, lihat riwayat pengambilan bahan bulanan, dan order cetak otomatis diperbarui.\n\n` +
       `Semua Surat Jalan dan mutasi bahan agen dapat langsung dicetak atau diekspor ke PDF dari Tab Agen ya ${prefixTitle}!`;
   }
 
@@ -268,13 +268,13 @@ export function generateLocalBejoAiReply(userMessage: string, ctx: LocalAiContex
       `• **Cetak Nota / Struk:** Otomatis keluar setelah pembayaran lunas atau klik ikon printer di riwayat transaksi.\n` +
       `• **Transaksi Cetak & Laser:** Klik tombol **+ Jasa Cetak & Laser** di kasir untuk langsung membuat SPK terintegrasi.\n` +
       `• **Tarik SPK di Kasir:** Gunakan tombol **📥 TARIK DARI SPK CETAK** untuk pelunasan atau potong DP.\n` +
-      `• **Mode Offline:** Aplikasi tetap dapat mencatat transaksi kasir & kalkulasi secara lokal saat internet terputus.\n\n` +
+      `• **Mode Offline:** Kasir tetap bisa mencatat transaksi dan menghitung harga saat internet putus.\n\n` +
       `Jika butuh bantuan teknis lain, tanyakan saja ya ${prefixTitle}!`;
   }
 
   // 11. GENERAL CONVERSATION & COMPANION
   return `${greeting}\n\nSebagai asisten pintar dan sahabat setia di **${storeName}**, aku selalu siap sedia tiap saat (baik saat online maupun offline):\n\n` +
-    `• 💰 Cek omset, kas kasir, & laporan penjualan real-time\n` +
+    `• 💰 Cek omset, uang kasir, dan laporan penjualan terbaru\n` +
     `• 📦 Cari stok barang, harga ecer/grosir, & info bahan menipis\n` +
     `• 🖨️ Pantau alur SPK Cetak Digital & deadline antrean mesin\n` +
     `• 🎨 Buat konsep visual stiker AI & ide promo toko\n` +

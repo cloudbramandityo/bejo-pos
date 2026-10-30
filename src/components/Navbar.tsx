@@ -359,10 +359,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 ? 'bg-slate-100 text-slate-800 border-slate-300 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-900'
                 : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
             }`}
-            title="Pengaturan Database Lokal & Sinkronisasi Real-time (Khusus Developer)"
+            title="Pengaturan data perangkat ini & server (Khusus Developer)"
           >
             <CloudCheck className={`w-3.5 h-3.5 ${isCloudConnected ? 'text-indigo-600' : 'text-amber-600'}`} />
-            <span>{isCloudConnected ? 'Hybrid Sync' : 'Mode Lokal'}</span>
+            <span>{isCloudConnected ? 'Lokal + Server' : 'Mode Lokal'}</span>
           </button>
         )}
 
@@ -634,7 +634,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   >
                     <CloudCheck className="w-[18px] h-[18px] shrink-0 text-indigo-600" />
                     <span className="flex-1 text-[13px] font-semibold truncate">
-                      {isCloudConnected ? 'Hybrid Sync (Lokal & Cloud)' : 'Mode Lokal (Offline)'}
+                      {isCloudConnected ? 'Tersambung ke Server' : 'Mode Lokal (Tanpa Internet)'}
                     </span>
                   </button>
                 </div>

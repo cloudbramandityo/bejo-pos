@@ -40,7 +40,7 @@ export function shouldDisableJournalCloud(error: unknown): boolean {
 export function describeJournalCloudError(error: unknown): string {
   if (error instanceof JournalApiError) {
     if (error.status === 503) {
-      return 'Penyimpanan cloud belum aktif di server ini. Tautan tetap tersimpan di LocalStorage browser.';
+      return 'Belum bisa menyimpan ke server. Tautan tetap tersimpan di perangkat ini.';
     }
     if (error.status === 401) {
       return 'Sesi DEVELOPER tidak aktif. Klik Coba lagi untuk membuat sesi baru.';
@@ -48,7 +48,7 @@ export function describeJournalCloudError(error: unknown): string {
     return error.message;
   }
   if (error instanceof Error && error.message) return error.message;
-  return 'Gagal menyimpan ke cloud. Tautan tetap tersimpan di browser.';
+  return 'Gagal menyimpan ke server. Tautan tetap tersimpan di perangkat ini.';
 }
 
 export async function fetchRemoteJournalSettings(): Promise<RemoteJournalConfig> {

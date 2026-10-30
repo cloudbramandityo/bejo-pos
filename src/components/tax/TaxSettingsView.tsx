@@ -16,7 +16,7 @@ export const TaxSettingsView: React.FC<TaxSettingsViewProps> = ({ onClearDummyDa
   const [clearedNotice, setClearedNotice] = React.useState(false);
 
   const handleClear = () => {
-    if (window.confirm('Apakah Anda yakin ingin membersihkan seluruh data dummy pada tab Pajak? Data profil contoh, simulasi harta, utang, dan billing contoh akan dikosongkan agar formulir SPT murni hanya berisi data riil yang Anda masukkan.')) {
+    if (window.confirm('Hapus semua data contoh di tab Pajak? Profil contoh, simulasi harta, utang, dan billing contoh akan dikosongkan, jadi isian SPT hanya berisi data asli Anda.')) {
       if (onClearDummyData) {
         onClearDummyData();
       }
@@ -36,7 +36,7 @@ export const TaxSettingsView: React.FC<TaxSettingsViewProps> = ({ onClearDummyDa
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Seluruh rumus, lapisan tarif, PTKP, dan kode akun pajak dikunci sesuai peraturan perundang-undangan perpajakan resmi Republik Indonesia.
+            Tarif, PTKP, dan kode akun pajak sudah dikunci sesuai aturan pajak resmi Indonesia.
           </p>
         </div>
 
@@ -117,7 +117,7 @@ export const TaxSettingsView: React.FC<TaxSettingsViewProps> = ({ onClearDummyDa
           <span>3. Fasilitas Insentif UMKM Orang Pribadi (PP No 55 Tahun 2022)</span>
         </div>
         <p className="text-amber-800 leading-relaxed">
-          Wajib Pajak Orang Pribadi yang memiliki peredaran bruto tertentu dari usaha tidak dikenai Pajak Penghasilan (PPh) atas bagian peredaran bruto sampai dengan <strong>Rp 500.000.000,00 (lima ratus juta rupiah)</strong> dalam 1 (satu) Tahun Pajak. Bagian peredaran bruto di atas Rp 500.000.000,00 dikenai PPh Final sebesar <strong>0,5%</strong>.
+          Usaha orang pribadi dengan omzet sampai <strong>Rp 500.000.000,00 (lima ratus juta rupiah)</strong> dalam satu tahun tidak kena Pajak Penghasilan (PPh). Omzet di atas itu kena PPh Final <strong>0,5%</strong>.
         </p>
       </div>
 
@@ -127,10 +127,11 @@ export const TaxSettingsView: React.FC<TaxSettingsViewProps> = ({ onClearDummyDa
           <div>
             <h4 className="font-bold text-slate-900 flex items-center gap-2 text-sm">
               <Trash2 className="w-4 h-4 text-rose-600" />
-              <span>4. Pembersihan Data Dummy & Reset Formulir Bersih</span>
+              <span>4. Hapus Data Contoh &amp; Bersihkan Formulir</span>
             </h4>
             <p className="text-slate-500 mt-1 max-w-xl leading-relaxed">
-              Pastikan tidak ada data contoh/simulasi lama yang tercampur dengan data nyata yang Anda input. Tombol ini akan mereset seluruh formulir SPT dan billing ke lembar kosong (Rp 0) yang siap diisi murni dengan data riil Anda.
+              Pastikan data contoh lama tidak tercampur dengan data asli Anda. Tombol ini mengosongkan
+              seluruh formulir SPT dan billing menjadi Rp 0.
             </p>
           </div>
 
@@ -140,14 +141,14 @@ export const TaxSettingsView: React.FC<TaxSettingsViewProps> = ({ onClearDummyDa
             className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs flex items-center gap-2 shrink-0 cursor-pointer self-start sm:self-auto"
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            <span>Bersihkan Data Dummy Pajak</span>
+            <span>Hapus Data Contoh Pajak</span>
           </button>
         </div>
 
         {clearedNotice && (
           <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 font-semibold flex items-center gap-2 animate-fade-in">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>Seluruh data dummy berhasil dibersihkan! Lembar pajak kini murni siap diisi data riil.</span>
+            <span>Data contoh terhapus. Formulir pajak kembali kosong dan siap diisi data asli Anda.</span>
           </div>
         )}
       </div>

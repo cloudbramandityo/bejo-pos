@@ -157,7 +157,7 @@ export const ShiftModal: React.FC<ShiftModalProps> = ({
                 <span className="text-[10px] text-slate-400 block">{formatShiftDate(activeShift.startTime, activeShift.date)}</span>
               </div>
               <div>
-                <span className="text-slate-500 block">Durasi Real-Time:</span>
+                <span className="text-slate-500 block">Berjalan selama:</span>
                 <span className="font-black text-blue-900 font-mono text-sm block">
                   {getShiftDurationString(activeShift.startTime, activeShift.date)}
                 </span>

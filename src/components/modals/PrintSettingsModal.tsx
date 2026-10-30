@@ -102,7 +102,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
             </div>
             <div>
               <h2 className="text-sm font-bold tracking-tight">PENGATURAN PRINTER THERMAL POS</h2>
-              <p className="text-[11px] text-slate-300">Konfigurasi ukuran kertas 80mm/58mm, auto-print & hemat kertas</p>
+              <p className="text-[11px] text-slate-300">Atur ukuran kertas 80mm/58mm, cetak otomatis, dan hemat kertas</p>
             </div>
           </div>
           <button
@@ -167,7 +167,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                     Pilihan Printer Default & Perangkat
                   </h3>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Tentukan jenis printer bawaan yang diprioritaskan saat kasir mencetak struk atau surat jalan.
+                    Pilih printer yang dipakai lebih dulu saat kasir mencetak struk atau surat jalan.
                   </p>
                 </div>
 
@@ -186,7 +186,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                       <span className="bg-indigo-100 text-indigo-800 text-[9px] font-bold px-1.5 py-0.2 rounded">Rekomendasi</span>
                     </div>
                     <div className="text-[10px] text-slate-500 font-normal mt-1">
-                      Printer kasir USB/LAN/BT 80mm (Epson, Panda, Xprinter, Iware).
+                      Printer kasir 80mm kabel, jaringan, atau Bluetooth (Epson, Panda, Xprinter, Iware).
                     </div>
                   </button>
 
@@ -201,7 +201,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                   >
                     <div className="text-xs font-bold">Thermal POS 58</div>
                     <div className="text-[10px] text-slate-500 font-normal mt-1">
-                      Printer thermal mini portable 58mm / bluetooth mobile.
+                      Printer mini 58mm yang bisa dibawa, sambungan Bluetooth.
                     </div>
                   </button>
 
@@ -216,7 +216,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                   >
                     <div className="text-xs font-bold">Default Browser / OS</div>
                     <div className="text-[10px] text-slate-500 font-normal mt-1">
-                      Mengikuti setelan default printer di sistem operasi komputer kasir.
+                      Mengikuti printer utama yang sudah disetel di komputer kasir.
                     </div>
                   </button>
                 </div>
@@ -233,7 +233,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-600"
                   />
                   <span className="text-[10.5px] text-slate-400 mt-1 block">
-                    Nama perangkat printer kasir yang sedang aktif digunakan di workstation ini.
+                    Nama printer kasir yang sedang dipakai di komputer ini.
                   </span>
                 </div>
               </div>
@@ -247,7 +247,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                       Ukuran Kertas Thermal Printer
                     </h3>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      Pilih ukuran gulungan kertas thermal yang terpasang di printer POS kasir Anda.
+                      Pilih ukuran gulungan kertas yang terpasang di printer kasir.
                     </p>
                   </div>
                 </div>
@@ -276,7 +276,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500 mt-1 font-normal leading-relaxed">
-                        Format lebar standar kertas roll thermal kasir 80mm (Epson, Xprinter, Iware, Panda, dll). Otomatis menyesuaikan panjang struk sesuai gulungan roll.
+                        Lebar kertas roll standar kasir 80mm (Epson, Xprinter, Iware, Panda). Panjang struk menyesuaikan isi.
                       </p>
                     </div>
                   </label>
@@ -301,7 +301,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                         <span className="text-xs font-bold text-slate-900">58 mm x Roll (Mini Thermal / Bluetooth)</span>
                       </div>
                       <p className="text-[11px] text-slate-500 mt-1 font-normal leading-relaxed">
-                        Format ringkas untuk printer mini portable / bluetooth mobile roll paper. Layout teks dipadatkan otomatis.
+                        Untuk printer mini 58mm yang bisa dibawa. Teks diperkecil otomatis agar muat di kertas.
                       </p>
                     </div>
                   </label>
@@ -317,7 +317,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                       Format Margin Cetak (0mm – 10mm)
                     </h3>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      Atur jarak batas tepi (margin) kertas. Margin 0mm adalah rekomendasi utama untuk printer thermal agar tidak membuang kertas.
+                      Atur jarak tepi kertas. 0mm disarankan agar kertas tidak terbuang.
                     </p>
                   </div>
                   <div className="bg-indigo-50 text-indigo-900 border border-indigo-200 font-mono font-bold text-xs px-2.5 py-1 rounded-lg">
@@ -385,7 +385,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                     Opsi Auto-Print Otomatis
                   </h3>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Aktifkan agar kasir tidak perlu menekan tombol cetak manual lagi saat menyelesaikan transaksi atau surat jalan.
+                    Aktifkan agar kasir tidak perlu menekan tombol cetak lagi saat transaksi atau surat jalan selesai.
                   </p>
                 </div>
 
@@ -400,7 +400,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500 leading-relaxed">
-                        Struk thermal langsung otomatis diproses cetak ke printer kasir begitu tombol 'Selesai Transaksi' ditekan.
+                        Struk langsung tercetak ke printer kasir begitu tombol 'Selesai Transaksi' ditekan.
                       </p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -424,7 +424,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500 leading-relaxed">
-                        Dokumen Surat Jalan / Bukti Pengambilan Bahan langsung otomatis diproses cetak begitu pesanan diproses atau tombol surat jalan diklik.
+                        Surat jalan / bukti pengambilan bahan langsung tercetak begitu pesanan diproses atau tombol surat jalan diklik.
                       </p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -448,7 +448,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                     Kerapatan Font & Mode Hemat Kertas
                   </h3>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Atur spasi baris dan ukuran huruf untuk menghemat panjang gulungan kertas thermal.
+                    Atur spasi dan ukuran huruf agar struk lebih pendek dan hemat kertas.
                   </p>
                 </div>
 
@@ -464,7 +464,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                   >
                     <div className="text-xs font-bold">Hemat Kertas (Compact)</div>
                     <div className="text-[10px] text-slate-500 font-normal mt-0.5">
-                      Spasi sangat rapat, menghemat 30% panjang kertas struk.
+                      Spasi sangat rapat, hemat 30% kertas struk.
                     </div>
                   </button>
 
@@ -479,7 +479,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                   >
                     <div className="text-xs font-bold">Standar (Seimbang)</div>
                     <div className="text-[10px] text-slate-500 font-normal mt-0.5">
-                      Proporsional & sangat nyaman dibaca pelanggan.
+                      Ukuran sedang, nyaman dibaca pelanggan.
                     </div>
                   </button>
 
@@ -494,7 +494,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                   >
                     <div className="text-xs font-bold">Besar & Jelas (Large)</div>
                     <div className="text-[10px] text-slate-500 font-normal mt-0.5">
-                      Teks ekstra besar untuk kemudahan membaca.
+                      Huruf lebih besar, mudah dibaca.
                     </div>
                   </button>
                 </div>
@@ -505,10 +505,10 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                 <div>
                   <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                    Ketajaman & Kontras Cetak Thermal (Boldness)
+                    Ketajaman & Kontras Cetak Thermal
                   </h3>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Meningkatkan ketebalan font thermal agar hasil print tidak pudar dan awet terbaca.
+                    Atur ketebalan huruf agar hasil cetak tidak pudar dan awet terbaca.
                   </p>
                 </div>
 
@@ -554,7 +554,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                   >
                     <div className="text-xs font-black text-black">Hitam Pekat Solid (Weight 900)</div>
                     <div className="text-[10px] text-slate-500 font-normal mt-0.5">
-                      Maksimal kontras untuk pemanas thermal tua.
+                      Paling pekat, cocok untuk printer thermal lama.
                     </div>
                   </button>
                 </div>
@@ -568,7 +568,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                     Elemen Struk Penjualan
                   </h3>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Aktifkan atau nonaktifkan bagian tertentu pada struk untuk menyesuaikan kebutuhan toko.
+                    Pilih bagian yang boleh tampil di struk sesuai kebutuhan toko.
                   </p>
                 </div>
 
@@ -641,10 +641,10 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                   <div>
                     <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                       <Scissors className="w-3.5 h-3.5 text-indigo-600" />
-                      Jarak Baris Potong Kertas (Auto-Cutter Margin)
+                      Jarak Baris Sebelum Kertas Dipotong
                     </h3>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      Berapa baris kosong yang dikeluarkan printer sebelum kertas dipotong oleh pisau cutter.
+                      Jumlah baris kosong yang keluar sebelum kertas dipotong printer.
                     </p>
                   </div>
                 </div>
@@ -674,7 +674,7 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
               <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-xl text-xs flex items-center gap-2">
                 <Info className="w-4 h-4 text-amber-700 shrink-0" />
                 <span>
-                  Ini adalah simulasi tampilan struk sesuai pengaturan saat ini (Kertas: <strong>{formData.paperSize}</strong>, Kerapatan: <strong>{formData.density}</strong>, Kontras: <strong>{formData.contrast}</strong>).
+                  Contoh tampilan struk dengan pengaturan saat ini (Kertas: <strong>{formData.paperSize}</strong>, Kerapatan: <strong>{formData.density}</strong>, Kontras: <strong>{formData.contrast}</strong>).
                 </span>
               </div>
 
@@ -816,10 +816,10 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
               <div className="bg-indigo-50 border border-indigo-200 text-indigo-950 p-4 rounded-xl space-y-2">
                 <div className="flex items-center gap-2 text-xs font-bold text-indigo-900">
                   <Zap className="w-4 h-4 text-indigo-600" />
-                  <span>Cara Mengaktifkan Silent / Direct Printing (Otomatis Cetak Tanpa Pop-up Browser)</span>
+                  <span>Cara Mengaktifkan Cetak Otomatis Tanpa Jendela Pratinjau</span>
                 </div>
                 <p className="text-xs text-indigo-800 leading-relaxed font-normal">
-                  Secara default, browser akan selalu menampilkan kotak preview dialog setiap kali mencetak. Ikuti 3 langkah mudah berikut pada komputer/laptop kasir agar struk <strong>langsung keluar otomatis dari printer thermal</strong> begitu tombol diklik:
+                  Chrome atau Edge selalu menampilkan jendela pratinjau tiap kali mencetak. Ikuti 3 langkah di komputer/laptop kasir agar struk <strong>langsung keluar dari printer thermal</strong> begitu tombol cetak diklik:
                 </p>
               </div>
 
@@ -830,27 +830,27 @@ export const PrintSettingsModal: React.FC<PrintSettingsModalProps> = ({
                     <span>Jadikan Printer Thermal POS 80 Sebagai Default Printer</span>
                   </div>
                   <p className="text-slate-600 text-[11px] pl-7">
-                    Buka <em>Windows Settings &rarr; Bluetooth & devices &rarr; Printers & Scanners</em>. Pilih printer thermal kasir Anda dan klik <strong>Set as default</strong>.
+                    Buka <em>Windows Settings &rarr; Bluetooth & devices &rarr; Printers & Scanners</em>. Pilih printer kasir Anda, lalu klik <strong>Set as default</strong>.
                   </p>
                 </div>
 
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
                   <div className="font-bold text-slate-900 flex items-center gap-2">
                     <span className="w-5 h-5 rounded-full bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center">2</span>
-                    <span>Hilangkan Header & Footer Browser (Agar Hemat Kertas)</span>
+                    <span>Hilangkan Header & Footer Cetak (Agar Hemat Kertas)</span>
                   </div>
                   <p className="text-slate-600 text-[11px] pl-7">
-                    Saat dialog print muncul, klik <em>More settings</em>. <strong>Hilangkan centang (Uncheck) pada opsi "Headers and footers"</strong> dan atur <strong>Margins: None</strong>.
+                    Saat jendela cetak muncul, klik <em>More settings</em>. <strong>Hilangkan centang opsi "Headers and footers"</strong> lalu atur <strong>Margins: None</strong>.
                   </p>
                 </div>
 
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-2">
                   <div className="font-bold text-slate-900 flex items-center gap-2">
                     <span className="w-5 h-5 rounded-full bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center">3</span>
-                    <span>Tambahkan Parameter Kiosk Printing pada Shortcut Chrome / Edge</span>
+                    <span>Tambahkan --kiosk-printing di Shortcut Chrome / Edge</span>
                   </div>
                   <p className="text-slate-600 text-[11px] pl-7 leading-relaxed">
-                    Klik kanan icon shortcut Google Chrome di Desktop &rarr; pilih <strong>Properties</strong>. Pada kolom <strong>Target</strong>, tambahkan spasi lalu ketik parameter berikut di paling ujung:
+                    Klik kanan shortcut Google Chrome di Desktop &rarr; pilih <strong>Properties</strong>. Di kolom <strong>Target</strong>, ketik spasi lalu tambahkan teks berikut di paling akhir:
                   </p>
                   <div className="ml-7 p-2.5 bg-slate-900 text-emerald-400 font-mono text-xs rounded-lg select-all border border-slate-800 flex items-center justify-between">
                     <span>--kiosk-printing</span>

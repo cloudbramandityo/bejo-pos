@@ -151,7 +151,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     setFormTemporaryPassword(true);
     setShowPassword(true);
     setFormNotice(
-      'Password sementara baru sudah dibuat. Salin password di kolom Password dan berikan ke pengguna — ia wajib mengganti sendiri saat login pertama.'
+      'Password sementara sudah dibuat. Salin dari kolom Password dan berikan ke pengguna. Ia wajib menggantinya sendiri saat login pertama.'
     );
   };
 
@@ -396,7 +396,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                 )}
               </h2>
               <p className="text-[11px] text-blue-100">
-                Kelola wewenang akun (Developer, Admin, Agen, Kasir) & Audit Log Record Waktu Login & Aktivitas Sistem
+                Kelola wewenang akun (Developer, Admin, Agen, Kasir) dan Log Record Aktivitas & Login
               </p>
             </div>
           </div>
@@ -514,8 +514,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     </div>
                     <p className="mt-1 text-[10px] leading-snug text-slate-500 dark:text-slate-400">
                       {formTemporaryPassword
-                        ? `Password sementara minimal ${MIN_TEMPORARY_PASSWORD_LENGTH} karakter (boleh sederhana, mis. admin123). User wajib mengganti sendiri saat login.`
-                        : `Minimal ${MIN_PASSWORD_LENGTH} karakter, gabungan huruf dan angka. Password default (admin123, agen123, dll.) ditolak.`}
+                        ? `Password sementara minimal ${MIN_TEMPORARY_PASSWORD_LENGTH} karakter (boleh sederhana, mis. admin123). Pengguna wajib menggantinya saat login.`
+                        : `Minimal ${MIN_PASSWORD_LENGTH} karakter, gabungan huruf dan angka. Password bawaan (admin123, agen123, dll.) ditolak.`}
                     </p>
                     <label className="mt-1.5 flex items-start gap-1.5 text-[10px] font-semibold text-amber-900 dark:text-amber-300 leading-snug cursor-pointer">
                       <input
@@ -524,7 +524,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                         onChange={(e) => setFormTemporaryPassword(e.target.checked)}
                         className="mt-0.5 w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
                       />
-                      <span>Password sementara — user wajib mengganti username & password saat login pertama</span>
+                      <span>Password sementara — pengguna wajib mengganti username & password saat login pertama</span>
                     </label>
                   </div>
                 </div>
@@ -583,7 +583,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                           Owner (Pemilik)
                         </div>
                         <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug">
-                          Akses eksekutif penuh: POS Kasir, Katalog Produk, Stok Gudang, Pengaturan Toko & Profil Cabang, Laporan Penjualan & Keuangan, Pelanggan, Mitra & Shift.
+                          Akses penuh semua menu: POS Kasir, Katalog Produk, Stok Gudang, Pengaturan Toko, Laporan, Pelanggan, Mitra & Shift.
                         </div>
                       </div>
                     </button>
@@ -607,7 +607,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                           Admin
                         </div>
                         <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug">
-                          Akses operasional penuh: POS Kasir, Katalog Produk, Stok Gudang & Mutasi, Pelanggan, Supplier, Agen & Laporan Penjualan Transaksi.
+                          Akses penuh operasional: POS Kasir, Katalog Produk, Stok & Mutasi, Pelanggan, Supplier, Agen, Laporan Penjualan.
                         </div>
                       </div>
                     </button>
@@ -631,7 +631,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                           Agen
                         </div>
                         <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug">
-                          Akses khusus Portal Agen: Pemesanan & Pengambilan bahan baku, katalog harga agen, serta cetak surat jalan cabang agen terkait.
+                          Khusus Portal Agen: pesan dan ambil bahan, lihat harga agen, serta cetak surat jalan cabang agen itu sendiri.
                         </div>
                       </div>
                     </button>
@@ -655,7 +655,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                           Kasir
                         </div>
                         <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug">
-                          Akses kasir harian: POS penjualan reguler, buka/tutup shift kasir & cetak struk nota thermal 80mm.
+                          Kasir harian: POS penjualan, buka/tutup shift kasir, dan cetak struk thermal 80mm.
                         </div>
                       </div>
                     </button>
@@ -679,7 +679,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                           SPK Cetak
                         </div>
                         <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug">
-                          Akses operator & produksi SPK Cetak Digital: Manajemen mesin, alur kerja Kanban & detail order cetak.
+                          Operator produksi SPK Cetak: atur mesin, ikuti alur kerja Kanban, dan urus detail order cetak.
                         </div>
                       </div>
                     </button>
@@ -809,7 +809,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                       )}
                     </div>
                     <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
-                      Ketika diketik, role baru akan otomatis dibuat dan tersimpan untuk akun ini layaknya role Admin, Kasir, dan Agen.
+                      Ketik nama role baru. Role akan dibuat dan tersimpan, seperti role Admin, Kasir, atau Agen.
                     </p>
                   </div>
                 </div>
@@ -1119,7 +1119,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        if (confirm('Apakah Anda yakin ingin menghapus seluruh log aktivitas record? Data ini akan dibersihkan.')) {
+                        if (confirm('Hapus seluruh log aktivitas? Catatan yang terhapus tidak bisa dikembalikan.')) {
                           onClearLogs();
                         }
                       }}

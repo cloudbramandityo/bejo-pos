@@ -293,7 +293,7 @@ export const MarketingScreen: React.FC = () => {
             ) : (
               <RefreshCw className="w-3.5 h-3.5" />
             )}
-            {checkingDiagnostics ? 'Memeriksa...' : 'Cek koneksi API'}
+            {checkingDiagnostics ? 'Memeriksa...' : 'Cek koneksi layanan iklan'}
           </button>
         </div>
       </div>
@@ -303,7 +303,7 @@ export const MarketingScreen: React.FC = () => {
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs font-bold text-slate-800">Status koneksi API (live)</p>
+              <p className="text-xs font-bold text-slate-800">Status koneksi layanan iklan</p>
               <p className="text-[10px] text-slate-500">
                 {diagnostics
                   ? `Diperiksa ${new Date(diagnostics.checkedAt).toLocaleString('id-ID')} · ${diagnostics.liveCount}/${SUB_MENUS.length} kanal live`

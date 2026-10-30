@@ -117,7 +117,7 @@ export const TaxWithholdingView: React.FC<TaxWithholdingViewProps> = ({
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Lampiran 1 Bagian D & E Formulir 1770 — Bukti Potong PPh Pasal 21, 22, 23, dan 24 yang dipotong oleh pihak lain dan menjadi kredit pengurang pajak terutang.
+            Lampiran 1 Bagian D &amp; E Formulir 1770 — bukti potong PPh Pasal 21, 22, 23, dan 24 dari pihak lain. Nilainya mengurangi pajak yang harus dibayar.
           </p>
         </div>
 

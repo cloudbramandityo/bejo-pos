@@ -38,7 +38,7 @@ export const TaxFinalNonTaxableView: React.FC<TaxFinalNonTaxableViewProps> = ({
           </h2>
         </div>
         <p className="text-xs text-slate-500 mt-1">
-          Penghasilan yang pajaknya telah final (seperti PPh Final UMKM 0.5%, bunga deposito, dividen, penjualan properti) dan penghasilan non-objek (warisan, bantuan, klaim asuransi).
+          Penghasilan yang pajaknya sudah final (PPh Final UMKM 0,5%, bunga deposito, dividen, jual properti) dan yang bukan objek pajak (warisan, bantuan, klaim asuransi).
         </p>
       </div>
 

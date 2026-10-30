@@ -258,7 +258,7 @@ export const MyProfileModal: React.FC<MyProfileModalProps> = ({
               <Lock className="w-4 h-4 shrink-0 mt-0.5 text-slate-500" />
               <div className="leading-snug">
                 <p className="font-bold">Akun developer dikelola lewat server.</p>
-                <p>Username dan password developer diatur dari konfigurasi server (DEV_USERNAME / DEV_PASSWORD_HASH), sehingga tidak dapat diubah dari menu ini.</p>
+                <p>Username dan password developer diatur dari pengaturan server, jadi tidak bisa diubah dari menu ini.</p>
               </div>
             </div>
           ) : (
@@ -281,7 +281,7 @@ export const MyProfileModal: React.FC<MyProfileModalProps> = ({
                 <div className="min-w-0 space-y-2">
                   <p className="text-xs font-bold text-slate-700">Foto Profil</p>
                   <p className="text-[10px] leading-snug text-slate-500">
-                    Otomatis dikompres di perangkat. Foto tampil pada menu pengguna di aplikasi.
+                    Foto diperkecil otomatis di perangkat ini. Foto tampil di menu pengguna aplikasi.
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
@@ -422,7 +422,7 @@ export const MyProfileModal: React.FC<MyProfileModalProps> = ({
                   </div>
                 </div>
                 <p className="text-[10px] leading-snug text-slate-500">
-                  Minimal 10 karakter, gabungan huruf dan angka, tidak memakai password yang dikenal publik (admin123, agen123, dll.) dan tidak mengikuti username.
+                  Minimal 10 karakter, gabungan huruf dan angka. Jangan pakai password umum (admin123, agen123) dan jangan sama dengan username.
                 </p>
               </div>
             </>

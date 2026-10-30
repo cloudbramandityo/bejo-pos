@@ -129,7 +129,7 @@ export const TaxAttachmentsView: React.FC<TaxAttachmentsViewProps> = ({ currentR
         <div>
           <strong>Catatan Resmi DJP Mengenai Bukti Penerimaan Elektronik (BPE):</strong>
           <p className="text-[11px] text-blue-800 mt-0.5">
-            Bukti Penerimaan Elektronik (BPE) resmi dengan stempel digital dan Nomor Tanda Terima Elektronik (NTTE) diterbitkan secara sah langsung oleh server Direktorat Jenderal Pajak (DJP) setelah Anda mengunggah formulir SPT Tahunan ini melalui portal e-Filing DJP Online (djponline.pajak.go.id).
+            Bukti Penerimaan Elektronik (BPE) dan Nomor Tanda Terima Elektronik (NTTE) diterbitkan langsung oleh Direktorat Jenderal Pajak (DJP) setelah Anda mengirim formulir SPT Tahunan lewat e-Filing DJP Online (djponline.pajak.go.id).
           </p>
         </div>
       </div>

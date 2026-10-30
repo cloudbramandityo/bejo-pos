@@ -150,6 +150,19 @@ Lihat dan unduh memakai predikat periode yang sama; jangan menulis ulang perband
 - Tambah mode periode baru → perluas `RecapPeriodType` + kasus di `scripts/check-agent-period.mts` (`npm run check:agent-period`), jangan menambah cabang `if` di `AgentScreen.tsx`.
 - Uji regresi: `npm run check:agent-period` (format lama, batas minggu Senin–Minggu, inklusivitas rentang, dan label periode).
 
+## Bahasa deskripsi antarmuka (wajib)
+
+Semua kalimat yang dibaca operator/pemilik toko harus bahasa Indonesia awam: **singkat, padat, jelas**. Contoh yang disahkan pemilik (panel Pergerakan Aset): bukan "Riwayat nilai tidak disimpan sebagai snapshot, jadi tiap titik dihitung mundur...", tetapi "Nilai barang dihitung berdasarkan harga modal saat ini, ditambah/dikurangi dengan penyesuaian uang yang tercatat saat kejadian (seperti perubahan harga kulak, koreksi stok manual, penjualan, atau produk baru)."
+
+- Yang diubah **hanya teks tampilan**: node JSX, `title`/`placeholder`/`label`/`aria-label`/`hint`, dan pesan `alert`/`confirm`. Identifier, props, tipe, className, kunci localStorage, nama record, dan label menu/navigasi yang sudah dikenal operator tidak diubah.
+- dilarang istilah programmer di teks pengguna: `browser` → "Chrome atau Edge di perangkat ini", `localStorage` → "tersimpan di perangkat ini", `PocketBase`/`cloud database`/`backend`/`API`/`endpoint` → "server", `sinkronisasi` → "terkirim ke server", `real-time` → "langsung", `field` → "kolom isian", `dummy` → "data contoh", `rekapitulasi` → "rekap", `HPP` → "harga kulak", `snapshot` → "catatan nilai per hari", `mutasi stok` → "stok masuk/keluar" (kata "Mutasi Stok" tetap hanya untuk nama fitur/tab-nya).
+- Istilah domain toko (harga kulak, agen, SPK, stok, kasir, PI/INV) dan istilah akuntansi/pajak baku (PSAK, PTKP, PPh Final, Formulir 1770, BPE/NTTE, nama regulasi) **boleh** dipertahankan; hanya kalimat pengantarnya yang disederhanakan. Label yang harus dicocokkan dengan pihak luar (mis. "Set as default", "Anyone with the link") dibiarkan persis.
+- Memendekkan kalimat tidak boleh membuang fakta: efek permanen ("dihapus permanen", "tidak bisa dikembalikan"), syarat perangkat/koneksi, dasar perhitungan angka, dan apa yang harus dilakukan pengguna berikutnya. Status, kecepatan, latency, atau lokasi folder tidak boleh dikarang — kalau tidak ada datanya, tulis "belum tersambung".
+- Jangan menulis status, kecepatan, latency, atau kesiapan layanan sebagai teks tetap di komponen — nilainya wajib berasal dari hasil pengukuran. Kalau datanya tidak ada, tulis "belum tersambung" / "belum terukur". Kartu diagnostik tidak boleh memakai badge hijau statis.
+- Panel diagnostik khusus DEVELOPER (`BackendDiagnosticsModal`, `backendDiagnostics`, log di `src/backend/`) boleh menyebut nama teknis karena dipakai untuk memperbaiki sistem, tetapi kalimatnya tetap pendek.
+- Penjaga: `npm run check:copy` (memindai `src/`, melaporkan istilah teknis, kalimat > 130 karakter, dan klaim status tetap) dan `node scripts/check-ui-language.mjs --strict` yang berjalan sebagai `prebuild` — build gagal jika masih ada istilah teknis atau klaim status tetap di teks pengguna. Tambah istilah baru ke tabel `JARGON` dan pola baru ke `FAKE_STATUS` di `scripts/check-ui-language.mjs`; pengecualian hanya lewat `DEV_ONLY`, `CONTENT`, atau `OFFICIAL_NAMES` di berkas yang sama, disertai alasan.
+- Uji regresi: `npm run check:copy:strict` lulus, dan `npm run build` lulus karena penjaga itu ikut berjalan di `prebuild`.
+
 ## Deploy
 
 Gunakan `deploy/deploy-vps.ps1` yang sudah ada. Jangan membuat skrip deploy baru. Build dan deploy hanya setelah `npm run build` lulus (termasuk check-brand, check-version, dan check-path-fabrication).

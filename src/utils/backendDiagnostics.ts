@@ -13,15 +13,15 @@ const diagnosticsListeners = new Set<DiagnosticsListener>();
 const errorNotificationListeners = new Set<ErrorNotificationListener>();
 
 let cachedDiagnostics: BackendDiagnostics = {
-  status: 'healthy',
+  status: 'warning',
   uptimeSeconds: 0,
   memoryUsageMb: 0,
   nodeVersion: 'Node.js',
-  aiApiStatus: 'ready',
-  pocketbaseStatus: 'connected',
+  aiApiStatus: 'unavailable',
+  pocketbaseStatus: 'checking',
   activeErrors: [],
   recentFixLogs: [],
-  lastChecked: Date.now()
+  lastChecked: 0
 };
 
 let latestActiveNotification: BackendErrorItem | null = null;
@@ -176,7 +176,7 @@ export async function fetchBackendDiagnostics(): Promise<BackendDiagnostics> {
       uptimeSeconds: serverDiag.uptimeSeconds || 0,
       memoryUsageMb: serverDiag.memoryUsageMb || 0,
       nodeVersion: serverDiag.nodeVersion || 'Node.js',
-      aiApiStatus: serverDiag.aiApiStatus || 'ready',
+      aiApiStatus: serverDiag.aiApiStatus ?? 'unavailable',
       pocketbaseStatus: isQuotaExceeded ? 'offline' : isDbConnected ? 'connected' : 'offline',
       activeErrors: uniqueErrors,
       recentFixLogs: serverDiag.recentFixLogs || cachedDiagnostics.recentFixLogs || [],
@@ -218,7 +218,7 @@ export async function runBackendAutoFix(): Promise<BackendFixReport> {
 
     // 2. Self-repair PocketBase Cloud DB & Collections / Local Fallback
     if (isPocketBaseUnavailable()) {
-      fixedIssues.push('Mode Penyimpanan Lokal (High-Speed Local Storage) diverifikasi aktif. Seluruh data transaksi, produk, dan shift tersimpan aman di peramban.');
+      fixedIssues.push('Mode Lokal aktif. Semua data transaksi, produk, dan shift tersimpan aman di perangkat ini.');
     } else {
       try {
         await testPocketBaseConnection();
@@ -263,7 +263,7 @@ export async function runBackendAutoFix(): Promise<BackendFixReport> {
 
     return {
       success: true,
-      message: 'Perbaikan otomatis berhasil dilakukan! Seluruh sistem backend, database lokal, dan cache kini dalam status normal dan siap digunakan.',
+      message: 'Perbaikan otomatis selesai. Sistem dan penyimpanan data kembali normal dan siap digunakan.',
       fixedCount: fixedIssues.length,
       fixedIssues,
       diagnostics: cachedDiagnostics,

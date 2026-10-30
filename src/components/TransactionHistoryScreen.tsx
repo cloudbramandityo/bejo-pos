@@ -228,7 +228,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
       setDeletingStockTx(null);
       setActionToast({
         type: 'success',
-        message: `Transaksi #${deletedId} berhasil dihapus permanen dari database cloud.`
+        message: `Transaksi #${deletedId} berhasil dihapus permanen dari server.`
       });
       setTimeout(() => setActionToast(null), 4000);
     } catch (err: any) {
@@ -1165,7 +1165,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
       );
     } else if (reportTab === 'pembelian_bahan') {
       if (finalFilteredStockTransactions.length === 0) {
-        alert('Tidak ada data transaksi mutasi stok untuk diekspor.');
+        alert('Belum ada data stok masuk/keluar untuk diekspor.');
         return;
       }
       exportStockTransactionsToExcel(
@@ -1236,7 +1236,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
       });
     } else if (reportTab === 'pembelian_bahan') {
       if (finalFilteredStockTransactions.length === 0) {
-        alert('Tidak ada data transaksi mutasi stok untuk diekspor ke PDF.');
+        alert('Belum ada data stok masuk/keluar untuk diekspor ke PDF.');
         return;
       }
       exportStockTransactionsToPDF(finalFilteredStockTransactions, 'PEMBELIAN', {
@@ -1300,11 +1300,11 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
               LAPORAN TOKO & RIWAYAT TRANSAKSI
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Seluruh laporan direkap <strong>Per Transaksi</strong> (Penjualan, Pembelian Bahan, dan Pengambilan Bahan) dengan rincian multi-produk. Dapat di-export ke Excel (.xlsx) dan PDF (.pdf).
+              Semua laporan direkap <strong>Per Transaksi</strong>, lengkap dengan rincian tiap produk. Bisa diunduh sebagai Excel (.xlsx) atau PDF (.pdf).
             </p>
             <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-[11px] font-semibold">
               <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
-              <span>Audit Trail Aman & Terkunci Permanen Per Transaksi</span>
+              <span>Riwayat per transaksi tersimpan aman dan tidak bisa diubah</span>
             </div>
           </div>
         </div>
@@ -3833,7 +3833,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
             <div className="p-5 space-y-4">
               <p className="text-xs text-slate-600 leading-relaxed">
                 Apakah Anda yakin ingin menghapus transaksi <strong>{deletingStockTx.type === 'PEMBELIAN' ? 'Pembelian Bahan' : 'Pengambilan Bahan'}</strong> ini?
-                Data akan dihapus secara permanen dari database cloud dan tidak dapat dikembalikan.
+                Data dihapus permanen dari server dan tidak bisa dikembalikan.
               </p>
 
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs space-y-2 font-medium text-slate-700">

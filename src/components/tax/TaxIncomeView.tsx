@@ -58,7 +58,7 @@ export const TaxIncomeView: React.FC<TaxIncomeViewProps> = ({
           </h2>
         </div>
         <p className="text-xs text-slate-500 mt-1">
-          Atur sumber penghasilan dari pekerjaan (karyawan/pegawai) dan penghasilan dari kegiatan usaha percetakan/stiker atau pekerjaan bebas.
+          Isi penghasilan dari pekerjaan (karyawan/pegawai) dan dari usaha percetakan/stiker atau pekerjaan bebas.
         </p>
       </div>
 

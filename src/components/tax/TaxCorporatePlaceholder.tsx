@@ -27,7 +27,7 @@ export const TaxCorporatePlaceholder: React.FC = () => {
           Under Development by Langgo Bramandityo
         </p>
         <p className="text-xs sm:text-sm text-slate-500 mt-1">
-          Modul pelaporan SPT Tahunan PPh Wajib Pajak Badan (PT, CV, Koperasi, Firma) dengan rekonsiliasi fiskal komprehensif, lampiran I-VI, dan laporan keuangan komersial.
+          Modul SPT Tahunan Badan (PT, CV, Koperasi, Firma) dengan rekonsiliasi fiskal, lampiran I-VI, dan laporan keuangan.
         </p>
       </div>
 
@@ -53,7 +53,7 @@ export const TaxCorporatePlaceholder: React.FC = () => {
             <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
             <span>Integrasi POS</span>
           </div>
-          <p className="text-[11px] text-slate-500">Tarik omzet otomatis dari buku besar & database POS.</p>
+          <p className="text-[11px] text-slate-500">Omzet akan diambil otomatis dari catatan penjualan dan kas toko.</p>
         </div>
       </div>
 

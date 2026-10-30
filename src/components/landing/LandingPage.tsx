@@ -1062,7 +1062,7 @@ const FaqSection: React.FC<{ faqs: LandingFaqItem[] }> = ({ faqs }) => {
 
   return (
     <section className="mx-auto max-w-[1200px] px-4 py-14">
-      <SectionTitle className="mb-8">Frequently Asked Question (FAQ)</SectionTitle>
+      <SectionTitle className="mb-8">Pertanyaan yang Sering Diajukan</SectionTitle>
       <div className="mx-auto max-w-[820px]">
         {items.map((faq) => {
           const isOpen = open === faq.id;

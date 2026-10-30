@@ -506,7 +506,7 @@ export const TaxFilingWizard: React.FC<TaxFilingWizardProps> = ({
                 </span>
               </div>
               <p className="text-slate-600">
-                Peredaran bruto usaha toko stiker Anda secara otomatis tercatat di lampiran ini ({formatRupiah(data.businessActivity?.grossRevenue || 0)}) dengan PPh Final disetor ({formatRupiah(data.businessActivity?.umkmTaxAmount || 0)}) dan tidak digabung ke penghasilan neto tarif progresif.
+                Omzet usaha toko stiker Anda tercatat di lampiran ini ({formatRupiah(data.businessActivity?.grossRevenue || 0)}) dengan PPh Final yang disetor ({formatRupiah(data.businessActivity?.umkmTaxAmount || 0)}). Omzet ini tidak digabung ke penghasilan yang kena tarif progresif.
               </p>
             </div>
           </div>
@@ -648,7 +648,7 @@ export const TaxFilingWizard: React.FC<TaxFilingWizardProps> = ({
                   SPT Tahunan Berhasil Disimpan & Difinalisasi!
                 </h3>
                 <p className="text-xs text-slate-500 max-w-md mx-auto">
-                  Dokumen formulir 1770 dan seluruh lampiran telah tercatat secara permanen di basis data sistem dengan status <strong>SELESAI</strong>.
+                  Formulir 1770 dan seluruh lampirannya tersimpan permanen di aplikasi dengan status <strong>SELESAI</strong>.
                 </p>
 
                 {/* SPT Summary Card */}

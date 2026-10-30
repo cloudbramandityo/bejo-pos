@@ -218,7 +218,7 @@ export const GoogleDriveUrlConverter: React.FC<GoogleDriveUrlConverterProps> = (
     setAppliedSuccessToast(null);
 
     if (!driveUrl.trim()) {
-      setMessage({ text: 'Silakan masukkan URL Google Drive terlebih dahulu.', type: 'error' });
+      setMessage({ text: 'Isi link Google Drive dulu, lalu tekan Konversi URL.', type: 'error' });
       return;
     }
 
@@ -263,7 +263,7 @@ export const GoogleDriveUrlConverter: React.FC<GoogleDriveUrlConverterProps> = (
         setMessage({ text: 'URL berhasil disalin!', type: 'success' });
         setTimeout(() => setCopied(false), 2500);
       } catch {
-        setMessage({ text: 'Gagal menyalin. Silakan salin URL secara manual.', type: 'error' });
+        setMessage({ text: 'Gagal menyalin. Silakan salin link-nya manual.', type: 'error' });
       }
     }
   };
@@ -308,7 +308,7 @@ export const GoogleDriveUrlConverter: React.FC<GoogleDriveUrlConverterProps> = (
     // 3. Set toast & highlight status
     setAppliedSuccessProductId(product.id);
     setAppliedSuccessToast(
-      `Foto berhasil diterapkan pada produk "${product.name}" (${product.code})!`
+      `Foto produk "${product.name}" (${product.code}) berhasil diganti.`
     );
 
     setTimeout(() => {
@@ -350,7 +350,7 @@ export const GoogleDriveUrlConverter: React.FC<GoogleDriveUrlConverterProps> = (
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                Ubah URL Google Drive menjadi <strong>Direct Image URL</strong> atau <strong>Thumbnail URL</strong> secara otomatis agar dapat ditampilkan di katalog produk & modul POS.
+                Ubah link Google Drive menjadi <strong>Direct Image URL</strong> atau <strong>Thumbnail URL</strong> supaya gambarnya tampil di katalog & POS.
               </p>
             </div>
           </div>
@@ -414,7 +414,7 @@ export const GoogleDriveUrlConverter: React.FC<GoogleDriveUrlConverterProps> = (
             ) : (
               <div className="p-2.5 bg-slate-100/70 border border-slate-200 rounded-xl flex items-center gap-2 text-slate-600 text-[11px]">
                 <ShieldAlert className="w-4 h-4 text-slate-400 shrink-0" />
-                <span>Format Direct Image menggunakan endpoint Google UC untuk menyajikan file asli gambar secara langsung.</span>
+                <span>Format Direct Image mengambil file gambar asli langsung dari server Google.</span>
               </div>
             )}
           </div>
@@ -522,7 +522,7 @@ export const GoogleDriveUrlConverter: React.FC<GoogleDriveUrlConverterProps> = (
                   setProductSearch('');
                 }}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs hover:shadow-sm"
-                title="Terapkan URL gambar ini ke produk pada Katalog Produk"
+                title="Pasang gambar ini ke produk di Katalog Produk"
               >
                 <PackageCheck className="w-4 h-4 text-emerald-200" />
                 <span>Terapkan Pada Produk</span>
@@ -561,7 +561,7 @@ export const GoogleDriveUrlConverter: React.FC<GoogleDriveUrlConverterProps> = (
                     <AlertCircle className="w-8 h-8 text-rose-500 mx-auto" />
                     <p className="text-xs font-bold text-rose-800">Preview Gagal Dimuat</p>
                     <p className="text-[11px] text-slate-500 max-w-md mx-auto leading-relaxed">
-                      Pastikan hak akses file di Google Drive disetel ke <strong>"Siapa saja yang memiliki link (Anyone with the link)"</strong> dengan peran <strong>Pelihat (Viewer)</strong>.
+                      Atur berbagi file di Google Drive: pilih <strong>"Siapa saja yang memiliki link (Anyone with the link)"</strong> dengan peran <strong>Pelihat (Viewer)</strong>.
                     </p>
                   </div>
                 )}
@@ -571,7 +571,7 @@ export const GoogleDriveUrlConverter: React.FC<GoogleDriveUrlConverterProps> = (
                 {previewStatus === 'loaded' && (
                   <span className="text-emerald-700 font-bold inline-flex items-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    Gambar berhasil dimuat dan valid untuk digunakan di aplikasi POS & Katalog!
+                    Gambar tampil dan siap dipakai di aplikasi POS & Katalog!
                   </span>
                 )}
                 {previewStatus === 'loading' && 'Sedang menghubungi server Google Drive...'}
@@ -602,7 +602,7 @@ export const GoogleDriveUrlConverter: React.FC<GoogleDriveUrlConverterProps> = (
                     Terapkan Foto ke Produk Katalog
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Pilih produk untuk menerapkan URL gambar Google Drive ini sebagai foto produk.
+                    Pilih produk yang fotonya ingin diganti dengan link Google Drive ini.
                   </p>
                 </div>
               </div>

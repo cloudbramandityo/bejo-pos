@@ -278,7 +278,7 @@ export const LanNetworkFolderModal: React.FC<LanNetworkFolderModalProps> = ({
     setFolderFiles([]);
     setFolderError('');
     await refreshGrant();
-    showToast('Akses folder dilepas dari browser ini.', true);
+    showToast('Akses folder dilepas dari perangkat ini.', true);
   };
 
   /**
@@ -292,7 +292,7 @@ export const LanNetworkFolderModal: React.FC<LanNetworkFolderModalProps> = ({
       const rootFolder = relPath.split('/')[0] || files[0].name;
       if (!lanDir) setLanDir(`${rootFolder}/`);
       showToast(
-        `Folder "${rootFolder}" terbaca, tetapi browser ini tidak dapat memberi izin tulis. Gunakan Chrome/Edge lalu klik "Hubungkan Folder di Perangkat Ini".`,
+        `Folder "${rootFolder}" terbaca, tetapi perangkat ini belum bisa memberi izin tulis. Buka dengan Chrome/Edge lalu klik "Hubungkan Folder di Perangkat Ini".`,
         false
       );
     }
@@ -336,7 +336,7 @@ export const LanNetworkFolderModal: React.FC<LanNetworkFolderModalProps> = ({
   const grantLabel = !grantStatus
     ? 'Memeriksa...'
     : !grantStatus.supported
-      ? 'Browser Tidak Dukung Folder'
+      ? 'Perangkat Ini Belum Bisa Pilih Folder'
       : grantStatus.granted && !grantStatus.needsPermission
         ? `Folder "${grantStatus.folderName}" Tersambung`
         : grantStatus.needsPermission
@@ -475,7 +475,7 @@ export const LanNetworkFolderModal: React.FC<LanNetworkFolderModalProps> = ({
                 </div>
 
                 <div className={`text-[11px] font-bold rounded-lg border px-3 py-2 ${grantTone}`}>
-                  {grantStatus?.message || 'Memeriksa izin folder pada browser ini...'}
+                  {grantStatus?.message || 'Memeriksa izin folder pada perangkat ini...'}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -559,7 +559,7 @@ export const LanNetworkFolderModal: React.FC<LanNetworkFolderModalProps> = ({
                   <strong className="text-white">Cara kerjanya:</strong>
                   <span className="ml-1 text-indigo-200">
                     Lokasi folder disimpan di server dan otomatis mengikuti ke semua komputer. Izin baca-tulis folder bersifat per
-                    browser, jadi setiap komputer cukup menekan "Hubungkan Folder" satu kali, lalu semua berkas SPK dapat dibuka dari
+                    perangkat, jadi setiap komputer cukup menekan "Hubungkan Folder" satu kali, lalu semua berkas SPK dapat dibuka dari
                     folder yang sama.
                     {isUncPath && (
                       <>
@@ -766,10 +766,10 @@ export const LanNetworkFolderModal: React.FC<LanNetworkFolderModalProps> = ({
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <Radio className="w-5 h-5 text-emerald-400 animate-pulse" />
-                    <h3 className="text-sm font-black text-white">LAN Machine Heartbeat & Real-Time Prober</h3>
+                    <h3 className="text-sm font-black text-white">Pantau Mesin Cetak di Jaringan Lokal</h3>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Memantau respons kontroler mesin cetak dan RIP spooler di jaringan lokal.
+                    Memeriksa respons mesin cetak dan antrean cetak di jaringan lokal.
                   </p>
                 </div>
 
@@ -1003,8 +1003,8 @@ export const LanNetworkFolderModal: React.FC<LanNetworkFolderModalProps> = ({
                 <p className="text-[11px] text-slate-400 leading-relaxed">
                   Selalu akhiri dengan <span className="font-mono text-indigo-300">\</span> atau{' '}
                   <span className="font-mono text-indigo-300">/</span> supaya nama berkas menempel dengan benar. Path ini hanya
-                  teks penunjuk: setiap komputer tetap harus menekan "Hubungkan Folder di Perangkat Ini" satu kali agar browser
-                  boleh membaca dan menulis isinya.
+                  teks penunjuk: setiap komputer tetap harus menekan "Hubungkan Folder di Perangkat Ini" satu kali agar perangkat
+                  ini boleh membaca dan menulis isinya.
                 </p>
 
                 <div className="pt-3 border-t border-slate-700/80 space-y-2">
@@ -1039,7 +1039,7 @@ export const LanNetworkFolderModal: React.FC<LanNetworkFolderModalProps> = ({
           <div className="text-xs text-slate-400 flex items-center gap-2">
             <Server className="w-3.5 h-3.5 text-indigo-400" />
             <span>
-              Folder bersama aktif di browser ini:{' '}
+              Folder bersama di perangkat ini:{' '}
               <strong className={grantStatus?.granted ? 'text-emerald-300' : 'text-amber-300'}>
                 {grantStatus?.granted ? grantStatus.folderName : 'belum terhubung'}
               </strong>

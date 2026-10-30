@@ -26,7 +26,7 @@ interface TrendPeriodControlsProps {
 const MODE_BUTTONS: { mode: TrendPeriodMode; label: string; icon: React.ReactNode }[] = [
   { mode: 'MINGGUAN', label: 'Mingguan', icon: <CalendarDays className="w-3.5 h-3.5" /> },
   { mode: 'BULANAN', label: 'Bulanan', icon: <CalendarRange className="w-3.5 h-3.5" /> },
-  { mode: 'KUSTOM', label: 'Kustom', icon: <Layers className="w-3.5 h-3.5" /> }
+  { mode: 'KUSTOM', label: 'Atur Sendiri', icon: <Layers className="w-3.5 h-3.5" /> }
 ];
 
 const BUCKET_BUTTONS: { bucket: TrendBucket; label: string }[] = [
@@ -55,7 +55,7 @@ export default function TrendPeriodControls({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
           <Calendar className="w-3.5 h-3.5 text-slate-400" />
-          Periode Pergerakan:
+          Pilih periode:
         </span>
         <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0">
           {MODE_BUTTONS.map(({ mode, label, icon }) => (
@@ -115,13 +115,13 @@ export default function TrendPeriodControls({
           </div>
 
           <span className="text-[10.5px] text-slate-400 font-semibold">
-            Rincian garis: {BUCKET_BUTTONS.find((b) => b.bucket === activeBucket)?.label?.toLowerCase() || activeBucket.toLowerCase()}
+            Grafik per: {BUCKET_BUTTONS.find((b) => b.bucket === activeBucket)?.label?.toLowerCase() || activeBucket.toLowerCase()}
           </span>
         </div>
       )}
 
       <div className="text-[10.5px] text-slate-400 font-mono">
-        Rentang dihitung: {rangeFrom} s.d. {rangeTo}
+        Periode yang dihitung: {rangeFrom} s.d. {rangeTo}
       </div>
     </div>
   );

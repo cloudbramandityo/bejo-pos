@@ -279,7 +279,7 @@ export const LaporanKeuanganScreen: React.FC<LaporanKeuanganScreenProps> = ({
       <p className="text-[11px] text-slate-500 mt-0.5">{subtitle || 'Laporan Keuangan Sederhana'}</p>
       <h3 className="text-base font-bold text-slate-800 mt-3">{title}</h3>
       <p className="text-xs text-slate-500 mt-0.5">
-        Untuk Periode {fromDate} s.d. {toDate} — Sistem Akrual
+        Untuk Periode {fromDate} s.d. {toDate} — catatan akrual
       </p>
     </div>
   );
@@ -340,7 +340,7 @@ export const LaporanKeuanganScreen: React.FC<LaporanKeuanganScreenProps> = ({
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
               Laba Rugi, Perubahan Modal, Neraca & Arus Kas sesuai <strong>PSAK No.1/2015</strong> —
-              dihitung otomatis dari transaksi toko, dilengkapi input pembukuan manual.
+              angkanya diambil otomatis dari transaksi toko, sebagian bisa Anda isi sendiri.
             </p>
             <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-[11px] font-semibold">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -533,8 +533,8 @@ export const LaporanKeuanganScreen: React.FC<LaporanKeuanganScreenProps> = ({
           <div>
             <KopLaporan title="Neraca Saldo (Ringkas)" />
             <p className="text-[11px] text-slate-500 mb-3">
-              Daftar akun dengan saldo debit & kredit hasil posting jurnal, dikelompokkan ke aktiva & pasiva —
-              dasar penyusunan laporan keuangan.
+              Daftar saldo debit & kredit dari buku jurnal, dikelompokkan ke aset dan kewajiban —
+              bahan untuk menyusun laporan keuangan.
             </p>
             <div className="overflow-x-auto rounded-xl border border-slate-200">
               <table className="w-full text-xs">
@@ -815,18 +815,13 @@ const PanduanContent: React.FC = () => (
     <div>
       <h3 className="text-base font-black text-slate-900 mb-2">Apa Itu Laporan Keuangan?</h3>
       <p className="mb-2">
-        Menurut <strong>PSAK No.1 Tahun 2015</strong>, laporan keuangan adalah penyajian terstruktur dari posisi
-        keuangan dan kinerja keuangan suatu entitas.
-      </p>
-      <p className="mb-2">
-        Lebih lanjut dalam buku <em>Intermediate Accounting</em>, laporan keuangan didefinisikan sebagai ringkasan
-        suatu proses sistem pencatatan transaksi keuangan dan ringkasan dari transaksi-transaksi keuangan yang
-        terjadi selama satu tahun buku yang bersangkutan (Baridwan, 2004).
+        Menurut <strong>PSAK No.1 Tahun 2015</strong>, laporan keuangan adalah gambaran resmi kondisi dan
+        kinerja usaha Anda pada suatu periode. Isinya ringkasan semua transaksi yang dicatat selama tahun
+        buku berjalan (Baridwan, 2004).
       </p>
       <p>
-        Baik untuk perusahaan skala besar maupun kecil, laporan keuangan merupakan kewajiban yang harus dibuat
-        setiap periode. Sebagai pengusaha, Anda wajib bisa membacanya untuk mengetahui kondisi keuangan dan menilai
-        kinerja perusahaan, sehingga dapat mengambil keputusan operasional yang benar.
+        Usaha sebesar apa pun wajib membuatnya tiap periode. Sebagai pemilik, Anda perlu membacanya untuk
+        mengetahui kondisi keuangan toko dan mengambil keputusan yang tepat.
       </p>
     </div>
 

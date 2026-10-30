@@ -383,7 +383,7 @@ export const TaxScreen: React.FC<TaxScreenProps> = () => {
                       title="Klik untuk memastikan seluruh data SPT 1770 dan Dashboard selaras dengan data Riwayat Pelaporan"
                     >
                       <RefreshCw className="w-3 h-3" />
-                      <span>Sinkronkan</span>
+                      <span>Selaraskan</span>
                     </button>
                   </div>
                 </div>

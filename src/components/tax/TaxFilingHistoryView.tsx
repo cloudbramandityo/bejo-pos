@@ -169,7 +169,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
       setHasUnsavedChanges(false);
       const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
       setLastSavedTime(nowStr);
-      showAlert(`✓ SELURUH DATA BERHASIL DISELARASKAN! Seluruh Formulir SPT 1770 (2023 - 2026), Dashboard Pajak, Data Penghasilan, dan Lampiran kini sama persis dengan Riwayat Pelaporan.`);
+      showAlert(`✓ SELURUH DATA BERHASIL DISELARASKAN! Formulir SPT 1770 (2023 - 2026), Dashboard Pajak, Data Penghasilan, dan Lampiran sudah sama dengan Riwayat Pelaporan.`);
     } catch (err) {
       console.error('Failed to sync all returns', err);
       showAlert('Gagal menyelaraskan seluruh data.');
@@ -287,7 +287,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
 
   // Reset to clean Rp 0 (purge all dummy/unverified data)
   const handleResetDefaults = () => {
-    if (window.confirm(`Kosongkan seluruh data billing bulanan tahun ${selectedBillingYear} menjadi Rp 0 (lembar bersih)? Seluruh data dummy akan dihapus.`)) {
+    if (window.confirm(`Kosongkan seluruh billing bulanan tahun ${selectedBillingYear} menjadi Rp 0? Isi Anda untuk tahun ini akan hilang dan tidak bisa dikembalikan.`)) {
       const defaults = generateDefaultMonthlyBillings();
       const updatedAll = {
         ...billingsData,
@@ -650,7 +650,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
                 type="button"
                 onClick={handleResetDefaults}
                 className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-100 cursor-pointer"
-                title="Kosongkan seluruh billing ke Rp 0 (Hapus data dummy)"
+                title="Kosongkan seluruh billing tahun ini menjadi Rp 0"
               >
                 <RotateCcw className="w-4 h-4" />
               </button>
@@ -920,7 +920,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
                 Total PPh Disetor: <strong className="text-blue-300 font-mono">{formatRupiah(summary.totalPph)}</strong> • Total Omzet: <strong className="text-white font-mono">{formatRupiah(summary.totalGross)}</strong> • {summary.paidCount}/12 Bulan Lunas
               </p>
               <p className="text-[11px] text-slate-400 italic">
-                Data tersimpan otomatis secara lokal dan dapat dikonfirmasi permanen dengan menekan tombol <strong>Save Data</strong> atau shortcut <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-slate-200 border border-slate-600">Ctrl + S</kbd>.
+                Data tersimpan otomatis di perangkat ini. Anda juga bisa menekan <strong>Save Data</strong> atau <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-slate-200 border border-slate-600">Ctrl + S</kbd>.
               </p>
             </div>
 
@@ -1333,7 +1333,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
                 <span>Pola Musiman Omzet Bulanan</span>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Puncak omzet & setoran PPh selalu terjadi di kuartal IV (Oktober - Desember) karena tingginya pesanan cetak kalender, merchandise, dan stiker akhir tahun.
+                Omzet dan setoran PPh biasanya tertinggi di kuartal IV (Oktober - Desember) karena pesanan kalender, merchandise, dan stiker akhir tahun memuncak.
               </p>
               <div className="text-[11px] font-bold text-blue-700 bg-blue-100/60 px-2.5 py-1 rounded-lg">
                 Puncak Tertinggi: Bulan Desember
@@ -1347,7 +1347,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
                 <span>Fasilitas PP 55/2022 Rp 500 Juta</span>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Wajib Pajak Orang Pribadi UMKM mendapat fasilitas peredaran bruto sampai dengan Rp 500.000.000 tidak dikenai PPh. Bagian di atas Rp 500 juta terutang 0.5%.
+                Usaha orang pribadi UMKM tidak kena PPh atas omzet sampai Rp 500.000.000. Omzet di atas itu kena PPh Final 0,5%.
               </p>
               <div className="text-[11px] text-indigo-700 font-medium">
                 Penyetoran bulanan dapat langsung disinkronkan ke Lampiran III Formulir 1770 resmi DJP.
@@ -1369,7 +1369,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
                 <span className="font-bold text-xs text-blue-950">Status Keselarasan Data Seluruh SPT (2023 - 2026)</span>
               </div>
               <p className="text-[11px] text-slate-600">
-                Peredaran bruto & PPh final UMKM di seluruh formulir SPT Tahunan 1770 otomatis selaras 100% dengan data billing bulanan yang tersimpan.
+                Omzet dan PPh Final UMKM di semua formulir SPT Tahunan 1770 sudah cocok dengan billing bulanan yang tersimpan.
               </p>
             </div>
             <button

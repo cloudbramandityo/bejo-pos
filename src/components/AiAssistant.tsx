@@ -57,7 +57,8 @@ import {
   AiInternalChatMessage,
   UserMentionNotification,
   PrivateChatMessage,
-  SpkOrder
+  SpkOrder,
+  BackendDiagnostics
 } from '../types';
 import {
   StoreInfo,
@@ -90,6 +91,7 @@ import {
   savePrivateChatMessageCloud
 } from '../backend/pocketbaseBackend';
 import { playMentionChime } from '../utils/notificationSound';
+import { fetchBackendDiagnostics, subscribeDiagnostics } from '../utils/backendDiagnostics';
 import {
   sendSystemNotification,
   requestSystemNotificationPermission,
@@ -119,6 +121,13 @@ interface AiAssistantProps {
   onMarkNotificationRead?: (notifId: string) => void;
 }
 
+const formatEngineUptime = (seconds: number) => {
+  if (!seconds || seconds <= 0) return 'belum terukur';
+  if (seconds < 60) return `${seconds} detik`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} menit`;
+  return `${Math.floor(seconds / 3600)} jam ${Math.floor((seconds % 3600) / 60)} menit`;
+};
+
 export const AiAssistant: React.FC<AiAssistantProps> = ({
   currentTab,
   userRole,
@@ -145,6 +154,28 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
   const [aiSettings, setAiSettings] = useState<BejoAiSettings>(() => getStoredAiSettings());
   const [isAiSettingsModalOpen, setIsAiSettingsModalOpen] = useState(false);
   const [isNetworkOnline, setIsNetworkOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [engineDiagnostics, setEngineDiagnostics] = useState<BackendDiagnostics | null>(null);
+
+  // Kondisi mesin AI diambil dari hasil pemeriksaan nyata saat panel pengaturan dibuka
+  useEffect(() => {
+    if (!isAiSettingsModalOpen) return;
+    let masihTerpasang = true;
+    let sudahDiperiksa = false;
+    setEngineDiagnostics(null);
+    const berhentiLangganan = subscribeDiagnostics((data) => {
+      if (masihTerpasang && sudahDiperiksa) setEngineDiagnostics(data);
+    });
+    fetchBackendDiagnostics()
+      .then((data) => {
+        sudahDiperiksa = true;
+        if (masihTerpasang) setEngineDiagnostics(data);
+      })
+      .catch(() => {});
+    return () => {
+      masihTerpasang = false;
+      berhentiLangganan();
+    };
+  }, [isAiSettingsModalOpen]);
 
   // Online / Offline Status Listener
   useEffect(() => {
@@ -1898,7 +1929,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-400 font-medium">
-                    Sinkronisasi Real-Time Database • {activeAgentNotifPopup.time} WIB
+                    Data langsung diperbarui • {activeAgentNotifPopup.time} WIB
                   </p>
                 </div>
               </div>
@@ -2102,7 +2133,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                       </span>
                     </h3>
                     <p className="text-xs text-slate-400">
-                      Konfigurasi engine, mode online/offline, suara TTS, dan persona asisten
+                      Atur mesin AI, mode online/offline, suara, dan karakter asisten
                     </p>
                   </div>
                 </div>
@@ -2147,7 +2178,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                         {aiSettings.engineMode === 'HYBRID_AUTO' && <Check size={14} className="text-indigo-600" />}
                       </div>
                       <p className="text-[10px] text-slate-500 leading-tight">
-                        Cloud Gemini saat online + Otomatis beralih ke Lokal jika offline/timeout.
+                        Pakai Gemini saat ada internet. Otomatis pindah ke mode lokal jika offline atau waktu tunggu habis.
                       </p>
                     </button>
 
@@ -2167,7 +2198,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                         {aiSettings.engineMode === 'ONLINE_ONLY' && <Check size={14} className="text-indigo-600" />}
                       </div>
                       <p className="text-[10px] text-slate-500 leading-tight">
-                        Mengutamakan pemrosesan cloud Gemini Flash dengan grounding data live.
+                        Selalu pakai Gemini Flash di internet, jawabannya memakai data toko terbaru.
                       </p>
                     </button>
 
@@ -2187,7 +2218,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                         {aiSettings.engineMode === 'OFFLINE_ONLY' && <Check size={14} className="text-indigo-600" />}
                       </div>
                       <p className="text-[10px] text-slate-500 leading-tight">
-                        Respon super instan (&lt;0.1s) 100% dari database lokal tanpa kuota.
+                        Jawaban sangat cepat (di bawah 0,1 detik) dari data di perangkat ini, tanpa kuota internet.
                       </p>
                     </button>
                   </div>
@@ -2204,7 +2235,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                       { id: 'CERIA', label: 'Ceria & Ramah', desc: 'Hangat & seru' },
                       { id: 'FORMAL', label: 'Formal / Resmi', desc: 'Terstruktur' },
                       { id: 'SANTAI', label: 'Santai & Akrab', desc: 'Bahasa kasual' },
-                      { id: 'RINGKAS', label: 'Ringkas & Cepat', desc: 'To the point' }
+                      { id: 'RINGKAS', label: 'Ringkas & Cepat', desc: 'Langsung ke inti' }
                     ].map((p) => (
                       <button
                         key={p.id}
@@ -2350,18 +2381,41 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                   <div className="font-bold text-white flex items-center justify-between">
                     <span className="flex items-center gap-1">
                       <Zap size={12} className="text-amber-300" />
-                      Status Engine Real-Time Aktif
+                      Kondisi Mesin AI
                     </span>
-                    <span className="font-mono text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                      LIVE OPTIMAL
+                    <span
+                      className={`font-mono text-[9px] px-1.5 py-0.2 rounded border ${
+                        !engineDiagnostics
+                          ? 'bg-slate-500/20 text-slate-300 border-slate-500/30'
+                          : engineDiagnostics.status === 'healthy'
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                            : engineDiagnostics.status === 'warning'
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                              : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                      }`}
+                    >
+                      {!engineDiagnostics
+                        ? 'MEMERIKSA...'
+                        : engineDiagnostics.status === 'healthy'
+                          ? 'NORMAL'
+                          : engineDiagnostics.status === 'warning'
+                            ? 'PERLU DICEK'
+                            : 'ADA MASALAH'}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-[10px] text-indigo-200 pt-1">
-                    <div>• Engine: <strong>Gemini Flash + Local Engine</strong></div>
-                    <div>• Status Jaringan: <strong>{isNetworkOnline ? '🟢 Online' : '🟠 Offline'}</strong></div>
-                    <div>• Respon Waktu: <strong>&lt; 100ms (Instan)</strong></div>
-                    <div>• Akses Database POS: <strong>Real-Time Terkoneksi</strong></div>
+                    <div>• Mode mesin: <strong>{aiSettings.engineMode === 'OFFLINE_ONLY' ? 'Lokal saja' : aiSettings.engineMode === 'ONLINE_ONLY' ? 'Online saja' : 'Online, otomatis pindah ke lokal'}</strong></div>
+                    <div>• Internet: <strong>{isNetworkOnline ? 'terhubung' : 'tidak terhubung'}</strong></div>
+                    <div>• Layanan AI: <strong>{!engineDiagnostics ? 'sedang diperiksa' : engineDiagnostics.aiApiStatus === 'ready' ? 'siap' : engineDiagnostics.aiApiStatus === 'degraded' ? 'terbatas (kunci AI di server belum diisi)' : 'belum tersambung'}</strong></div>
+                    <div>• Penyimpanan data: <strong>{!engineDiagnostics ? 'sedang diperiksa' : engineDiagnostics.pocketbaseStatus === 'connected' ? 'tersambung ke server' : engineDiagnostics.pocketbaseStatus === 'checking' ? 'sedang diperiksa' : 'Mode Lokal di perangkat ini'}</strong></div>
+                    <div>• Server menyala: <strong>{!engineDiagnostics ? 'sedang diperiksa' : formatEngineUptime(engineDiagnostics.uptimeSeconds)}</strong></div>
+                    <div>• Diperiksa pukul: <strong>{engineDiagnostics && engineDiagnostics.lastChecked ? new Date(engineDiagnostics.lastChecked).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : 'belum pernah'}</strong></div>
                   </div>
+                  {engineDiagnostics && engineDiagnostics.activeErrors.filter((e) => !e.isResolved).length > 0 && (
+                    <div className="text-[10px] text-rose-300 pt-1 border-t border-indigo-900">
+                      • Ada {engineDiagnostics.activeErrors.filter((e) => !e.isResolved).length} masalah tercatat. Buka panel diagnostik untuk detailnya.
+                    </div>
+                  )}
                 </div>
               </div>
 

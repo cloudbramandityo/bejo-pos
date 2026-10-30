@@ -92,8 +92,8 @@ export default function AgentPickupPanel({ stockTransactions, products, agents }
             <div>
               <h3 className="text-sm sm:text-base font-bold text-slate-900">Total Pengambilan tiap Agen</h3>
               <p className="text-[11px] text-slate-500 mt-0.5 max-w-2xl leading-relaxed">
-                Nilai bahan yang diambil agen rekanan (tipe mutasi PENGAMBILAN, dihitung dengan Harga Agen
-                atau Harga Meter Grosir pada baris transaksi) per minggu, per bulan, atau periode manual.
+                Nilai bahan yang diambil agen tiap minggu, bulan, atau rentang tanggal yang Anda pilih.
+                Yang dihitung harga agen atau harga meter grosir yang tercatat di transaksinya.
               </p>
             </div>
           </div>

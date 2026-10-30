@@ -211,7 +211,7 @@ export function exportStockTransactionsToPDF(
   const hasCetakData = safeCetakTransactions.length > 0;
 
   if (!hasStockData && !hasCetakData) {
-    alert('Tidak ada data transaksi mutasi stok untuk diekspor ke PDF.');
+    alert('Belum ada data stok masuk/keluar untuk diekspor ke PDF.');
     return;
   }
 

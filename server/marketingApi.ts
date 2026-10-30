@@ -1410,7 +1410,7 @@ async function tiktokDiagnostics() {
         missing: [],
         checkedAt,
         warnings,
-        error: 'TikTok tidak mengembalikan data advertiser. Periksa TIKTOK_ADVERTISER_ID dan izin token.',
+        error: 'Data akun iklan TikTok tidak dikembalikan TikTok. Periksa TIKTOK_ADVERTISER_ID dan izin aksesnya.',
       };
     }
     const status = String(account.status || '');
@@ -1553,7 +1553,7 @@ export function registerMarketingRoutes(app: Express): void {
     asyncRoute(async (req, res) => {
       const { metaBusinessId, facebookPageId, whatsappBusinessNumber } = req.body || {};
       if (!metaBusinessId || !facebookPageId || !whatsappBusinessNumber) {
-        res.status(400).json({ error: 'Semua field akun bisnis wajib diisi.' });
+        res.status(400).json({ error: 'Semua kolom akun bisnis wajib diisi.' });
         return;
       }
       const result = await metaConnect({
@@ -1582,7 +1582,7 @@ export function registerMarketingRoutes(app: Express): void {
     asyncRoute(async (req, res) => {
       const { tiktokForBusinessId, tiktokAdsManagerId, tiktokOrganicHandle } = req.body || {};
       if (!tiktokForBusinessId || !tiktokAdsManagerId || !tiktokOrganicHandle) {
-        res.status(400).json({ error: 'Semua field akun bisnis TikTok wajib diisi.' });
+        res.status(400).json({ error: 'Semua kolom akun bisnis TikTok wajib diisi.' });
         return;
       }
       const result = await tiktokConnect({

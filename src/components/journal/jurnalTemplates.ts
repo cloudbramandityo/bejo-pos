@@ -327,7 +327,7 @@ export function createKasUtamaSheet(year: number): Sheet {
     0,
     {
       ...mergeCells(parts.merge, noteRow, 0, 1, colCount),
-      v: 'Status harian diisi CLOSING atau LIBUR. Saldo Kas Akhir = Saldo Awal + Pendapatan Operasional + Pemasukan Non Operasional - Biaya Tetap - Biaya Variabel - Operasional Toko. Seluruh perubahan tersimpan otomatis ke PocketBase.',
+      v: 'Status harian diisi CLOSING atau LIBUR. Saldo Kas Akhir = Saldo Awal + Pendapatan Operasional + Pemasukan Non Operasional - Biaya Tetap - Biaya Variabel - Operasional Toko. Seluruh perubahan tersimpan otomatis ke server.',
       bg: '#f8fafc',
       fc: '#64748b',
       fs: 10,
@@ -460,7 +460,7 @@ export function createDebitSheet(year: number): Sheet {
 
   put(parts.cells, noteRow, 0, {
     ...mergeCells(parts.merge, noteRow, 0, 1, 11),
-    v: 'Isi pengeluaran pada kolom Cash, Transfer PT, atau TRF Bejo. Total Pengeluaran dihitung otomatis. Seluruh perubahan tersimpan otomatis ke PocketBase.',
+    v: 'Isi pengeluaran pada kolom Cash, Transfer PT, atau TRF Bejo. Total Pengeluaran dihitung otomatis. Seluruh perubahan tersimpan otomatis ke server.',
     bg: '#f8fafc',
     fc: '#64748b',
     fs: 10,
@@ -588,7 +588,7 @@ export function createKreditSheet(year: number): Sheet {
 
   put(parts.cells, noteRow, 0, {
     ...mergeCells(parts.merge, noteRow, 0, 1, 10),
-    v: 'Isi pendapatan pada kolom Cash, Transfer PT, atau TRF Bejo. Total Pendapatan dihitung otomatis. Seluruh perubahan tersimpan otomatis ke PocketBase.',
+    v: 'Isi pendapatan pada kolom Cash, Transfer PT, atau TRF Bejo. Total Pendapatan dihitung otomatis. Seluruh perubahan tersimpan otomatis ke server.',
     bg: '#f8fafc',
     fc: '#64748b',
     fs: 10,

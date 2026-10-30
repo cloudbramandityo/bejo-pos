@@ -124,7 +124,7 @@ export const TaxDependentsView: React.FC<TaxDependentsViewProps> = ({
         <div>
           <span className="font-bold">Ketentuan Tanggungan PTKP Menurut UU PPh:</span>
           <p className="text-[11px] text-emerald-700 mt-0.5 leading-relaxed">
-            Tanggungan yang dapat diperhitungkan dalam PTKP adalah anggota keluarga sedarah dan semenda dalam garis keturunan lurus (orang tua, mertua, anak kandung, anak angkat) yang menjadi tanggungan sepenuhnya, maksimal 3 (tiga) orang.
+            Tanggungan yang dihitung untuk PTKP: keluarga sedarah atau semenda garis lurus (orang tua, mertua, anak kandung, anak angkat) yang sepenuhnya Anda tanggung, maksimal 3 orang.
           </p>
         </div>
       </div>

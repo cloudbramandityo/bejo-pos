@@ -126,7 +126,7 @@ export const ShiftScreen: React.FC<ShiftScreenProps> = ({
 
   const handleDirectCloseShift = (e: React.FormEvent) => {
     e.preventDefault();
-    if (confirm('Apakah Anda yakin ingin menutup shift kasir ini dan merekap laporan kas? Laporan Excel akan otomatis di-download dan aplikasi akan kembali ke pilihan kasir & shift.')) {
+    if (confirm('Tutup shift kasir ini dan rekap laporan kas? Laporan Excel otomatis diunduh, lalu aplikasi kembali ke pilihan kasir & shift.')) {
       // 1. Auto save to Excel
       if (currentShiftTransactions.length > 0) {
         exportTransactionsToExcel(
@@ -151,7 +151,7 @@ export const ShiftScreen: React.FC<ShiftScreenProps> = ({
               MANAJEMEN SHIFT & DATA KASIR TOKO
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Kelola modal kas laci, pengaturan daftar kasir & shift toko, serta rekap penutupan kasir otomatis tersimpan ke Excel.
+              Atur modal kas laci dan daftar kasir & shift toko. Rekap penutupan kasir otomatis diunduh sebagai Excel.
             </p>
           </div>
         </div>
@@ -512,7 +512,7 @@ export const ShiftScreen: React.FC<ShiftScreenProps> = ({
               <AlertCircle className="w-12 h-12 text-amber-600 mx-auto" />
               <h2 className="text-base font-bold text-amber-900">Belum Ada Shift Kasir yang Dibuka</h2>
               <p className="text-xs text-amber-800 max-w-md mx-auto">
-                Silakan buka shift kasir baru dengan memilih kasir bertugas dan shift kerja untuk memulai transaksi di POS.
+                Pilih kasir bertugas dan shift kerja, lalu buka shift untuk mulai transaksi di POS.
               </p>
               <button
                 type="button"
@@ -536,7 +536,7 @@ export const ShiftScreen: React.FC<ShiftScreenProps> = ({
                 Daftar Kasir Aktif & Parameter Shift Toko
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Kasir yang terdaftar di sini dapat langsung dipilih saat membuka aplikasi POS atau mengganti shift.
+                Kasir di daftar ini bisa langsung dipilih saat membuka POS atau saat ganti shift.
               </p>
             </div>
 

@@ -180,7 +180,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
   };
 
   const handleResetPrintSettingsDefault = () => {
-    if (window.confirm('Kembalikan semua pengaturan printer ke setelan bawaan rekomendasi (POS 80mm)?')) {
+    if (window.confirm('Kembalikan semua pengaturan printer ke setelan rekomendasi POS 80mm?')) {
       const def = { ...DEFAULT_PRINT_SETTINGS };
       setPrintSettingsForm(def);
       saveStoredPrintSettings(def);
@@ -393,7 +393,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
     setUTemporaryPassword(true);
     setShowModalPassword(true);
     setUFormNotice(
-      'Password sementara baru sudah dibuat. Salin password di kolom Password dan berikan ke pengguna — ia wajib mengganti sendiri saat login.'
+      'Password sementara sudah dibuat. Salin dan berikan ke pengguna; ia wajib menggantinya sendiri saat login.'
     );
   };
 
@@ -614,10 +614,10 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
 
   const handleDeleteProfileClick = (profile: StoreProfile) => {
     if (profile.isMaster || profile.id === 'bejo_polsek') {
-      alert('Profil Master Database (BEJO Polsek) bersifat permanen dan tidak dapat dihapus.');
+      alert('Profil utama toko (BEJO Polsek) bersifat permanen dan tidak bisa dihapus.');
       return;
     }
-    if (window.confirm(`Apakah Anda yakin ingin menghapus Profil Toko "${profile.storeName}"? Database transaksi mandiri profil ini akan dihapus.`)) {
+    if (window.confirm(`Hapus Profil Toko "${profile.storeName}" dari daftar pilihan toko? Catatan transaksi yang sudah ada tidak ikut terhapus.`)) {
       if (onDeleteStoreProfile) {
         onDeleteStoreProfile(profile.id);
       }
@@ -680,7 +680,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
             };
             setStoreForm(updatedStoreInfo);
             onSaveStoreInfo(updatedStoreInfo);
-            setLogoSuccessToast('Logo berhasil diupload dan dijadikan sebagai Logo Default aplikasi!');
+            setLogoSuccessToast('Logo berhasil diunggah dan dijadikan Logo Default aplikasi.');
             setTimeout(() => setLogoSuccessToast(null), 4000);
           }
         } catch (err) {
@@ -714,13 +714,13 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
     if (storeForm.logoUrl) {
       saveStoredDefaultLogo(storeForm.logoUrl);
       onSaveStoreInfo({ ...storeForm, logoUrl: storeForm.logoUrl });
-      setLogoSuccessToast('Logo saat ini berhasil ditetapkan sebagai Logo Default Sistem!');
+      setLogoSuccessToast('Logo ini ditetapkan sebagai Logo Default aplikasi.');
       setTimeout(() => setLogoSuccessToast(null), 3500);
     }
   };
 
   const handleResetLogo = () => {
-    if (confirm('Kembalikan logo ke logo standar bawaan (bejo_store_logo)?')) {
+    if (confirm('Kembalikan ke logo standar bawaan aplikasi?')) {
       clearStoredDefaultLogo();
       const updatedStoreInfo: StoreInfo = {
         ...storeForm,
@@ -774,10 +774,10 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
   const handleDownloadBackup = () => {
     try {
       const res = downloadBackupJSON(storeInfo?.name);
-      setBackupToastMsg(`Cadangan data offline (${res.fileName}) berhasil diunduh! Total ${res.summary.totalProducts} produk, ${res.summary.totalCustomers} pelanggan, ${res.summary.totalTransactions} transaksi tersimpan.`);
+      setBackupToastMsg(`Cadangan berhasil diunduh (${res.fileName}). Isi: ${res.summary.totalProducts} produk, ${res.summary.totalCustomers} pelanggan, ${res.summary.totalTransactions} transaksi.`);
       setTimeout(() => setBackupToastMsg(null), 5000);
     } catch (e) {
-      setBackupToastMsg('Gagal mengunduh file cadangan JSON.');
+      setBackupToastMsg('Gagal mengunduh berkas cadangan.');
       setTimeout(() => setBackupToastMsg(null), 5000);
     }
   };
@@ -794,7 +794,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
         const validation = validateBackupPayload(parsed);
         if (!validation.isValid || !validation.payload) {
           setRestorePendingPayload(null);
-          setRestoreError(validation.error || 'Format file cadangan tidak valid.');
+          setRestoreError(validation.error || 'Berkas cadangan tidak dikenali.');
           setIsRestoreModalOpen(true);
           return;
         }
@@ -802,7 +802,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
         setIsRestoreModalOpen(true);
       } catch (err) {
         setRestorePendingPayload(null);
-        setRestoreError('Gagal membaca file: Pastikan file yang dipilih berformat .JSON yang valid.');
+        setRestoreError('Gagal membaca file. Pastikan yang dipilih berkas .json hasil cadangan aplikasi ini.');
         setIsRestoreModalOpen(true);
       }
     };
@@ -816,12 +816,12 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
     setRestoreError(null);
     setIsRestoringBackup(true);
     setRestoreProgressPercent(0);
-    setRestoreProgress('Memulihkan data ke penyimpanan lokal...');
+    setRestoreProgress('Memulihkan data ke perangkat ini...');
 
     try {
       const localSuccess = restoreBackupToStorage(restorePendingPayload);
       if (!localSuccess) {
-        setRestoreError('Gagal memulihkan data ke sistem penyimpanan lokal.');
+        setRestoreError('Gagal memulihkan data ke perangkat ini.');
         return;
       }
 
@@ -830,13 +830,13 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
           ? Math.round((progress.overallProcessed / progress.overallTotal) * 100)
           : 100;
         setRestoreProgressPercent(percent);
-        setRestoreProgress(`Menyinkronkan ${progress.step} (${progress.processed}/${progress.total})...`);
+        setRestoreProgress(`Mengirim ${progress.step} ke server (${progress.processed}/${progress.total})...`);
       });
 
       if (!cloudResult.success) {
         const detail = cloudResult.errors.length > 0 ? ` Detail: ${cloudResult.errors.slice(0, 3).join(' | ')}` : '';
         const adopted = cloudResult.skippedRecords > 0
-          ? ` ${cloudResult.skippedRecords} data digabungkan ke akun cloud yang sudah ada.`
+          ? ` ${cloudResult.skippedRecords} data digabungkan ke akun server yang sudah ada.`
           : '';
         // Penolakan data tidak akan berubah walau diulang, jadi jangan sarankan
         // "Coba Lagi" untuk kasus itu.
@@ -844,19 +844,19 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
           ? ' Periksa koneksi internet lalu klik "Coba Lagi".'
           : ' Perbaiki data yang ditolak dulu; mengulang restore akan memberi hasil yang sama.';
         setRestoreError(
-          `Data lokal berhasil dipulihkan, tetapi ${cloudResult.failedRecords} data gagal disinkronkan ke database cloud.${detail}${adopted}${hint}`
+          `Data di perangkat ini berhasil dipulihkan, tetapi ${cloudResult.failedRecords} data gagal dikirim ke server.${detail}${adopted}${hint}`
         );
         return;
       }
 
       setRestoreProgressPercent(100);
-      setRestoreProgress('Sinkronisasi cloud selesai. Memuat ulang data...');
+      setRestoreProgress('Data terkirim ke server. Memuat ulang aplikasi...');
       setIsRestoreModalOpen(false);
       setRestorePendingPayload(null);
       const adoptedNote = cloudResult.skippedRecords > 0
         ? ` ${cloudResult.skippedRecords} data digabungkan ke akun yang sudah ada.`
         : '';
-      setBackupToastMsg(`Restore berhasil: ${cloudResult.syncedRecords} data tersinkron ke database cloud.${adoptedNote} Memuat ulang aplikasi...`);
+      setBackupToastMsg(`Restore berhasil: ${cloudResult.syncedRecords} data terkirim ke server.${adoptedNote} Memuat ulang aplikasi...`);
       setTimeout(() => {
         window.location.reload();
       }, 1500);
@@ -904,7 +904,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
 
   const openEditCustomer = (c: Customer) => {
     if (isAgenCustomer(c)) {
-      alert('Pelanggan dengan kategori AGEN tidak dapat diedit secara langsung dari sini. Silakan edit data melalui tab Daftar Agen.');
+      alert('Pelanggan kategori AGEN tidak bisa diedit di sini. Silakan edit lewat tab Daftar Agen.');
       return;
     }
     setEditingCustomer(c);
@@ -925,7 +925,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
 
     const selectedCatObj = categories.find((k) => k.id === cCategoryId);
     if (cCategoryId === 'cat_agen' || (selectedCatObj && selectedCatObj.name.trim().toUpperCase() === 'AGEN')) {
-      alert('Kategori AGEN tidak dapat dipilih secara manual. Pelanggan kategori AGEN terdaftar otomatis dari Daftar Agen.');
+      alert('Kategori AGEN tidak bisa dipilih manual. Data pelanggan AGEN mengikuti Daftar Agen.');
       return;
     }
 
@@ -1010,7 +1010,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
             PENGATURAN TOKO
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Kelola data pelanggan, diskon kategori, serta profil dan nama toko yang tersinkronisasi di POS.
+            Atur data pelanggan, diskon kategori, dan profil toko. Perubahan langsung tampil di POS.
           </p>
         </div>
 
@@ -1296,7 +1296,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                         </td>
                         <td className="py-3.5 px-4 text-center">
                           {isAgen ? (
-                            <div className="inline-flex items-center justify-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-[10px] font-bold" title="Pelanggan kategori AGEN tidak bisa diedit/dihapus manual dari sini. Data terikat otomatis dari Daftar Agen.">
+                            <div className="inline-flex items-center justify-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-[10px] font-bold" title="Akun AGEN tidak bisa diubah atau dihapus dari sini. Datanya mengikuti Daftar Agen.">
                               <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                               <span>Terkunci (Daftar Agen)</span>
                             </div>
@@ -1570,7 +1570,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
               Aturan Diskon Berdasarkan Kategori Pelanggan
             </h3>
             <p className="text-xs text-slate-500 mt-1">
-              Setiap pelanggan yang terdaftar dengan kategori di bawah akan secara otomatis mendapatkan diskon persentase saat transaksi kasir dihitung.
+              Pelanggan dengan kategori di bawah otomatis dapat diskon saat transaksi di kasir.
             </p>
           </div>
 
@@ -1642,7 +1642,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
             <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center justify-between text-xs text-emerald-800 font-semibold animate-in fade-in duration-200">
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-emerald-600" />
-                <span>Profil dan nama toko berhasil diperbarui! Nama toko telah tersinkronisasi ke POS.</span>
+                <span>Profil dan nama toko tersimpan. Perubahan langsung tampil di POS.</span>
               </div>
               <button
                 type="button"
@@ -1687,7 +1687,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Kelola profil toko, setiap profil memiliki penyimpanan database transaksi & shift masing-masing (stand alone).
+                    Atur profil toko. Setiap profil punya data transaksi dan shift sendiri, tidak bercampur.
                   </p>
                 </div>
               </div>
@@ -1709,14 +1709,14 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
               </div>
               <div className="text-xs space-y-1">
                 <div className="font-black text-amber-950 flex items-center gap-2 flex-wrap">
-                  <span>👑 Profil Toko BEJO Polsek adalah Master Database (Stok Terpusat)</span>
+                  <span>👑 Toko BEJO Polsek adalah profil utama (stok berpusat di sini)</span>
                   <span className="px-2 py-0.5 bg-amber-200/90 text-amber-900 font-bold text-[10px] rounded-md border border-amber-300">
-                    SINKRONISASI AKTIF
+                    STOK DIPERBARUI OTOMATIS
                   </span>
                 </div>
                 <p className="text-amber-900/90 text-[11px] leading-relaxed">
-                  Jumlah Stok pada <strong>Katalog Produk</strong> dan <strong>Agen</strong> tersinkronisasi dengan database <strong>BEJO Polsek</strong>. 
-                  Profil Toko memiliki database transaksi penjualan & rekap shift tersendiri (berdiri sendiri & tidak bercampur).
+                  Jumlah stok di <strong>Katalog Produk</strong> dan <strong>Agen</strong> mengikuti stok di <strong>BEJO Polsek</strong>.
+                  Setiap Profil Toko punya data transaksi penjualan dan rekap shift sendiri, tidak bercampur.
                 </p>
               </div>
             </div>
@@ -1741,11 +1741,11 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                       <div className="flex items-center justify-between gap-2 mb-2">
                         {isMaster ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300">
-                            👑 MASTER DATABASE
+                            👑 PROFIL UTAMA
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                            🏢 DATABASE MANDIRI
+                            🏢 STOK SENDIRI
                           </span>
                         )}
 
@@ -1864,7 +1864,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                     type="button"
                     onClick={handleResetLogo}
                     className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                    title="Kembalikan ke logo default"
+                    title="Kembalikan ke logo bawaan"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                     Reset ke Logo Standar
@@ -1910,7 +1910,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                       </span>
                     )}
                     <p className="text-[10px] text-slate-500 leading-tight">
-                      {storeForm.logoUrl ? 'Tersimpan & tersinkronisasi sebagai default di seluruh aplikasi.' : 'Menggunakan aset bawaan bejo_store_logo.'}
+                      {storeForm.logoUrl ? 'Tersimpan dan dipakai sebagai logo utama di semua halaman.' : 'Memakai logo bawaan aplikasi.'}
                     </p>
                   </div>
                 </div>
@@ -1940,7 +1940,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                       type="button"
                       onClick={handleSetAsDefaultLogo}
                       className="w-full sm:w-auto px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-bold text-xs rounded-xl shadow-2xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                      title="Pastikan logo ini tersimpan sebagai default permanen"
+                      title="Jadikan logo ini logo utama di semua halaman"
                     >
                       <Check className="w-4 h-4 text-emerald-600" />
                       Setel Ulang Default
@@ -1948,7 +1948,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                   )}
 
                   <div className="text-xs text-slate-600 leading-relaxed text-center sm:text-left">
-                    File logo yang diupload otomatis dijadikan sebagai <strong>Logo Default</strong> untuk seluruh identitas toko, POS kasir, dan struk.
+                    Logo yang diunggah langsung jadi <strong>Logo Default</strong> untuk identitas toko, POS kasir, dan struk.
                   </div>
                 </div>
               </div>
@@ -1963,8 +1963,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                 <div className="text-xs text-blue-900">
                   <p className="font-bold">Edit Informasi Profil Aktif ({storeForm.storeName})</p>
                   <p className="text-blue-700 text-[11px] mt-0.5">
-                    Nama toko yang Anda tentukan di bawah ini akan tersinkronisasi secara otomatis dengan <strong>header navigasi atas</strong>, 
-                    informasi toko di <strong>halaman transaksi kasir POS</strong>, dan <strong>cetak struk belanja thermal</strong>.
+                    Nama toko di bawah ini otomatis tampil di <strong>header navigasi atas</strong>, <strong>halaman transaksi kasir POS</strong>, dan <strong>cetak struk thermal</strong>.
                   </p>
                 </div>
               </div>
@@ -2000,7 +1999,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
                 />
                 <span className="text-[11px] text-slate-500 mt-1 block">
-                  Teks besar di sebelah logo pada header aplikasi (dapat diedit manual, misal: &ldquo;Point of Sales&rdquo;).
+                  Teks besar di samping logo pada header. Bebas diubah, misal: &ldquo;Point of Sales&rdquo;.
                 </span>
               </div>
 
@@ -2076,7 +2075,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
             {/* Live Preview Column */}
             <div className="lg:col-span-5 space-y-4">
               <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Pratinjau Sinkronisasi Tampilan
+                Pratinjau Tampilan di POS
               </div>
 
               {/* Preview 1: Top Navigation Header */}
@@ -2156,7 +2155,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                       </span>
                     </div>
                     <p className="text-xs text-slate-600 mt-0.5">
-                      Konfigurasi printer default ({printSettingsForm.defaultPrinter || 'POS 80'}), format margin cetak (0-10mm), serta aktivasi opsi auto-print transaksi & surat jalan.
+                      Atur printer utama ({printSettingsForm.defaultPrinter || 'POS 80'}), margin cetak (0-10mm), dan cetak otomatis untuk struk & surat jalan.
                     </p>
                   </div>
                 </div>
@@ -2193,7 +2192,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                         </span>
                       </div>
                       <p className="text-xs text-slate-600 mt-0.5">
-                        Kontrol kesehatan backend Express Port 3000, Gemini AI engine, status PocketBase DB, serta Auto-Fix engine.
+                        Cek kondisi server (port 3000), Gemini AI, database di server, dan perbaikan otomatis.
                       </p>
                     </div>
                   </div>
@@ -2204,7 +2203,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                         type="button"
                         onClick={onOpenBackendDiagnostics}
                         className="px-4 py-2.5 bg-white hover:bg-slate-100 active:scale-95 text-slate-800 border border-slate-300 font-bold text-xs rounded-xl shadow-2xs flex items-center gap-2 transition-all cursor-pointer"
-                        title="Buka panel diagnostik lengkap dan log error"
+                        title="Buka panel diagnostik lengkap dan daftar error"
                       >
                         <Activity className="w-4 h-4 text-slate-700" />
                         Buka Panel Diagnostik Backend
@@ -2216,43 +2215,11 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                       onClick={handleQuickAutoFix}
                       disabled={isFixingBackend}
                       className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                      title="Jalankan perbaikan otomatis sistem backend dan reset koneksi"
+                      title="Jalankan perbaikan otomatis sistem dan sambungkan ulang ke server"
                     >
                       <Wrench className={`w-4 h-4 text-white ${isFixingBackend ? 'animate-spin' : ''}`} />
                       {isFixingBackend ? 'Memperbaiki...' : 'Perbaiki Otomatis (FIX)'}
                     </button>
-                  </div>
-                </div>
-
-                {/* Quick Sub-Modules Status Preview for Developer */}
-                <div className="pt-2 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
-                  <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-2xs">
-                    <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Express Server</div>
-                    <div className="text-xs font-bold text-slate-900 flex items-center justify-center gap-1.5 mt-1">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                      Port 3000 OK
-                    </div>
-                  </div>
-                  <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-2xs">
-                    <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Gemini AI Engine</div>
-                    <div className="text-xs font-bold text-slate-900 flex items-center justify-center gap-1.5 mt-1">
-                      <Sparkles className="w-3.5 h-3.5 text-slate-700" />
-                      Siap (Ready)
-                    </div>
-                  </div>
-                  <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-2xs">
-                    <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Cloud Database</div>
-                    <div className="text-xs font-bold text-slate-900 flex items-center justify-center gap-1.5 mt-1">
-                      <Check className="w-3.5 h-3.5 text-slate-700" />
-                      PocketBase Synced
-                    </div>
-                  </div>
-                  <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-2xs">
-                    <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Auto-Fix Engine</div>
-                    <div className="text-xs font-bold text-slate-900 flex items-center justify-center gap-1.5 mt-1">
-                      <Wrench className="w-3.5 h-3.5 text-slate-700" />
-                      Aktif 24/7
-                    </div>
                   </div>
                 </div>
 
@@ -2284,7 +2251,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Konfigurasi printer default, pengaturan format margin (0-10mm), aktivasi auto-print tanpa aksi manual kasir, dan penghematan kertas.
+                Atur printer utama, margin cetak (0-10mm), cetak otomatis tanpa klik kasir, dan hemat kertas.
               </p>
             </div>
 
@@ -2333,7 +2300,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
           {printSettingsSavedToast && (
             <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-bold flex items-center gap-2 shadow-2xs animate-in zoom-in-95">
               <Check className="w-4 h-4 text-emerald-600" />
-              <span>Pengaturan printer dan format margin berhasil disimpan & disinkronkan ke sistem POS!</span>
+              <span>Pengaturan printer dan margin tersimpan, langsung dipakai POS.</span>
             </div>
           )}
 
@@ -2353,7 +2320,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                         Pilihan Printer Default
                       </h3>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        Tentukan profil printer bawaan yang terhubung pada workstation kasir ini.
+                        Pilih printer yang tersambung di komputer kasir ini.
                       </p>
                     </div>
 
@@ -2372,7 +2339,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                           <span className="bg-indigo-100 text-indigo-800 text-[9px] font-bold px-1.5 py-0.2 rounded">Rekomendasi</span>
                         </div>
                         <div className="text-[10px] text-slate-500 font-normal mt-1">
-                          Printer thermal USB / Bluetooth lebar 80mm standar kasir.
+                          Printer thermal 80mm lewat USB / Bluetooth, standar kasir.
                         </div>
                       </button>
 
@@ -2387,7 +2354,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                       >
                         <div className="text-xs font-bold">POS 58 mm</div>
                         <div className="text-[10px] text-slate-500 font-normal mt-1">
-                          Printer thermal mini portable 58mm / mobile bluetooth.
+                          Printer thermal mini 58mm, portabel lewat Bluetooth.
                         </div>
                       </button>
 
@@ -2402,7 +2369,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                       >
                         <div className="text-xs font-bold">Default OS</div>
                         <div className="text-[10px] text-slate-500 font-normal mt-1">
-                          Mengikuti printer default di Windows / Browser OS.
+                          Mengikuti printer default di Windows atau Chrome/Edge perangkat ini.
                         </div>
                       </button>
                     </div>
@@ -2430,7 +2397,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                           Format Margin Cetak (0mm – 10mm)
                         </h3>
                         <p className="text-[11px] text-slate-500 mt-0.5">
-                          Atur jarak batas tepi (margin) kertas. <strong>0mm adalah rekomendasi utama</strong> untuk printer thermal POS agar hasil cetak rapat dan hemat kertas.
+                          Atur jarak tepi kertas. <strong>0mm paling disarankan</strong> untuk printer thermal agar struk rapat dan hemat kertas.
                         </p>
                       </div>
                       <div className="bg-indigo-50 text-indigo-900 border border-indigo-200 font-mono font-bold text-xs px-2.5 py-1 rounded-lg">
@@ -2498,7 +2465,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                         Aktivasi Opsi Auto-Print
                       </h3>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        Kasir tidak perlu lagi mengklik tombol cetak manual setelah menyelesaikan proses.
+                        Kasir tidak perlu klik tombol cetak lagi setelah transaksi selesai.
                       </p>
                     </div>
 
@@ -2513,7 +2480,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                             </span>
                           </div>
                           <p className="text-[11px] text-slate-500 leading-relaxed">
-                            Struk thermal langsung otomatis diproses cetak ke printer kasir begitu tombol 'Selesai Transaksi' ditekan.
+                            Struk langsung tercetak ke printer kasir begitu tombol 'Selesai Transaksi' ditekan.
                           </p>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -2537,7 +2504,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                             </span>
                           </div>
                           <p className="text-[11px] text-slate-500 leading-relaxed">
-                            Dokumen Surat Jalan / Bukti Pengambilan Bahan langsung otomatis dicetak ke printer begitu pesanan diproses.
+                            Surat Jalan / Bukti Pengambilan Bahan langsung tercetak begitu pesanan diproses.
                           </p>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -2674,7 +2641,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                         type="button"
                         onClick={handleResetPrintSettingsDefault}
                         className="w-full py-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                        title="Reset ke pengaturan standar rekomendasi POS 80"
+                        title="Kembali ke pengaturan standar POS 80 yang disarankan"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
                         <span>Reset Standar POS 80</span>
@@ -2712,7 +2679,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
               <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-xl text-xs flex items-center gap-2">
                 <Info className="w-4 h-4 text-amber-700 shrink-0" />
                 <span>
-                  Simulasi struk thermal aktif: Kertas <strong>{printSettingsForm.paperSize}</strong>, Margin <strong>{printSettingsForm.printMarginMm || 0}mm</strong>, Kerapatan <strong>{printSettingsForm.density}</strong>, Kontras <strong>{printSettingsForm.contrast}</strong>.
+                  Contoh struk dengan pengaturan ini: kertas <strong>{printSettingsForm.paperSize}</strong>, margin <strong>{printSettingsForm.printMarginMm || 0}mm</strong>, spasi baris <strong>{printSettingsForm.density}</strong>, ketajaman <strong>{printSettingsForm.contrast}</strong>.
                 </span>
               </div>
 
@@ -2858,10 +2825,10 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
               <div className="bg-indigo-50 border border-indigo-200 text-indigo-950 p-4 rounded-xl space-y-2">
                 <div className="flex items-center gap-2 text-xs font-bold text-indigo-900">
                   <Zap className="w-4 h-4 text-indigo-600" />
-                  <span>Panduan Silent / Direct Printing (Otomatis Cetak Tanpa Kotak Dialog Browser)</span>
+                  <span>Panduan Cetak Otomatis Tanpa Jendela Print</span>
                 </div>
                 <p className="text-xs text-indigo-800 leading-relaxed font-normal">
-                  Agar printer thermal langsung mengeluarkan struk secara <strong>otomatis sekali klik</strong> tanpa kotak dialog browser, terapkan 3 langkah berikut pada komputer kasir:
+                  Supaya struk langsung keluar <strong>otomatis tanpa jendela print</strong>, lakukan 3 langkah ini di komputer kasir:
                 </p>
               </div>
 
@@ -2872,7 +2839,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                     <span>Set Default Printer POS 80</span>
                   </div>
                   <p className="text-slate-600 text-[11px] leading-relaxed">
-                    Buka <em>Windows Settings &rarr; Bluetooth & devices &rarr; Printers & Scanners</em>. Pilih printer thermal kasir Anda dan klik <strong>Set as default</strong>.
+                    Buka <em>Windows Settings &rarr; Bluetooth & devices &rarr; Printers & Scanners</em>. Pilih printer kasir Anda, klik <strong>Set as default</strong>.
                   </p>
                 </div>
 
@@ -2882,7 +2849,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                     <span>Hilangkan Header & Footer</span>
                   </div>
                   <p className="text-slate-600 text-[11px] leading-relaxed">
-                    Saat dialog print muncul pertama kali, klik <em>More settings</em>. <strong>Hilangkan centang "Headers and footers"</strong> dan atur <strong>Margins: None</strong>.
+                    Saat jendela print pertama kali muncul, klik <em>More settings</em>. <strong>Hilangkan centang "Headers and footers"</strong>, pilih <strong>Margins: None</strong>.
                   </p>
                 </div>
 
@@ -2892,7 +2859,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                     <span>Mode Kiosk Direct Print</span>
                   </div>
                   <p className="text-slate-600 text-[11px] leading-relaxed">
-                    Tambahkan parameter <code className="bg-slate-100 text-indigo-700 px-1 py-0.5 rounded font-mono font-bold">--kiosk-printing</code> pada shortcut Target Google Chrome / MS Edge di desktop.
+                    Tambahkan <code className="bg-slate-100 text-indigo-700 px-1 py-0.5 rounded font-mono font-bold">--kiosk-printing</code> di akhir Target shortcut Chrome / Edge di desktop.
                   </p>
                 </div>
               </div>
@@ -2917,7 +2884,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                   <div>
                     <div className="text-[11px] font-black text-indigo-950 uppercase">OWNER (Pemilik)</div>
                     <div className="text-[10px] text-indigo-800 mt-0.5 leading-relaxed">
-                      Akses eksekutif penuh: POS, Stok, Toko, Laporan Keuangan, Pelanggan & Shift.
+                      Akses penuh: POS, stok, toko, laporan keuangan, pelanggan, dan shift.
                     </div>
                   </div>
                 </div>
@@ -2929,7 +2896,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                   <div>
                     <div className="text-[11px] font-black text-blue-950 uppercase">ADMIN (Kelola Data)</div>
                     <div className="text-[10px] text-blue-800 mt-0.5 leading-relaxed">
-                      Akses operasional: POS, Stok Gudang, Pelanggan, Supplier, Agen & Laporan.
+                      Akses harian: POS, stok gudang, pelanggan, supplier, agen, dan laporan.
                     </div>
                   </div>
                 </div>
@@ -2941,7 +2908,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                   <div>
                     <div className="text-[11px] font-black text-amber-950 uppercase">AGEN (Mitra Toko)</div>
                     <div className="text-[10px] text-amber-800 mt-0.5 leading-relaxed">
-                      Portal khusus Agen: Pengambilan bahan, katalog agen & cetak surat jalan.
+                      Hanya untuk agen: ambil bahan, lihat katalog agen, cetak surat jalan.
                     </div>
                   </div>
                 </div>
@@ -2953,7 +2920,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                   <div>
                     <div className="text-[11px] font-black text-emerald-950 uppercase">KASIR (Operasional POS)</div>
                     <div className="text-[10px] text-emerald-800 mt-0.5 leading-relaxed">
-                      Fokus operasional: Kasir POS, buka/tutup shift kasir & cetak struk nota.
+                      Hanya untuk kasir: POS, buka/tutup shift, dan cetak struk nota.
                     </div>
                   </div>
                 </div>
@@ -3511,7 +3478,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                       className="mt-0.5 accent-purple-600"
                     />
                     <span>
-                      Password sementara — pengguna wajib membuat password sendiri setelah login.
+                      Password sementara: pengguna harus membuat password sendiri setelah login.
                     </span>
                   </label>
                 </div>
@@ -3525,7 +3492,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                   type="text"
                   value={uName}
                   onChange={(e) => setUName(e.target.value)}
-                  placeholder="WAJIB: menggunakan huruf kapital di awal nama"
+                  placeholder="Wajib, diawali huruf kapital"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-purple-500 focus:bg-white"
                   required
                 />
@@ -3741,7 +3708,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-900">Unduh Backup Data</h3>
-                  <p className="text-[11px] text-slate-500">Simpan snapshot seluruh data ke file JSON.</p>
+                  <p className="text-[11px] text-slate-500">Simpan seluruh data sebagai berkas cadangan (.json).</p>
                 </div>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
@@ -3765,12 +3732,12 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-900">Pulihkan dari File Backup</h3>
-                  <p className="text-[11px] text-slate-500">Upload file JSON untuk memperbarui data lokal dan cloud.</p>
+                  <p className="text-[11px] text-slate-500">Pilih berkas .json untuk memperbarui data di perangkat ini dan server.</p>
                 </div>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Data dari file akan ditulis ke penyimpanan lokal lalu diunggah ke database cloud PocketBase,
-                sehingga tidak tertimpa lagi saat aplikasi memuat ulang data real-time.
+                Isi berkas ditulis ke perangkat ini lalu dikirim ke server,
+                jadi data tidak tertimpa lagi saat aplikasi memuat ulang data dari server.
               </p>
               <input
                 ref={backupFileInputRef}
@@ -3793,8 +3760,8 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5">
             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <p className="text-[11px] text-amber-900 leading-relaxed">
-              Restore menimpa data lokal dan menambahkan/memperbarui data di cloud. Data cloud yang tidak ada
-              di file backup tidak dihapus. Jangan tutup halaman selama proses sinkronisasi berlangsung.
+              Restore menimpa data perangkat ini dan memperbarui data server; data server di luar berkas cadangan tetap tersimpan.
+              Jangan tutup halaman selama proses berlangsung.
             </p>
           </div>
         </div>
@@ -3839,7 +3806,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                   type="text"
                   value={cName}
                   onChange={(e) => setCName(e.target.value)}
-                  placeholder="WAJIB: menggunakan huruf kapital di awal nama"
+                  placeholder="Wajib, diawali huruf kapital"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   required
                 />
@@ -4327,7 +4294,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                     {editingProfile ? 'Edit Profil Toko' : 'Tambah Profil Toko Baru'}
                   </h2>
                   <p className="text-[11px] text-blue-200">
-                    Database mandiri untuk cabang & identitas toko terpisah
+                    Data transaksi dan identitas toko terpisah per cabang
                   </p>
                 </div>
               </div>
@@ -4351,7 +4318,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
               {editingProfile && (editingProfile.isMaster || editingProfile.id === 'bejo_polsek') && (
                 <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-950 flex items-center gap-2 font-semibold">
                   <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>Ini adalah Master Database (BEJO Polsek). Stok katalog utama berpusat pada profil ini.</span>
+                  <span>Ini profil utama toko (BEJO Polsek). Stok katalog berpusat di profil ini.</span>
                 </div>
               )}
 
@@ -4498,8 +4465,8 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                     <div className="text-xs text-amber-900 leading-relaxed">
                       <p className="font-bold text-amber-950">Konfirmasi Pemulihan Data</p>
                       <p className="mt-0.5">
-                        Data lokal akan diganti dengan data dari file cadangan, lalu seluruh data tersebut
-                        diunggah ke database cloud. Pastikan Anda telah mengunduh cadangan terbaru jika diperlukan.
+                        Data di perangkat ini akan diganti dengan isi berkas cadangan, lalu dikirim ke server.
+                        Unduh dulu cadangan terbaru bila diperlukan.
                       </p>
                     </div>
                   </div>
@@ -4509,7 +4476,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                       <div className="flex items-center justify-between gap-2 text-xs font-bold text-blue-900">
                         <span className="flex items-center gap-2">
                           <RotateCcw className="w-4 h-4 text-blue-600 animate-spin" />
-                          Proses Restore & Sinkronisasi Cloud
+                          Proses Pemulihan Data & Kirim ke Server
                         </span>
                         <span className="font-mono">{restoreProgressPercent}%</span>
                       </div>

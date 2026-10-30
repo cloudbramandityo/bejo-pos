@@ -342,7 +342,7 @@ export async function pickSharedFolder(): Promise<{
     return {
       ok: false,
       folderName: '',
-      message: 'Browser ini tidak mendukung pemilihan folder. Gunakan Chrome atau Edge versi terbaru, atau salin path UNC lalu tekan Win + R.'
+      message: 'Pilih folder otomatis hanya bisa di Chrome atau Edge terbaru di perangkat ini. Atau salin path UNC lalu tekan Win + R.'
     };
   }
   try {
@@ -402,7 +402,7 @@ export async function pickSharedFolderFiles(): Promise<SharedFolderPickResult> {
       ok: false,
       files: [],
       folderName: '',
-      message: 'Browser ini tidak mendukung pemilihan berkas dari folder. Gunakan Chrome atau Edge versi terbaru.'
+      message: 'Pilih berkas dari folder hanya bisa di Chrome atau Edge terbaru di perangkat ini.'
     };
   }
   try {
@@ -478,7 +478,7 @@ export async function getSharedFolderGrantStatus(): Promise<SharedFolderGrantSta
   };
 
   if (!supported) {
-    return { ...base, message: 'Browser ini tidak mendukung akses folder. Perbarui ke Chrome/Edge terbaru.' };
+    return { ...base, message: 'Akses folder hanya bisa di Chrome atau Edge terbaru di perangkat ini.' };
   }
 
   const { handle, needsPermission, denied } = await resolveHandle(false);
@@ -492,7 +492,7 @@ export async function getSharedFolderGrantStatus(): Promise<SharedFolderGrantSta
   }
   const nameMatches = !configuredPath || folderNameOf(configuredPath).toLowerCase() === handle.name.toLowerCase();
   if (denied) {
-    return { ...base, folderName: handle.name, nameMatches, message: 'Izin folder ditolak di browser ini.' };
+    return { ...base, folderName: handle.name, nameMatches, message: 'Izin folder ditolak di perangkat ini.' };
   }
   if (needsPermission) {
     return {
@@ -521,7 +521,7 @@ async function openWritableDirectory(forUserAction: boolean): Promise<{
   failure?: { reason: SharedCopyFailureReason; message: string };
 }> {
   if (!isSharedFolderApiSupported()) {
-    return { dir: null, failure: { reason: 'no-support', message: 'Browser ini tidak mendukung akses folder bersama.' } };
+    return { dir: null, failure: { reason: 'no-support', message: 'Perangkat ini belum mendukung akses folder bersama. Gunakan Chrome atau Edge terbaru.' } };
   }
   const { handle, needsPermission, denied } = await resolveHandle(forUserAction);
   if (!handle) {

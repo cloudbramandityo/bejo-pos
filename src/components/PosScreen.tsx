@@ -416,14 +416,14 @@ export const PosScreen: React.FC<PosScreenProps> = ({
     if (cartItems.length > 0) {
       if (
         confirm(
-          `Keranjang kasir saat ini sudah berisi transaksi lain (${cartItems.length} item).\nTransaksi Open Account (${group.customerName || 'Pelanggan'}) tidak dapat digabung dengan transaksi lainnya.\n\nKosongkan keranjang sekarang dan muat tagihan Open Account ini?`
+          `Keranjang sudah berisi ${cartItems.length} item lain.\nTagihan Open Account atas nama ${group.customerName || 'Pelanggan'} tidak boleh digabung dengan penjualan lain.\n\nKosongkan keranjang sekarang dan muat tagihan ini?`
         )
       ) {
         onClearCart();
         setLoadedSpkOrders([]);
       } else {
         setBlockingErrorModal(
-          'Transaksi Open Account tidak boleh digabung dengan transaksi lainnya. Kosongkan keranjang terlebih dahulu jika ingin memproses tagihan Open Account.'
+          'Tagihan Open Account tidak boleh digabung dengan penjualan lain. Kosongkan keranjang dulu, lalu muat tagihan Open Account ini.'
         );
         return;
       }
@@ -1247,7 +1247,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                   <Layers className="w-10 h-10 mb-2 opacity-30" />
                   <p className="font-semibold text-xs text-slate-600">Keranjang kasir masih kosong</p>
                   <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
-                    Masukkan No. WhatsApp pelanggan kemudian gunakan tombol <span className="text-blue-900 font-bold">TAMBAH PENJUALAN BAHAN</span> atau <span className="text-sky-600 font-bold">TAMBAH PENJUALAN CETAK</span> di sebelah kanan.
+                    Isi No. WhatsApp pelanggan, lalu tekan <span className="text-blue-900 font-bold">TAMBAH PENJUALAN BAHAN</span> atau <span className="text-sky-600 font-bold">TAMBAH PENJUALAN CETAK</span> di kanan.
                   </p>
                 </div>
               )}
@@ -1392,7 +1392,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                     }
                   }}
                   className="py-2.5 px-3 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl transition-all text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-                  title="Otomatis Buka Buat SPK Cetak Baru untuk Transaksi Jasa Cetak & Laser"
+                  title="Buka form Buat SPK Cetak Baru untuk transaksi jasa cetak & laser"
                 >
                   <Printer className="w-3.5 h-3.5 text-indigo-600" />
                   <span>+ Jasa Cetak & Laser</span>

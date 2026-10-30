@@ -77,7 +77,7 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
           const suggestedPath = `D:/${dirHandle.name}/`;
           setTempDirPath(suggestedPath);
           handleSaveDirectoryLocation(suggestedPath);
-          showToast(`Folder "${dirHandle.name}" terpilih sebagai lokasi database lokal!`, 'success');
+          showToast(`Folder "${dirHandle.name}" dipilih sebagai tempat penyimpanan di perangkat ini.`, 'success');
           return;
         }
       } catch (err: any) {
@@ -102,7 +102,7 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
         const path = `D:/${rootFolder}/`;
         setTempDirPath(path);
         handleSaveDirectoryLocation(path);
-        showToast(`Folder "${rootFolder}" dipilih dari komputer/jaringan lokal!`, 'success');
+        showToast(`Folder "${rootFolder}" dipilih dari komputer/jaringan lokal.`, 'success');
       }
     }
   };
@@ -111,7 +111,7 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
   const handleSaveDirectoryLocation = (customTarget?: string) => {
     const target = (customTarget || tempDirPath || '').trim();
     if (!target) {
-      alert('Mohon masukkan path lokasi database lokal yang valid.');
+      alert('Isi lokasi folder yang benar dulu, lalu tekan Simpan Lokasi.');
       return;
     }
 
@@ -131,7 +131,7 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
     setConfig(updated);
     setTempDirPath(clean);
     refreshStats();
-    showToast(`Lokasi database lokal otomatis disetel ke: ${clean}`, 'success');
+    showToast(`Lokasi folder tersimpan di perangkat ini: ${clean}`, 'success');
   };
 
   // Force Instant Dual Sync
@@ -146,7 +146,7 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
         showToast(res.message, 'error');
       }
     } catch (err: any) {
-      showToast('Gagal menjalankan sinkronisasi database', 'error');
+      showToast('Gagal memeriksa penyimpanan data di perangkat ini', 'error');
     } finally {
       setIsSyncing(false);
     }
@@ -174,7 +174,7 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 font-medium truncate mt-0.5">
-                Penyimpanan ganda real-time (IndexedDB lokal & Google PocketBase) tanpa perlu upload/download manual
+                Data tersimpan di perangkat ini dan terkirim ke server otomatis, tanpa unduh/unggah manual
               </p>
             </div>
           </div>
@@ -217,10 +217,10 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
             </div>
             <div className="space-y-1">
               <h4 className="font-black text-emerald-950 text-xs flex items-center gap-1.5">
-                <span>Pencadangan & Sinkronisasi Bekerja Otomatis Sepenuhnya</span>
+                <span>Pencadangan & Pengiriman Data Bekerja Otomatis</span>
               </h4>
               <p className="text-[11.5px] text-emerald-900 leading-relaxed font-medium">
-                Setiap transaksi kasir, SPK cetak, dan perubahan stok <strong>otomatis tersimpan ke database lokal (IndexedDB) dan cloud secara bersamaan</strong>. Anda tidak perlu mengklik tombol download/upload untuk mencadangkan data harian.
+                Setiap transaksi kasir, SPK cetak, dan perubahan stok <strong>langsung tersimpan di perangkat ini, dan ikut terkirim ke server saat ada internet</strong>. Anda tidak perlu menekan tombol download/upload untuk mencadangkan data harian.
               </p>
             </div>
           </div>
@@ -236,13 +236,13 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
                 </div>
                 <span className="bg-emerald-100 text-emerald-950 font-bold text-[10px] px-2 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                  AKTIF (0 ms)
+                  AKTIF
                 </span>
               </div>
               <div className="text-[11px] text-slate-600 font-medium space-y-1 bg-white p-2.5 rounded-lg border border-slate-200">
                 <div className="flex justify-between items-center">
-                  <span>Engine Lokal:</span>
-                  <strong className="text-slate-900 font-bold">IndexedDB + Local Storage</strong>
+                  <span>Tempat simpan:</span>
+                  <strong className="text-slate-900 font-bold">Perangkat kasir ini</strong>
                 </div>
                 <div className="flex justify-between items-center">
                   <span>Total Data Tersimpan:</span>
@@ -251,7 +251,7 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
                   </strong>
                 </div>
                 <div className="flex justify-between items-center truncate">
-                  <span>Folder Target:</span>
+                  <span>Folder tercatat:</span>
                   <span className="font-mono text-indigo-950 font-bold truncate max-w-[150px]" title={config.localDirectoryPath}>
                     {config.localDirectoryPath}
                   </span>
@@ -259,7 +259,7 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
               </div>
               <div className="text-[10.5px] text-emerald-700 font-semibold flex items-center gap-1">
                 <Check className="w-3 h-3 text-emerald-600 shrink-0" />
-                <span>Transaksi tetap aman saat offline 100%</span>
+                <span>Transaksi tetap aman saat internet mati</span>
               </div>
             </div>
 
@@ -268,7 +268,7 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 font-black text-slate-900 text-xs">
                   <Cloud className="w-4 h-4 text-indigo-600" />
-                  <span>Cloud Database (PocketBase)</span>
+                  <span>Database Server (Cloud)</span>
                 </div>
                 <span
                   className={`font-bold text-[10px] px-2 py-0.5 rounded-full border flex items-center gap-1 ${
@@ -282,28 +282,28 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
                       isCloudConnected ? 'bg-emerald-600 animate-pulse' : 'bg-amber-600'
                     }`}
                   ></span>
-                  {isCloudConnected ? 'TERHUBUNG REAL-TIME' : 'OFFLINE (ANTREAN AKTIF)'}
+                  {isCloudConnected ? 'TERHUBUNG LANGSUNG' : 'OFFLINE (DATA MENGANTRE)'}
                 </span>
               </div>
               <div className="text-[11px] text-slate-600 font-medium space-y-1 bg-white p-2.5 rounded-lg border border-slate-200">
                 <div className="flex justify-between items-center">
-                  <span>Sinkronisasi:</span>
-                  <strong className="text-slate-900 font-bold">WebSocket Real-Time</strong>
+                  <span>Pengiriman ke server:</span>
+                  <strong className="text-slate-900 font-bold">Otomatis saat online</strong>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span>Antrean Pending:</span>
+                  <span>Belum terkirim:</span>
                   <strong className="text-slate-900 font-bold font-mono">
                     {stats.pendingOutboxCount} data
                   </strong>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span>Terakhir Sinkron:</span>
+                  <span>Terakhir terkirim:</span>
                   <span className="font-mono text-slate-800 font-bold">{stats.lastSyncFormatted}</span>
                 </div>
               </div>
               <div className="text-[10.5px] text-indigo-700 font-semibold flex items-center gap-1">
                 <ArrowUpDown className="w-3 h-3 text-indigo-600 shrink-0" />
-                <span>Replikasi otomatis antar cabang & kasir</span>
+                <span>Data otomatis sama di semua cabang & kasir</span>
               </div>
             </div>
           </div>
@@ -321,7 +321,7 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
                 type="button"
                 onClick={handleBrowseLocalDirectory}
                 className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 cursor-pointer flex items-center gap-1 transition-all shadow-2xs active:scale-95"
-                title="Pilih folder di PC atau jaringan lokal menggunakan file picker browser"
+                title="Pilih folder di komputer atau jaringan lokal"
               >
                 <FolderOpen className="w-3.5 h-3.5" />
                 <span>Pilih Folder (Browse)</span>
@@ -330,7 +330,7 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
 
             <div className="space-y-1.5">
               <label className="block text-[11px] font-bold text-slate-700">
-                Direktori Harddisk PC / Drive Jaringan LAN:
+                Lokasi folder di komputer / jaringan:
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -385,17 +385,17 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
             <div className="flex items-center justify-between">
               <h3 className="font-black text-slate-900 text-xs uppercase tracking-wider flex items-center gap-1.5">
                 <Layers className="w-4 h-4 text-indigo-600" />
-                Data yang Tersinkronisasi Otomatis
+                Data yang Otomatis Tersimpan
               </h3>
               <button
                 type="button"
                 onClick={handleManualSyncNow}
                 disabled={isSyncing}
                 className="text-indigo-700 hover:text-indigo-900 font-bold inline-flex items-center gap-1 px-2 py-0.5 rounded-md hover:bg-indigo-50 border border-transparent hover:border-indigo-200 transition-all cursor-pointer"
-                title="Periksa & paksa sinkronisasi real-time instan"
+                title="Periksa penyimpanan dan kirim data sekarang"
               >
                 <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin text-indigo-600' : ''}`} />
-                <span>{isSyncing ? 'Menyinkronkan...' : 'Cek Sinkronisasi Sekarang'}</span>
+                <span>{isSyncing ? 'Menyimpan...' : 'Cek Penyimpanan Sekarang'}</span>
               </button>
             </div>
 
@@ -434,7 +434,7 @@ export const LocalDatabaseSyncModal: React.FC<LocalDatabaseSyncModalProps> = ({
         <div className="p-3.5 sm:p-4 bg-slate-100 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-1.5 text-[11px] text-emerald-800 font-semibold">
             <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>Database lokal & cloud aktif tersinkronisasi otomatis secara real-time.</span>
+            <span>Data di perangkat ini dan di server diperbarui otomatis.</span>
           </div>
 
           <button

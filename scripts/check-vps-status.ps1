@@ -224,7 +224,7 @@ $caddyfile = "$CaddyDir\Caddyfile"
 $caddyfileApp = "$AppDir\deploy\Caddyfile.windows"
 $caddyfileOK = Test-Path $caddyfile
 $caddyfileSync = $false
-if ($caddyfileOK -and Test-Path $caddyfileApp) {
+if ($caddyfileOK -and (Test-Path $caddyfileApp)) {
     $c1 = Get-Content $caddyfile -Raw
     $c2 = Get-Content $caddyfileApp -Raw
     $caddyfileSync = ($c1 -replace '\r','') -eq ($c2 -replace '\r','')

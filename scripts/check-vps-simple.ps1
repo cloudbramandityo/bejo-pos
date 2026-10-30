@@ -11,8 +11,8 @@ $Pass = 0
 function Check {
     param($cat, $name, $ok, $det = "", $act = "")
     $global:Total++
-    if ($ok) { $global:Pass++; Write-Host "  [+] $cat: $name" -ForegroundColor Green }
-    else { Write-Host "  [-] $cat: $name" -ForegroundColor Red }
+    if ($ok) { $global:Pass++; Write-Host "  [+] ${cat}: $name" -ForegroundColor Green }
+    else { Write-Host "  [-] ${cat}: $name" -ForegroundColor Red }
     if ($det) { Write-Host "    -> $det" -ForegroundColor DarkGray }
     if ($act) { Write-Host "    -> Tindakan: $act" -ForegroundColor Cyan }
 }

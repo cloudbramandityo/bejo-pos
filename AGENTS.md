@@ -187,7 +187,9 @@ Semua kalimat yang dibaca operator/pemilik toko harus bahasa Indonesia awam: **s
 
 ## Deploy
 
-Gunakan `deploy/deploy-vps.ps1` yang sudah ada. Jangan membuat skrip deploy baru. Build dan deploy hanya setelah `npm run build` lulus (termasuk check-brand, check-version, check-path-fabrication, dan check-ui-language --strict).
+Gunakan `deploy/deploy-vps.ps1` yang sudah ada. Jangan membuat skrip deploy baru. Build dan deploy hanya setelah `npm run build` lulus (termasuk check-brand, check-version, check-path-fabrication, check-ui-language --strict, dan check-powershell-syntax).
+
+Berkas `.ps1` tidak ikut diperiksa `tsc` atau `vite build` — kesalahan sintaksisnya baru meledak di layar VPS setelah deploy (`ExpectedValueExpression`, "You must provide a value expression following the '-and' operator"). Karena itu `scripts/check-powershell-syntax.mjs` (`npm run check:ps1`, otomatis di `prebuild`) menyuruh PowerShell membaca tiap `.ps1` di `deploy/` dan `scripts/` dengan `Parser::ParseFile` tanpa menjalankannya; skrip yang tidak bisa dimuat menggagalkan build. Penjaga ini melewat dirinya di luar Windows. Dua kasus yang sudah ditemukan: `if ($a -and Test-Path $b)` tanpa kurung, dan `"$cat: $name"` yang dibaca PowerShell sebagai variabel bervalifikasi drive (tulis `"${cat}: $name"`).
 
 Penyalinan source memakai `robocopy /E` (tanpa purge), sehingga berkas versi lama yang sudah dihapus dari branch tetap tertinggal di `C:\bejo-pos`. Tambahkan `-PurgeSource` bila build di VPS gagal karena berkas yang tidak ada di `main` (gejala: penjaga teks atau tsc menyingkap nama berkas yang tidak muncul di repo); opsinya hanya mengosongkan `src/` lalu menulis ulang dari arsip — `.env`, `data/`, `logs/`, `backups/`, `dist/`, dan `node_modules/` tidak disentuh.
 

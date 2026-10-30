@@ -1,11 +1,11 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "4.10.0",
+  "version": "4.10.1",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "prebuild": "node scripts/check-brand.mjs && node scripts/check-version.mjs && node scripts/check-path-fabrication.mjs && node scripts/check-ui-language.mjs --strict",
+    "prebuild": "node scripts/check-brand.mjs && node scripts/check-version.mjs && node scripts/check-path-fabrication.mjs && node scripts/check-ui-language.mjs --strict && node scripts/check-powershell-syntax.mjs",
     "check:brand": "node scripts/check-brand.mjs",
     "check:version": "node scripts/check-version.mjs",
     "check:paths": "node scripts/check-path-fabrication.mjs",
@@ -14,6 +14,7 @@
     "check:agent-period": "tsx scripts/check-agent-period.mts",
     "check:reconciliation": "tsx scripts/check-reconciliation.mts",
     "check:copy": "node scripts/check-ui-language.mjs",
+    "check:ps1": "node scripts/check-powershell-syntax.mjs",
     "check:copy:strict": "node scripts/check-ui-language.mjs --strict",
     "dev-password:set": "node scripts/set-dev-password.mjs --prompt --no-backup --min-length 10",
     "dev-password:verify": "node scripts/set-dev-password.mjs --verify",

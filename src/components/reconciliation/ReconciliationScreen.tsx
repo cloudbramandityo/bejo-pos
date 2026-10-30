@@ -230,8 +230,8 @@ export const ReconciliationScreen: React.FC<ReconciliationScreenProps> = ({
               <Scale className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight">
-                Rekonsiliasi Laporan
+              <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                REKONSILIASI LAPORAN
               </h2>
               <p className="text-[11px] text-slate-500 mt-0.5 max-w-2xl leading-relaxed">
                 Bandingkan dua laporan: rencana dengan capaian, atau dua periode berbeda.

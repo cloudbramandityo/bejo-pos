@@ -362,7 +362,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             title="Pengaturan data perangkat ini & server (Khusus Developer)"
           >
             <CloudCheck className={`w-3.5 h-3.5 ${isCloudConnected ? 'text-indigo-600' : 'text-amber-600'}`} />
-            <span>{isCloudConnected ? 'Lokal + Server' : 'Mode Lokal'}</span>
+            <span>{isCloudConnected ? 'Hybrid Server' : 'Mode Lokal'}</span>
           </button>
         )}
 

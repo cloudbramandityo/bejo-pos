@@ -88,8 +88,8 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
           icon: BookOpen,
           desc:
             journalAccess === 'edit'
-              ? 'Google Sheet Mirror per tahun (kelola sebagai DEVELOPER)'
-              : 'Google Sheet Mirror per tahun (hanya lihat)',
+              ? 'Google Sheet per tahun (kelola sebagai DEVELOPER)'
+              : 'Google Sheet per tahun (hanya lihat)',
         }]
       : []),
   ];
@@ -136,7 +136,7 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
           <React.Suspense
             fallback={
               <div className="flex items-center justify-center py-24 text-sm text-slate-500">
-                Memuat Google Sheet Mirror...
+                Memuat Google Sheet...
               </div>
             }
           >

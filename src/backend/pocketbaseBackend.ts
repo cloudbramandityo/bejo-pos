@@ -222,6 +222,42 @@ export async function refreshPocketBaseAuth(): Promise<boolean> {
   return hasDashboardSession;
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Penyelamatan sesi: token PocketBase bisa kedaluwarsa di tengah sesi panjang */
+/* -------------------------------------------------------------------------- */
+const REAUTH_MIN_INTERVAL_MS = 30000;
+
+let lastReauthAt = 0;
+let reauthInFlight: Promise<boolean> | null = null;
+
+/**
+ * Penolakan karena sesi (bukan karena isian data). Bedanya penting: yang pertama
+ * masih bisa diselamatkan dengan token baru, yang kedua tidak akan pernah diterima
+ * server jadi tidak layak diantre.
+ */
+function isSessionRejected(err: any): boolean {
+  const status = Number(err?.status || 0);
+  if (status === 401 || status === 403) return true;
+  const msg = String(err?.message || err || '').toLowerCase();
+  return msg.includes('expired') || msg.includes('invalid token') || msg.includes('missing auth token');
+}
+
+/**
+ * Minta token PocketBase baru tanpa menunggu halaman di-refresh. Sekali jalan per
+ * 30 detik supaya puluhan kanal yang gagal bersamaan tidak membanjiri server.
+ * Bila berhasil, performAuth sudah menghidupkan kembali seluruh kanal realtime dan
+ * mengirim antrean tulis.
+ */
+function ensureCloudSession(): Promise<boolean> {
+  if (reauthInFlight) return reauthInFlight;
+  if (Date.now() - lastReauthAt < REAUTH_MIN_INTERVAL_MS) return Promise.resolve(false);
+  lastReauthAt = Date.now();
+  reauthInFlight = refreshPocketBaseAuth().finally(() => {
+    reauthInFlight = null;
+  });
+  return reauthInFlight;
+}
+
 // Bootstrapping ditunda ke microtask berikutnya: performAuth menyentuh status
 // dan outbox yang baru diisi setelah blok deklarasi di bawah.
 authReady = Promise.resolve()
@@ -401,32 +437,52 @@ function enqueueOutbox(entry: Omit<OutboxEntry, 'id' | 'timestamp'>): void {
 
 let outboxFlushInFlight: Promise<number> | null = null;
 
+async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
+  if (entry.action === 'DELETE') {
+    await executeRemoveRecord(entry.collection, entry.docId);
+  } else {
+    await executeUpsert(entry.collection, entry.docId, entry.data || {});
+  }
+}
+
+/** Kirim satu entri; sesi kedaluwarsa diselamatkan lebih dulu dengan token baru. */
+async function attemptOutboxEntry(entry: OutboxEntry): Promise<{ ok: boolean; err?: any }> {
+  for (let round = 0; round < 2; round += 1) {
+    try {
+      await sendOutboxEntry(entry);
+      return { ok: true };
+    } catch (err: any) {
+      if (round === 0 && isSessionRejected(err) && (await ensureCloudSession())) continue;
+      return { ok: false, err };
+    }
+  }
+  return { ok: false };
+}
+
 /**
  * Kirim ulang seluruh antrean tulis secara berurutan.
- * Berhenti saat jaringan masih putus; buang entri yang ditolak PocketBase
- * (payload tidak valid) agar antrean tidak pernah macet selamanya.
+ * Berhenti saat jaringan masih putus atau sesi belum bisa diperbarui; buang entri
+ * yang ditolak PocketBase karena isian datanya agar antrean tidak macet selamanya.
  */
 async function flushOutbox(): Promise<number> {
   if (outboxFlushInFlight) return outboxFlushInFlight;
 
   outboxFlushInFlight = (async () => {
     let flushed = 0;
+    const dropEntry = (entry: OutboxEntry) =>
+      writeOutbox(readOutbox().filter((e) => e.id !== entry.id));
+
     for (const entry of readOutbox()) {
       if (isCloudUnavailable || !hasDashboardSession) break;
-      try {
-        if (entry.action === 'DELETE') {
-          await executeRemoveRecord(entry.collection, entry.docId);
-        } else {
-          await executeUpsert(entry.collection, entry.docId, entry.data || {});
-        }
-        const rest = readOutbox().filter((e) => e.id !== entry.id);
-        writeOutbox(rest);
+      const result = await attemptOutboxEntry(entry);
+      if (result.ok) {
+        dropEntry(entry);
         flushed += 1;
-      } catch (err: any) {
-        if (isRetryableWriteError(err)) break;
-        console.error(`[PocketBase] Antrean tulis ${entry.collection}/${entry.docId} dibuang:`, err);
-        writeOutbox(readOutbox().filter((e) => e.id !== entry.id));
+        continue;
       }
+      if (isRetryableWriteError(result.err)) break;
+      console.error(`[PocketBase] Antrean tulis ${entry.collection}/${entry.docId} dibuang:`, result.err);
+      dropEntry(entry);
     }
     if (flushed > 0) console.log(`[PocketBase] ${flushed} tulis tertunda berhasil dikirim.`);
     return flushed;
@@ -563,6 +619,12 @@ function tickRealtimeWatchdog(): void {
       void flushOutbox();
       emitSyncStatus();
     });
+  }
+
+  // Token yang kedaluwarsa di tengah sesi panjang membuat kanal masih terpasang
+  // tapi tidak pernah lagi menerima perubahan dari perangkat lain.
+  if (hasDashboardSession && realtimeChannels.size > 0 && !pb.authStore.isValid) {
+    void ensureCloudSession();
   }
 
   emitSyncStatus();
@@ -762,14 +824,15 @@ async function accountApiRequest(
 }
 
 /**
- * Jalankan tulis cloud: bila gagal karena jaringan (atau server sedang sibuk),
- * simpan di outbox agar dikirim ulang saat koneksi kembali; entri lama untuk
- * target yang sama dibuang karena tulis ini sudah membawa kondisi terbaru.
- * Penolakan 4xx dari PocketBase/server dibuang dari antrean karena payload-nya
- * memang tidak akan pernah diterima.
+ * Jalankan tulis cloud: bila gagal karena jaringan atau karena sesi browser
+ * kedaluwarsa, simpan di outbox agar dikirim ulang saat koneksi/sesi kembali;
+ * entri lama untuk target yang sama dibuang karena tulis ini sudah membawa
+ * kondisi terbaru. Penolakan 4xx lainnya (payload memang tidak akan pernah
+ * diterima) dibuang dari antrean supaya antrean tidak pernah macet.
  */
 function isRetryableWriteError(err: any): boolean {
   if (isNetworkError(err)) return true;
+  if (isSessionRejected(err)) return true;
   const status = Number(err?.status || 0);
   return status === 408 || status === 429 || (status >= 500 && status <= 599);
 }
@@ -781,15 +844,29 @@ async function guardNetworkWrite(
   data: any,
   run: () => Promise<void>
 ): Promise<void> {
+  let caught: any = null;
   try {
     await run();
     dropOutboxTarget(collection, docId);
+    return;
   } catch (err) {
-    if (isRetryableWriteError(err)) {
-      enqueueOutbox({ collection, docId, action, data });
-    }
-    throw err;
+    caught = err;
   }
+  // Sesi yang kedaluwarsa di tengah shift pernah membuat satu perubahan hilang
+  // diam-diam dari server. Coba sekali lagi dengan token baru sebelum mengantre.
+  if (isSessionRejected(caught) && (await ensureCloudSession())) {
+    try {
+      await run();
+      dropOutboxTarget(collection, docId);
+      return;
+    } catch (err) {
+      caught = err;
+    }
+  }
+  if (isRetryableWriteError(caught)) {
+    enqueueOutbox({ collection, docId, action, data });
+  }
+  throw caught;
 }
 
 function dropOutboxTarget(collection: string, docId: string): void {
@@ -1023,6 +1100,14 @@ function createSafeSubscription(
   const onError = (error: any) => {
     handleBackendError(error, opType, path);
     stopLive();
+    // Sesi kedaluwarsa membuat kanal diam-diam tidak pernah lagi menerima
+    // perubahan dari perangkat lain. Token baru menghidupkan semua kanal sekaligus.
+    if (isSessionRejected(error)) {
+      void ensureCloudSession().then((renewed) => {
+        if (!renewed) scheduleRetry();
+      });
+      return;
+    }
     scheduleRetry();
   };
 

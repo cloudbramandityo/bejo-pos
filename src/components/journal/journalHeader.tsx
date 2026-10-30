@@ -33,8 +33,8 @@ export const JournalHeader: React.FC<JournalHeaderProps> = ({
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
-              Jurnal — Google Sheet Mirror
+            <h2 className="text-xl font-black text-slate-900 tracking-tight">
+              JURNAL - Google Sheet
             </h2>
             <span
               className={`px-2 py-0.5 rounded-full text-white text-[10px] font-bold tracking-wide ${

@@ -222,9 +222,9 @@ export const ReconciliationEditor: React.FC<ReconciliationEditorProps> = ({
               onClick={applyPickupExample}
               disabled={!canEdit}
               className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-[11px] font-bold text-slate-600 hover:border-emerald-400 disabled:opacity-40 cursor-pointer"
-              title="Isi cepat kolom kuantitas, frekuensi ambil, dan total nominal"
+              title="Langsung isi kolom kuantitas, frekuensi ambil, dan total nominal"
             >
-              Contoh pengambilan agen
+              Rekonsiliasi Agen
             </button>
             <button
               type="button"

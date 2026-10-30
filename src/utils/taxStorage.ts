@@ -309,14 +309,23 @@ export const getStoredTaxpayerProfile = (): TaxpayerProfile => {
   return getDefaultTaxpayerProfile();
 };
 
-export const saveStoredTaxpayerProfile = (profile: TaxpayerProfile): void => {
+/**
+ * Simpan profil wajib pajak. `fromCloud` menandai data yang baru datang dari
+ * server: jangan ditulis balik, karena tiap tulis mengirim ulang pemberitahuan ke
+ * semua perangkat lain dan gema itu berhenti sendiri hanya kebetulan.
+ */
+export const saveStoredTaxpayerProfile = (profile: TaxpayerProfile, fromCloud = false): void => {
   try {
     localStorage.setItem(STORAGE_KEY_TAXPAYER, JSON.stringify(profile));
   } catch (e) {
     console.error('Failed to save taxpayer profile', e);
   }
   // Realtime Cloud PocketBase persistence & cross-tab / user update broadcast
-  saveTaxpayerProfileCloud(profile).catch((err) => console.error('[Tax Cloud] Error saving taxpayer profile:', err));
+  if (!fromCloud) {
+    saveTaxpayerProfileCloud(profile).catch((err) =>
+      console.error('[Tax Cloud] Error saving taxpayer profile:', err)
+    );
+  }
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('bejo_taxpayer_profile_updated', { detail: profile }));
   }
@@ -473,7 +482,8 @@ export const getStoredMonthlyBillings = (): MonthlyBillingsByYear => {
   return initial;
 };
 
-export const saveStoredMonthlyBillings = (data: MonthlyBillingsByYear): void => {
+/** Lihat saveStoredTaxpayerProfile: `fromCloud` menahan diri dari tulis balik ke server. */
+export const saveStoredMonthlyBillings = (data: MonthlyBillingsByYear, fromCloud = false): void => {
   try {
     localStorage.setItem(STORAGE_KEY_MONTHLY_BILLINGS, JSON.stringify(data));
     // Auto-sync stored annual returns so they are never out of sync with Riwayat Pelaporan
@@ -483,14 +493,18 @@ export const saveStoredMonthlyBillings = (data: MonthlyBillingsByYear): void => 
       if (Array.isArray(parsed) && parsed.length > 0) {
         const synced = parsed.map((r) => syncReturnWithMonthlyBillings(r, data));
         localStorage.setItem(STORAGE_KEY_ANNUAL_RETURNS, JSON.stringify(synced));
-        saveAllTaxAnnualReturnsCloud(synced).catch(() => {});
+        if (!fromCloud) saveAllTaxAnnualReturnsCloud(synced).catch(() => {});
       }
     }
   } catch (e) {
     console.error('Failed to save monthly billings', e);
   }
-  // Realtime Cloud PocketBase persistence
-  saveTaxMonthlyBillingsCloud(data).catch((err) => console.error('[Tax Cloud] Error saving monthly billings:', err));
+  if (!fromCloud) {
+    // Realtime Cloud PocketBase persistence
+    saveTaxMonthlyBillingsCloud(data).catch((err) =>
+      console.error('[Tax Cloud] Error saving monthly billings:', err)
+    );
+  }
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('bejo_tax_monthly_billings_updated', { detail: data }));
   }

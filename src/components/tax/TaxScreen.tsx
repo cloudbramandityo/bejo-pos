@@ -116,7 +116,7 @@ export const TaxScreen: React.FC<TaxScreenProps> = () => {
     const unsubProfile = subscribeTaxpayerProfile((cloudProfile) => {
       if (cloudProfile) {
         setTaxpayer(cloudProfile);
-        saveStoredTaxpayerProfile(cloudProfile);
+        saveStoredTaxpayerProfile(cloudProfile, true);
       }
     });
     const unsubReturns = subscribeTaxAnnualReturns((cloudReturns) => {
@@ -127,7 +127,7 @@ export const TaxScreen: React.FC<TaxScreenProps> = () => {
     });
     const unsubBillings = subscribeTaxMonthlyBillings((cloudBillings) => {
       if (cloudBillings) {
-        saveStoredMonthlyBillings(cloudBillings);
+        saveStoredMonthlyBillings(cloudBillings, true);
       }
     });
     return () => {

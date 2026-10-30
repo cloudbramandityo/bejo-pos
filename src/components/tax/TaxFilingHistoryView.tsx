@@ -70,6 +70,19 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
   });
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
+  // Tagihan bulanan disimpan sebagai satu catatan bersama, jadi layar yang sedang
+  // terbuka harus ikut berubah ketika perangkat lain memperbaruinya. Isian yang
+  // belum disimpan tidak ditimpa.
+  useEffect(() => {
+    const onBillingsUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<MonthlyBillingsByYear>).detail;
+      if (!detail || hasUnsavedChanges) return;
+      setBillingsData(detail);
+    };
+    window.addEventListener('bejo_tax_monthly_billings_updated', onBillingsUpdated);
+    return () => window.removeEventListener('bejo_tax_monthly_billings_updated', onBillingsUpdated);
+  }, [hasUnsavedChanges]);
+
   // Line chart settings
   const [chartMetric, setChartMetric] = useState<ChartMetric>('pph');
   const [chartMode, setChartMode] = useState<'single' | 'compare'>('single');

@@ -1091,7 +1091,7 @@ export default function App() {
 
     // 14. Subscribe Activity Logs
     const unsubLogs = subscribeActivityLogs((cloudLogs) => {
-      if (cloudLogs && cloudLogs.length > 0) {
+      if (Array.isArray(cloudLogs)) {
         setActivityLogs(cloudLogs);
         saveStoredActivityLogs(cloudLogs);
       }
@@ -1144,7 +1144,7 @@ export default function App() {
 
     // 21. Subscribe Invoices (Real-time cloud sync for sales reporting)
     const unsubInvoices = subscribeInvoices((cloudInvoices) => {
-      if (Array.isArray(cloudInvoices) && cloudInvoices.length > 0) {
+      if (Array.isArray(cloudInvoices)) {
         setInvoices(cloudInvoices);
         saveStoredInvoices(cloudInvoices);
       }

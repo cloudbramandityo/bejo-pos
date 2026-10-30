@@ -10,6 +10,7 @@ import {
   saveCredential,
   credentialEmail,
   credentialFallbackEmail,
+  verifyStaffPassword,
 } from '../server/staffStore.ts';
 
 type Rec = Record<string, any>;
@@ -186,6 +187,44 @@ function check(label: string, condition: boolean, extra = '') {
   }
   check('H: adopsi record sinkronisasi ditolak', code === 'ACCOUNT_RESERVED', code);
   check('H: email sinkronisasi utuh', pb.records[0].email === 'sync@bejo.local');
+}
+
+// I. Urutan verifikasi password: hash PocketBase selalu lebih dulu, salinan
+//    plaintext lama (appPassword) hanya cadangan. Kalau urutannya dibalik,
+//    password baru dari Developer tidak pernah berlaku selama appPassword lama
+//    masih ada di record.
+{
+  const account = (authId: string, appPassword: string) => ({
+    id: 'u9',
+    username: 'budi',
+    name: 'Budi',
+    role: 'KASIR',
+    phone: '',
+    isActive: true,
+    spkRoleCategory: '',
+    createdAt: '',
+    authId,
+    email: credentialEmail('budi', 'u9'),
+    appPassword,
+  }) as any;
+
+  const cleared: string[] = [];
+  const ok = async () => true;
+  const reject = async () => false;
+  const clear = async (authId: string) => { cleared.push(authId); };
+
+  const first = await verifyStaffPassword(account('rec_1', 'lama123'), 'Baru2026', { verifyNative: ok, clearLegacy: clear });
+  check('I: password native menang atas appPassword lama', first === true && cleared.join() === 'rec_1', `cleared=${cleared.join()}`);
+
+  const second = await verifyStaffPassword(account('rec_2', 'lama123'), 'lama123', { verifyNative: reject, clearLegacy: clear });
+  check('I: appPassword jadi cadangan saat native gagal', second === true && cleared.length === 1);
+
+  const third = await verifyStaffPassword(account('rec_3', 'lama123'), 'salah', { verifyNative: reject, clearLegacy: clear });
+  check('I: password salah tetap ditolak', third === false);
+
+  const noAuth = { ...account('', 'lama123'), email: '' } as any;
+  const fourth = await verifyStaffPassword(noAuth, 'lama123', { verifyNative: ok, clearLegacy: clear });
+  check('I: record tanpa authId tetap login lewat appPassword', fourth === true);
 }
 
 console.log(failures === 0 ? 'SEMUA LULUS' : `${failures} GAGAL`);

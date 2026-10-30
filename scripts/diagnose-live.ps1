@@ -1,18 +1,58 @@
 <#
 =======================================================================
-  BEJO Digital Print - Diagnosa Aplikasi Live (VPS Windows)
+  BEJO Digital Print - SATU SKRIP DIAGNOSTIK VPS (status + diagnosa)
 =======================================================================
-  Jalankan DI VPS (PowerShell Administrator) dari folder aplikasi:
+  Satu-satunya skrip pemeriksaan kondisi VPS. Kebijakan: jangan membuat
+  skrip diagnostik baru; kebutuhan pemeriksaan tambahan cukup ditambahkan
+  sebagai seksi/opsi di skrip ini (sama seperti deploy-vps.ps1).
+  Menggantikan scripts/check-vps-status.ps1 dan scripts/check-vps-simple.ps1.
 
-      powershell -ExecutionPolicy Bypass -File C:\bejo-pos\scripts\diagnose-live.ps1
+  Jalankan DI DALAM VPS (PowerShell Administrator):
 
-  Hasil: ringkasan di layar + file laporan .txt dan .json di %TEMP%
-  (path dicetak di akhir). Kirim file .txt/.json itu untuk analisis.
+      powershell -NoProfile -ExecutionPolicy Bypass -File C:\bejo-pos\scripts\diagnose-live.ps1
+
+  Jangan menjalankan "git pull" di C:\bejo-pos: deploy menyalin source dari
+  arsip GitHub (robocopy) tanpa menyentuh .env/data, jadi working tree VPS
+  memang selalu "kotor" bagi git. Source terbaru cukup dibawa deploy-vps.ps1.
+
+  Hasil: ringkasan di layar + laporan .txt dan .json di %TEMP% (path dicetak
+  di akhir). Kirim kedua file itu untuk analisis.
 
   Skrip ini READ-ONLY:
-    - Tidak menulis/mengubah data PocketBase atau file aplikasi.
-    - Kredensial (.env) hanya ditampilkan status TERISI/KOSONG + panjang,
-      nilainya tidak pernah dicetak (termasuk di laporan).
+    - Tidak menulis/mengubah data PocketBase, .env, atau file aplikasi.
+    - Kredensial hanya ditampilkan status TERISI/KOSONG + panjang; nilainya
+      tidak pernah dicetak, termasuk di laporan.
+
+  Seksi:
+    A. Host, runtime, dan freshness deploy
+    B. Konfigurasi .env (nilai rahasia disembunyikan)
+    C. Service, proses, dan port
+    D. Endpoint lokal (dari dalam VPS)
+    E. Endpoint publik (HTTPS/Caddy) + sertifikat TLS
+    F. Integritas akun sinkronisasi & direktori
+    G. Data PocketBase, backup, dan risiko restore
+    H. Log terbaru (dipindai, rahasia disamarkan)
+    I. Provisioning: software, folder, service & firewall
+    J. Caddyfile, DNS, dan isi bundel browser
+    K. Ringkasan
+
+  Opsi:
+    -AppDir C:\bejo-pos          Folder aplikasi di VPS
+    -Domain <domain>             Domain publik untuk uji DNS/HTTPS/TLS
+    -CaddyDir C:\caddy           Folder Caddy (exe, Caddyfile, pki)
+    -PbDir C:\pocketbase         Folder PocketBase (exe + pb_data)
+    -BackupRoot C:\backups\...   Folder backup untuk cek keberadaan
+    -ExpectedPbVersion 0.28.1    Versi PocketBase yang seharusnya terpasang
+    -LogLines 120                Jumlah baris log yang dipindai
+    -ReportPath <file>           Lokasi laporan .txt (.json ikut di sampingnya)
+    -SkipAccounts                Lewati seksi F (pemeriksaan akun, paling lambat)
+    -SkipProvisioning            Lewati seksi I dan J (provisioning/Caddy/bundel)
+    -RequireClean                Exit code 2 bila masih ada WARN (untuk CI/cron)
+
+  Exit code:
+    0 tidak ada kegagalan kritis
+    1 ada kegagalan kritis (FAIL)
+    2 -RequireClean dipakai dan masih ada WARN
 =======================================================================
 #>
 [CmdletBinding()]
@@ -21,8 +61,16 @@ param(
   [string]$Domain    = 'bejodigitalprint.com',
   [string]$LocalPbUrl = 'http://127.0.0.1:8090',
   [string]$LocalAppUrl = 'http://127.0.0.1:3000',
+  [string]$CaddyDir  = 'C:\caddy',
+  [string]$PbDir     = 'C:\pocketbase',
+  [string]$NssmDir   = 'C:\nssm',
+  [string]$BackupRoot = 'C:\backups\bejo-pos',
+  [string]$ExpectedPbVersion = '0.28.1',
   [int]$LogLines     = 120,
-  [string]$ReportPath = ''
+  [string]$ReportPath = '',
+  [switch]$SkipAccounts,
+  [switch]$SkipProvisioning,
+  [switch]$RequireClean
 )
 
 $ErrorActionPreference = 'Continue'
@@ -56,6 +104,30 @@ function Redact([string]$text) {
   return ($text -replace '(?i)(password|passwd|token|secret|authorization|api[_-]?key)\s*[:=]\s*[^\s,;"'']+', '$1=***')
 }
 
+# stdout dan stderr Node dipisah lewat Start-Process. Dengan 2>&1 pesan stderr
+# dibungkus sebagai ErrorRecord PowerShell (menampilkan baris skrip dan
+# CategoryInfo) lalu menyatu dengan JSON, sehingga hasil baca terlihat seperti
+# data rusak dan penyebab aslinya tidak terbaca.
+function Invoke-NodeScript([string]$scriptPath, [string[]]$arguments) {
+  $outFile = Join-Path $env:TEMP ('bejo-diag-out-' + [guid]::NewGuid().ToString('N') + '.txt')
+  $errFile = Join-Path $env:TEMP ('bejo-diag-err-' + [guid]::NewGuid().ToString('N') + '.txt')
+  try {
+    $argList = @("`"$scriptPath`"")
+    foreach ($a in $arguments) { $argList += "`"$a`"" }
+    $proc = Start-Process -FilePath 'node' -ArgumentList $argList -NoNewWindow -Wait -PassThru `
+      -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+    $stdout = ''
+    $stderr = ''
+    if (Test-Path $outFile) { $stdout = (Get-Content -LiteralPath $outFile -Raw -ErrorAction SilentlyContinue) -join '' }
+    if (Test-Path $errFile) { $stderr = (Get-Content -LiteralPath $errFile -Raw -ErrorAction SilentlyContinue) -join '' }
+    $exitCode = -1
+    try { $exitCode = [int]$proc.ExitCode } catch { }
+    return [pscustomobject]@{ Out = [string]$stdout; Err = (Redact ([string]$stderr)); ExitCode = $exitCode }
+  } finally {
+    Remove-Item -LiteralPath $outFile, $errFile -Force -ErrorAction SilentlyContinue
+  }
+}
+
 # .env dibaca lewat dotenv (parser yang sama dengan server) supaya password
 # ber-escape tidak membuat laporan berbeda dari kenyataan. Nilai rahasia hanya
 # keluar sebagai panjang; nilai biasa (APP_URL, PUBLIC_SITE, dst.) apa adanya.
@@ -79,13 +151,22 @@ for (const key of [...plain, ...secret, ...legacy]) {
 }
 console.log(JSON.stringify(out));
 '@
+  $script:EnvReadError = ''
   try {
     [System.IO.File]::WriteAllText($tmp, $script, [System.Text.UTF8Encoding]::new($false))
-    $raw = (& node $tmp $path 2>&1) -join "`n"
+    $run = Invoke-NodeScript $tmp @($path)
+    $raw = [string]$run.Out
     $start = $raw.IndexOf('{')
+    if ($start -lt 0) {
+      $reason = [string]$run.Err
+      if (-not $reason) { $reason = 'node tidak menghasilkan output (exit code ' + $run.ExitCode + ').' }
+      $script:EnvReadError = $reason
+      return $null
+    }
     if ($start -gt 0) { $raw = $raw.Substring($start) }
     return ($raw | ConvertFrom-Json)
   } catch {
+    $script:EnvReadError = $_.Exception.Message
     return $null
   } finally {
     Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
@@ -118,7 +199,16 @@ function Get-TlsCertificate([string]$hostName) {
   try {
     $tcp = New-Object System.Net.Sockets.TcpClient($hostName, 443)
     $ssl = New-Object System.Net.Security.SslStream($tcp.GetStream(), $false, { $true })
-    $ssl.AuthenticateAsClient($hostName)
+    # Enum .NET bernama SslProtocols (jamak). Menulis SslProtocol membuat
+    # PowerShell melempar "Unable to find type" dan sertifikat terbaca tidak ada
+    # padahal HTTPS sehat.
+    # Tanpa daftar protokol eksplisit negosiasi bisa jatuh ke TLS 1.0 yang sudah
+    # dimatikan Caddy.
+    $protocols = [System.Security.Authentication.SslProtocols]::Tls12
+    try {
+      $protocols = $protocols -bor [System.Security.Authentication.SslProtocols]::Tls13
+    } catch { }
+    $ssl.AuthenticateAsClient($hostName, $null, $protocols, $false)
     $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($ssl.RemoteCertificate)
     $ssl.Dispose()
     return $cert
@@ -127,6 +217,54 @@ function Get-TlsCertificate([string]$hostName) {
   } finally {
     if ($tcp) { $tcp.Close() }
   }
+}
+
+# Sertifikat Let's Encrypt milik Caddy juga tersimpan di disk; bila jalur
+# jaringan gagal (mis. SNI/proxy), berkasnya tetap memberi tanggal kedaluwarsa.
+function Get-CaddyStoredCertificate([string]$caddyDir, [string]$hostName) {
+  $roots = @(
+    (Join-Path $caddyDir 'pki\authorities'),
+    (Join-Path $env:APPDATA 'Caddy\pki\authorities'),
+    (Join-Path $env:LOCALAPPDATA 'Caddy\pki\authorities')
+  ) | Where-Object { Test-Path $_ }
+  foreach ($root in $roots) {
+    $pem = Get-ChildItem -LiteralPath $root -Recurse -Filter 'cert.pem' -File -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -match [regex]::Escape($hostName) } |
+      Sort-Object LastWriteTime -Descending |
+      Select-Object -First 1
+    if ($pem) {
+      try { return (New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($pem.FullName)) } catch { }
+    }
+  }
+  return $null
+}
+
+function Get-ExeVersion([string]$path) {
+  if (-not (Test-Path $path)) { return '' }
+  try {
+    $info = (Get-Item -LiteralPath $path).VersionInfo
+    $fileVersion = [string]$info.ProductVersion
+    if ([string]::IsNullOrWhiteSpace($fileVersion)) { $fileVersion = [string]$info.FileVersion }
+    return $fileVersion.Trim()
+  } catch { return '' }
+}
+
+# Aksi pemulihan service dibaca dari registri (sama dengan yang dipakai NSSM),
+# bukan dari properti Win32_Service yang memang tidak menyediakannya.
+function Get-ServiceRecovery([string]$serviceName) {
+  $key = "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName"
+  $bytes = (Get-ItemProperty -Path $key -Name 'FailureActions' -ErrorAction SilentlyContinue).FailureActions
+  if (-not $bytes -or $bytes.Count -lt 8) { return 'none' }
+  try {
+    $count = [BitConverter]::ToInt32([byte[]]$bytes, 0)
+    if ($count -lt 1) { return 'none' }
+    switch ([BitConverter]::ToInt32([byte[]]$bytes, 4)) {
+      1 { return 'reboot' }
+      2 { return 'restart-service' }
+      3 { return 'run-command' }
+      default { return 'none' }
+    }
+  } catch { return 'tak terbaca' }
 }
 
 function Find-LogFiles {
@@ -147,7 +285,7 @@ try {
   $startedAt = Get-Date
 
   Write-Host ''
-  Write-Host '  BEJO Digital Print - DIAGNOSA APLIKASI LIVE' -ForegroundColor White
+  Write-Host '  BEJO Digital Print - DIAGNOSTIK VPS TERPADU (status + diagnosa)' -ForegroundColor White
   Write-Host "  Waktu     : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
   Write-Host "  AppDir    : $AppDir"
   Write-Host "  Domain    : $Domain"
@@ -192,11 +330,26 @@ try {
 
   if (Test-Path (Join-Path $AppDir '.git')) {
     try {
-      $head = (& git -C $AppDir rev-parse --short HEAD 2>&1) -join ''
-      $desc = (& git -C $AppDir describe --tags --always 2>&1) -join ''
+      $head = ((& git -C $AppDir rev-parse --short HEAD 2>&1) -join '').Trim()
+      $isCommit = $head -match '^[0-9a-f]{7,40}$'
       $dirty = ((& git -C $AppDir status --porcelain 2>&1) | Measure-Object).Count
-      Ok "Git HEAD $head | describe $desc | file berubah: $dirty"
-      if ($dirty -gt 0) { Warn "Ada $dirty file belum di-commit di folder aplikasi (deploy mungkin tidak bersih)." }
+      if (-not $isCommit) {
+        Info "Git tidak aktif di folder aplikasi (HEAD: $head); $dirty file berbeda."
+      } else {
+        $desc = ((& git -C $AppDir describe --tags --always 2>&1) -join '').Trim()
+        Info "Git HEAD $head | describe $desc | file beda dengan HEAD: $dirty"
+        # Versi di HEAD dibandingkan dengan source yang benar-benar terpasang.
+        $headJson = ((& git -C $AppDir show 'HEAD:package.json' 2>&1) -join "`n")
+        $headPkgVersion = ''
+        if ($headJson.Trim().StartsWith('{')) {
+          try { $headPkgVersion = ($headJson | ConvertFrom-Json).version } catch { }
+        }
+        if ($headPkgVersion -and $pkg -and ($headPkgVersion -ne $pkg.version)) {
+          Warn "Source terpasang versi $($pkg.version) tetapi commit HEAD versi $headPkgVersion (source disalin deploy, git VPS belum mengikuti). Bawa source lewat deploy-vps.ps1, jangan git pull di $AppDir."
+        } elseif ($dirty -gt 0) {
+          Info "$dirty file berbeda dengan HEAD. Di VPS ini wajar karena deploy menyalin source tanpa commit; di workstation berarti ada perubahan yang belum di-commit."
+        }
+      }
     } catch { Warn 'Tidak bisa membaca status git aplikasi.' }
   }
 
@@ -206,23 +359,32 @@ try {
   $envInfo = Get-EnvInfo $envPath $AppDir
   if (-not $envInfo) {
     Fail 'Tidak dapat membaca .env lewat dotenv (Node atau paket dotenv tidak tersedia).'
+    if ($script:EnvReadError) { Info (Redact ($script:EnvReadError.Substring(0, [Math]::Min(300, $script:EnvReadError.Length)))) }
   } else {
     foreach ($key in @('APP_URL', 'POCKETBASE_UPSTREAM', 'VITE_POCKETBASE_URL', 'PUBLIC_SITE', 'ALLOW_DEFAULT_STAFF_PASSWORDS', 'DEV_USERNAME')) {
       $info = $envInfo.$key
-      if (-not $info.present) { Warn "Env $key tidak ada di .env" }
+      if (-not $info.present) {
+        # DEV_USERNAME punya bawaan di server (server/devAuth.ts), jadi absen
+        # di .env bukan masalah selama nama developernya memang bawaan itu.
+        if ($key -eq 'DEV_USERNAME') { Info 'Env DEV_USERNAME tidak diset; server memakai nama bawaannya.' }
+        else { Warn "Env $key tidak ada di .env" }
+      }
       elseif ([string]::IsNullOrWhiteSpace([string]$info.value)) { Warn "Env $key KOSONG" }
       else { Ok "Env $key = $($info.value)" }
     }
     foreach ($key in @('PB_SYNC_EMAIL', 'PB_SYNC_PASSWORD', 'PB_ADMIN_EMAIL', 'PB_ADMIN_PASSWORD', 'DEV_PASSWORD_HASH', 'APP_SESSION_SECRET', 'GEMINI_API_KEY', 'REMOTE_ACCESS_PASS')) {
       $info = $envInfo.$key
       if (-not $info.present) { Warn "Env $key tidak ada di .env" }
-      elseif ($info.length -le 0) { Warn "Env $key KOSONG" }
+      elseif ($info.length -le 0) {
+        if ($key -eq 'GEMINI_API_KEY') { Warn 'Env GEMINI_API_KEY KOSONG: usulan AI melalui server tidak aktif (aplikasi tetap jalan).' }
+        else { Warn "Env $key KOSONG" }
+      }
       else { Ok ("Env $key terisi (panjang {0}, nilai disembunyikan)" -f $info.length) }
     }
     foreach ($legacy in @('VITE_PB_SYNC_EMAIL', 'VITE_PB_SYNC_PASSWORD')) {
       $info = $envInfo.$legacy
       if ($info.present -and $info.length -gt 0) {
-        Warn "$legacy masih ada di .env (kredensial lama ikut bundle browser). Hapus setelah broker berjalan."
+        Warn "$legacy masih ada di .env. Variabel VITE_ ikut dibundel ke browser; hapus barisnya (kredensial sinkronisasi yang dipakai server adalah PB_SYNC_*)."
       }
     }
     if (([string]$envInfo.ALLOW_DEFAULT_STAFF_PASSWORDS.value).Trim().ToLower() -eq 'true') {
@@ -249,7 +411,9 @@ try {
     $procs = Get-Process -Name $procName -ErrorAction SilentlyContinue
     if ($procs) {
       foreach ($p in $procs) {
-        Ok ("Proses $procName (PID $($p.Id), RAM {0:N0} MB, start {1})" -f ($p.WorkingSet64 / 1MB), $p.StartTime)
+        $started = ''
+        try { if ($p.StartTime) { $started = " | start $($p.StartTime)" } } catch { }
+        Ok ("Proses $procName (PID $($p.Id), RAM {0:N0} MB{1})" -f ($p.WorkingSet64 / 1MB), $started)
       }
     } else {
       Warn "Proses $procName tidak berjalan."
@@ -328,18 +492,25 @@ try {
   }
 
   $cert = Get-TlsCertificate $Domain
+  $certSource = 'jalur HTTPS'
+  if (-not $cert) {
+    $cert = Get-CaddyStoredCertificate $CaddyDir $Domain
+    $certSource = 'berkas sertifikat Caddy di disk'
+  }
   if ($cert) {
     $daysLeft = [math]::Round(($cert.NotAfter - (Get-Date)).TotalDays, 0)
-    if ($daysLeft -lt 14) { Warn "Sertifikat TLS $Domain tersisa $daysLeft hari (NotAfter $($cert.NotAfter))." }
-    else { Ok "Sertifikat TLS $Domain valid sampai $($cert.NotAfter) ($daysLeft hari)" }
-  } else { Warn "Tidak bisa membaca sertifikat TLS $Domain." }
+    if ($daysLeft -lt 14) { Warn "Sertifikat TLS $Domain tersisa $daysLeft hari (NotAfter $($cert.NotAfter), dibaca dari $certSource)." }
+    else { Ok "Sertifikat TLS $Domain valid sampai $($cert.NotAfter) ($daysLeft hari, dibaca dari $certSource)" }
+  } else { Warn "Tidak bisa membaca sertifikat TLS $Domain (jalur HTTPS gagal dan tidak ada cert.pem di folder Caddy)." }
 
   # ------------------------------------------------------------------
   Write-Section 'F. INTEGRITAS AKUN SINKRONISASI & DIREKTORI (READ-ONLY)'
   # ------------------------------------------------------------------
   $nodeResult = $null
   $tmpNode = Join-Path $AppDir ".tmp-diagnose-live-$stamp.mjs"
-  if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+  if ($SkipAccounts) {
+    Info 'Seksi F dilewati (-SkipAccounts): integritas akun sinkronisasi tidak diperiksa.'
+  } elseif (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     Fail 'Node.js tidak tersedia; pemeriksaan akun sinkronisasi dilewati.'
   } elseif (-not (Test-Path (Join-Path $AppDir 'node_modules\pocketbase'))) {
     Fail 'Paket pocketbase tidak ditemukan di node_modules; pemeriksaan akun dilewati.'
@@ -550,7 +721,18 @@ if (adminPb) {
   }
   try {
     const names = (await adminPb.collections.getFullList({ fields: 'name', requestKey: null })).map((c) => c.name);
-    const required = ['products', 'customers', 'transactions', 'settings', 'store_profiles', 'custom_roles', 'activity_logs', 'spk_orders', 'machines', 'invoices', 'app_users'];
+    // Daftar koleksi wajib. Tambah koleksi baru di aplikasi -> tambah namanya di
+    // sini dan di scripts/create-pocketbase-collections.mjs; tanpa koleksi di
+    // server, tulis cloud gagal dan data hanya tersimpan di perangkat.
+    const required = [
+      'products', 'product_categories', 'customers', 'customer_categories',
+      'suppliers', 'agents', 'transactions', 'shifts', 'stock_transactions',
+      'asset_adjustments', 'reconciliation_runs',
+      'users', 'app_users', 'cashiers', 'activity_logs', 'settings',
+      'store_profiles', 'custom_roles', 'agent_notifications',
+      'spk_orders', 'machines', 'invoices', 'invoice_settings',
+      'taxpayer_profile', 'tax_annual_returns', 'tax_monthly_billings',
+    ];
     out.collections.missing = required.filter((n) => !names.includes(n));
     out.collections.total = names.length;
   } catch (e) {
@@ -563,14 +745,19 @@ console.log(JSON.stringify(out, null, 2));
 
     try {
       [System.IO.File]::WriteAllText($tmpNode, $nodeScript, [System.Text.UTF8Encoding]::new($false))
-      $raw = (& node $tmpNode $envPath $LocalPbUrl 2>&1) -join "`n"
+      $run = Invoke-NodeScript $tmpNode @($envPath, $LocalPbUrl)
+      $raw = [string]$run.Out
+      $first = $raw.IndexOf('{')
+      $last = $raw.LastIndexOf('}')
+      if ($first -ge 0 -and $last -gt $first) { $raw = $raw.Substring($first, $last - $first + 1) }
       try {
         $nodeResult = $raw | ConvertFrom-Json
         [System.IO.File]::WriteAllText($JsonPath, $raw, [System.Text.UTF8Encoding]::new($false))
         Ok "Pemeriksaan akun selesai (detail JSON: $JsonPath)"
       } catch {
         Fail 'Hasil pemeriksaan akun bukan JSON valid.'
-        Info (Redact ($raw.Substring(0, [Math]::Min(600, $raw.Length))))
+        if ($run.Err) { Info ('Node: ' + $run.Err.Substring(0, [Math]::Min(500, $run.Err.Length))) }
+        Info ('Output: ' + $raw.Substring(0, [Math]::Min(500, $raw.Length)))
       }
     } finally {
       Remove-Item -LiteralPath $tmpNode -Force -ErrorAction SilentlyContinue
@@ -649,7 +836,7 @@ console.log(JSON.stringify(out, null, 2));
       $legacyPass = @($nodeResult.users.legacyPlaintextPasswords)
       if ($legacyPass.Count -gt 0) {
         Warn ("{0} record kredensial masih menyimpan password plaintext lama (appPassword): {1}" -f $legacyPass.Count, (($legacyPass | ForEach-Object { $_.username }) -join ', '))
-        Info 'Login memakai appPassword itu lebih dulu, sehingga password baru dari Developer tidak berlaku. Perbaiki lewat Hak Akses & Akun (isi password baru) atau jalankan ulang reset password.'
+        Info 'Login sekarang mengutamakan password yang di-hash PocketBase; salinan plaintext lama dikosongkan sendiri saat pemiliknya login. Untuk akun yang tidak pernah login lagi (mis. nama developer), kosongkan field appPassword record tersebut di Admin UI PocketBase.'
       } else {
         Ok 'Tidak ada record kredensial yang menyimpan password plaintext lama (appPassword).'
       }
@@ -713,16 +900,199 @@ console.log(JSON.stringify(out, null, 2));
         Info ("Log $log (baris dipindai: $($tail.Count), cocok: $(@($hits).Count))")
         if (@($hits).Count -gt 0) {
           $hits | Select-Object -Last 5 | ForEach-Object { Info ('  > ' + (Redact ([string]$_.Line))) }
-          if (@($hits) | Where-Object { $_.Line -match 'Failed to authenticate|Gagal membuat sesi layanan|ke database cloud terputus' }) {
-            Warn "Log $([System.IO.Path]::GetFileName($log)) memuat kegagalan koneksi/autentikasi PocketBase."
-          }
+        if (@($hits) -and (@($hits) | Where-Object { $_.Line -match 'Failed to authenticate|Gagal membuat sesi layanan|ke database cloud terputus' })) {
+          Warn "Log $([System.IO.Path]::GetFileName($log)) memuat kegagalan koneksi/autentikasi PocketBase."
+        }
+        if (@($hits) -and (@($hits) | Where-Object { $_.Line -match 'EADDRINUSE' })) {
+          Warn "Log $([System.IO.Path]::GetFileName($log)) memuat EADDRINUSE: ada proses Node lain mencoba port 3000 di VPS (mis. npm run dev dijalankan bersamaan dengan service)."
+        }
+        if (@($hits) -and (@($hits) | Where-Object { $_.Line -match 'heap out of memory|OOM' })) {
+          Warn "Log $([System.IO.Path]::GetFileName($log)) memuat kehabisan memori heap; service pernah restart karena Node dihentikan."
+        }
         }
       } catch { Warn "Gagal membaca log $log" }
     }
   }
 
   # ------------------------------------------------------------------
-  Write-Section 'I. RINGKASAN'
+  Write-Section 'I. PROVISIONING: SOFTWARE, FOLDER, SERVICE & FIREWALL'
+  # ------------------------------------------------------------------
+  if ($SkipProvisioning) {
+    Info 'Seksi I dan J dilewati (-SkipProvisioning).'
+  } else {
+    $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
+    if ($npmCmd) { Ok ("npm: " + ((& npm -v 2>&1) -join '')) } else { Fail 'npm tidak ditemukan di PATH.' }
+
+    $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+    if ($gitCmd) { Ok ("git: " + ((& git --version 2>&1) -join '')) } else { Warn 'git tidak ditemukan di PATH (deploy memakai arsip GitHub, jadi tidak wajib).' }
+
+    $caddyExe = Join-Path $CaddyDir 'caddy.exe'
+    $caddyVer = Get-ExeVersion $caddyExe
+    if ($caddyVer) { Ok "Caddy $caddyVer di $caddyExe" } elseif (Test-Path $caddyExe) { Ok "Caddy ada di $caddyExe (versi tidak terbaca dari file)" } else { Fail "Caddy tidak ada di $caddyExe" }
+
+    $nssmExe = Join-Path $NssmDir 'nssm.exe'
+    if (Test-Path $nssmExe) { Ok "NSSM ada di $nssmExe" } else { Warn "NSSM tidak ada di $NssmDir (service dibuat dengan cara lain?)" }
+
+    $pbExe = Join-Path $PbDir 'pocketbase.exe'
+    $pbVer = Get-ExeVersion $pbExe
+    if (-not (Test-Path $pbExe)) { Fail "PocketBase tidak ada di $pbExe" }
+    elseif (-not $pbVer) { Info "PocketBase ada di $pbExe; versinya tidak terbaca dari metadata file (binary Go), perbandingan dengan $ExpectedPbVersion dilewati." }
+    elseif ($pbVer -notlike "*$ExpectedPbVersion*") { Warn "PocketBase terpasang $pbVer, seharusnya $ExpectedPbVersion." }
+    else { Ok "PocketBase $pbVer di $pbExe" }
+
+    try {
+      $osInfo = Get-CimInstance Win32_OperatingSystem
+      $cores = (Get-CimInstance Win32_Processor | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
+      $ramGb = [math]::Round($osInfo.TotalVisibleMemorySize / 1MB, 1)
+      if ($ramGb -lt 4) { Warn "RAM $ramGb GB di bawah 4 GB; build npm di VPS berisiko gagal." } else { Ok "RAM $ramGb GB" }
+      if ($cores -lt 2) { Warn "CPU $cores logical core (disarankan >= 2)." } else { Ok "CPU $cores logical core" }
+    } catch { Warn 'Gagal membaca jumlah CPU/RAM untuk provisioning.' }
+
+    $folderChecks = @(
+      (Join-Path $AppDir 'dist'),
+      (Join-Path $AppDir 'logs'),
+      (Join-Path $AppDir 'node_modules'),
+      (Join-Path $PbDir 'pb_data'),
+      $CaddyDir,
+      $BackupRoot
+    )
+    foreach ($dir in $folderChecks) {
+      if (Test-Path $dir) { Ok "Folder ada: $dir" }
+      elseif ($dir -eq $BackupRoot) { Warn "Folder backup tidak ada: $dir (deploy tidak bisa menaruh cadangan)." }
+      else { Warn "Folder tidak ada: $dir" }
+    }
+
+    foreach ($svcName in @('BejoStikerPOS', 'Caddy', 'PocketBase')) {
+      $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
+      if (-not $svc) { Fail "Service Windows '$svcName' tidak terpasang."; continue }
+      $detail = $null
+      try { $detail = Get-CimInstance -ClassName Win32_Service -Filter "Name='$svcName'" -ErrorAction Stop } catch { Warn "Gagal membaca detail service $svcName." }
+      if ($detail) {
+        if ($detail.StartMode -eq 'Auto') { Ok "$svcName mulai otomatis (StartMode Auto)" }
+        else { Warn "$svcName StartMode=$($detail.StartMode) - service tidak akan hidup sendiri setelah host restart." }
+        $recovery = Get-ServiceRecovery $svcName
+        if ($recovery -eq 'restart-service') { Ok "$svcName dipulihkan otomatis oleh Windows saat crash" }
+        else { Warn "$svcName belum ada aksi pemulihan 'restart pada kegagalan' (failure action: $recovery); set lewat nssm set $svcName AppExit Default Restart." }
+      }
+    }
+
+    $fwProfiles = @(Get-NetFirewallProfile -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq 'True' })
+    if ($fwProfiles.Count -eq 0) {
+      Warn 'Firewall Windows tidak aktif di profil mana pun - port 3000 dan 8090 terbuka ke internet bila security group VPS mengizinkan.'
+    } else {
+      Info ("Firewall aktif pada profil: {0}" -f (($fwProfiles | ForEach-Object { $_.Name }) -join ', '))
+      $allowMaps = @()
+      $allowRuleCount = 0
+      $fwReadError = $null
+      # -ErrorAction Stop di sini meninggalkan baris "PS>TerminatingError(...)"
+      # di layar/laporan walau galatnya sudah ditangkap catch. ErrorRecord
+      # dikumpulkan lewat -ErrorVariable dan stream-nya dibungkam, pesannya tetap
+      # bisa dipakai untuk menjelaskan mengapa port tidak disimpulkan.
+      $allowRules = @(Get-NetFirewallRule -Direction Inbound -Enabled True -Action Allow -ErrorVariable fwReadError -ErrorAction SilentlyContinue 2>$null)
+      $allowRuleCount = $allowRules.Count
+      if ($allowRuleCount -eq 0 -and $fwReadError) {
+        $fwReadError = (@($fwReadError)[0].Exception.Message).Trim()
+      } else {
+        $fwReadError = $null
+      }
+      $allowMaps = @($allowRules | ForEach-Object {
+        $rule = $_
+        try {
+          $portFilter = Get-NetFirewallPortFilter -AssociatedNetFirewallRule $rule -ErrorAction Stop
+          $addrFilter = Get-NetFirewallAddressFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue
+          [pscustomobject]@{
+            Name   = [string]$rule.DisplayName
+            Ports  = (@($portFilter.LocalPort) -join ',')
+            Remote = (@($addrFilter.RemoteAddress) -join ',')
+          }
+        } catch { }
+      })
+      $fwReadable = ($allowRuleCount -gt 0 -and @($allowMaps).Count -gt 0)
+      if ($fwReadable) {
+        Info "$($allowMaps.Count) dari $allowRuleCount aturan inbound Allow terbaca filter portnya."
+      } elseif ($allowRuleCount -gt 0) {
+        Warn "$allowRuleCount aturan inbound Allow ada tetapi filter portnya tidak terbaca (butuh Administrator); kesimpulan paparan port dilewati."
+      } elseif ($fwReadError) {
+        Warn "Aturan firewall tidak terbaca ($fwReadError) - jalankan skrip sebagai Administrator untuk menyimpulkan paparan port."
+      }
+
+      if ($fwReadable) {
+        foreach ($p in @(3000, 8090)) {
+          $open = @($allowMaps | Where-Object {
+            ($_.Ports -eq 'Any' -or $_.Ports -match "(^|,)\s*$p\s*(,|$)") -and ($_.Remote -match '(?i)any|0\.0\.0\.0/0')
+          })
+          if ($open.Count -gt 0) {
+            Fail "Port $p diizinkan masuk dari internet oleh aturan: $(($open | ForEach-Object { $_.Name }) -join ' | ') - hanya Caddy (80/443) yang boleh publik."
+          } else {
+            Ok "Port $p tidak punya aturan Allow inbound dari internet."
+          }
+        }
+        foreach ($p in @(80, 443)) {
+          $open = @($allowMaps | Where-Object { $_.Ports -eq 'Any' -or $_.Ports -match "(^|,)\s*$p\s*(,|$)" })
+          if ($open.Count -gt 0) { Ok "Port $p ada aturan Allow inbound." }
+          else { Info "Tidak ada aturan Allow eksplisit untuk port $p (mungkin diizinkan lewat profil/security group VPS)." }
+        }
+      } else {
+        Info 'Daftar port 80/443/3000/8090 tidak disimpulkan dari firewall pada run ini.'
+      }
+    }
+
+    # ----------------------------------------------------------------
+    Write-Section 'J. CADDYFILE, DNS, DAN ISI BUNDEL BROWSER'
+    # ----------------------------------------------------------------
+    $caddyfile = Join-Path $CaddyDir 'Caddyfile'
+    $caddyfileRepo = Join-Path $AppDir 'deploy\Caddyfile.windows'
+    $caddyText = ''
+    if (Test-Path $caddyfile) {
+      $caddyText = (Get-Content -LiteralPath $caddyfile -Raw -ErrorAction SilentlyContinue) -join ''
+      Ok "Caddyfile ada: $caddyfile"
+      if ($caddyText -notmatch [regex]::Escape($Domain)) { Fail "Domain $Domain tidak muncul di Caddyfile." } else { Ok "Domain $Domain terpasang di Caddyfile." }
+      if ($caddyText -match '/api/pb') { Ok 'Jalur /api/pb ke PocketBase ada di Caddyfile.' } else { Fail 'Jalur /api/pb tidak ada - browser tidak akan pernah sampai PocketBase (Mode Lokal).' }
+      if ($caddyText -match 'flush_interval\s+-1') { Ok 'flush_interval -1 aktif: SSE realtime tidak di-buffer Caddy.' } else { Warn 'flush_interval -1 tidak ditemukan di Caddyfile - perubahan realtime bisa tertahan di proxy.' }
+      if (Test-Path $caddyfileRepo) {
+        $repoText = (Get-Content -LiteralPath $caddyfileRepo -Raw -ErrorAction SilentlyContinue) -join ''
+        $same = (($caddyText -replace '\r', '') -eq ($repoText -replace '\r', ''))
+        if ($same) { Ok 'Caddyfile di server sama dengan berkas di repo.' }
+        else { Warn 'Caddyfile di server berbeda dari deploy\Caddyfile.windows (server berubah manual atau repo belum dideploy).' }
+      }
+    } else { Fail "Caddyfile tidak ditemukan: $caddyfile" }
+
+    try {
+      $dnsIps = @((Resolve-DnsName -Name $Domain -Type A -ErrorAction Stop | Where-Object { $_.IPAddress }).IPAddress)
+      if ($dnsIps.Count -eq 0) { Warn "DNS $Domain tidak mengembalikan record A." }
+      else {
+        Info "DNS A: $($dnsIps -join ', ')"
+        $publicIp = ''
+        try { $publicIp = ((Invoke-WebRequest -Uri 'https://api.ipify.org' -UseBasicParsing -TimeoutSec 8).Content).Trim() } catch { }
+        if ($publicIp) {
+          if ($dnsIps -contains $publicIp) { Ok "IP publik VPS ($publicIp) sama dengan DNS $Domain." }
+          else { Warn "DNS $Domain menunjuk ke $(($dnsIps -join ',')) tetapi IP publik VPS ini $publicIp - cek A record atau apakah VPS ini memang yang melayani domain." }
+        } else { Info 'IP publik VPS tidak terbaca (api.ipify.org gagal); perbandingan DNS dilewati.' }
+      }
+    } catch { Warn "Gagal resolve DNS $Domain." }
+
+    $assetDir = Join-Path $AppDir 'dist\assets'
+    if (Test-Path $assetDir) {
+      $jsFiles = @(Get-ChildItem -LiteralPath $assetDir -Filter '*.js' -File -ErrorAction SilentlyContinue)
+      $bundleText = ($jsFiles | ForEach-Object { (Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue) }) -join "`n"
+      Info "Bundel browser: $($jsFiles.Count) file JS, $([math]::Round(($bundleText.Length/1MB),1)) MB."
+      if ($bundleText -match '127\.0\.0\.1:8090' -or $bundleText -match 'http://localhost:3000' -or $bundleText -match 'http://localhost:8090') {
+        Fail 'Bundel browser memuat URL localhost/127.0.0.1 untuk database - semua pengunjung akan jatuh ke Mode Lokal. Build dijalankan dengan .env yang salah.'
+      } elseif ($bundleText -match [regex]::Escape("https://$Domain/api/pb")) {
+        Ok 'Bundel browser memuat URL PocketBase publik.'
+      } else {
+        Warn 'URL PocketBase publik tidak ditemukan di bundel browser; periksa VITE_POCKETBASE_URL saat build.'
+      }
+      if ($bundleText -match '@bejo\.local') {
+        Warn 'Bundel browser memuat email domain internal (@bejo.local) - kemungkinan kredensial sinkronisasi lama (VITE_PB_SYNC_*) ikut dibundel. Hapus variabel itu lalu build ulang.'
+      } else {
+        Ok 'Bundel browser tidak memuat kredensial/domain sinkronisasi internal.'
+      }
+    } else { Warn "Folder bundel tidak ada: $assetDir (belum build?)" }
+  }
+
+  # ------------------------------------------------------------------
+  Write-Section 'K. RINGKASAN'
   # ------------------------------------------------------------------
   $duration = [math]::Round(((Get-Date) - $startedAt).TotalSeconds, 1)
   Write-Host ("  OK: {0} | WARN: {1} | FAIL: {2} | durasi {3}s" -f $script:OkCount, $script:WarnCount, $script:FailCount, $duration) -ForegroundColor White
@@ -733,7 +1103,11 @@ console.log(JSON.stringify(out, null, 2));
   }
   Write-Host ''
   Write-Host "  Laporan teks : $ReportPath" -ForegroundColor White
-  Write-Host "  Detail JSON  : $JsonPath" -ForegroundColor White
+  if (Test-Path $JsonPath) {
+    Write-Host "  Detail JSON  : $JsonPath" -ForegroundColor White
+  } else {
+    Write-Host '  Detail JSON  : tidak ditulis (seksi F dilewati atau gagal).' -ForegroundColor DarkGray
+  }
   if ($script:FailCount -gt 0) {
     Write-Host '  VERDICT: ADA KEGAGALAN KRITIS - kirim file laporan untuk analisis.' -ForegroundColor Red
   } else {
@@ -743,4 +1117,9 @@ console.log(JSON.stringify(out, null, 2));
   if ($transcriptStarted) { try { Stop-Transcript | Out-Null } catch { } }
 }
 
-if ($script:FailCount -gt 0) { exit 1 } else { exit 0 }
+if ($script:FailCount -gt 0) { exit 1 }
+if ($RequireClean -and $script:WarnCount -gt 0) {
+  Write-Host '  (-RequireClean dipakai: ada WARN, exit code 2.)' -ForegroundColor Yellow
+  exit 2
+}
+exit 0

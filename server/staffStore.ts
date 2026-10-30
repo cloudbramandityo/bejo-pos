@@ -696,21 +696,57 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 /**
- * Verifikasi password staf. Record lama masih menyimpan `appPassword` plaintext
- * (sempat ikut tersinkron); record baru memakai password yang di-hash PocketBase.
+ * Verifikasi password staf. Password yang di-hash PocketBase selalu diperiksa
+ * lebih dulu. `appPassword` adalah salinan plaintext warisan sinkronisasi lama;
+ * kalau ia yang diperiksa lebih dulu, password baru dari Developer tidak pernah
+ * berlaku selama salinan lama itu masih tertinggal di record.
  */
+export interface StaffPasswordVerifiers {
+  verifyNative?: (email: string, password: string) => Promise<boolean>;
+  clearLegacy?: (authId: string) => Promise<void>;
+}
+
 export async function verifyStaffPassword(
   account: StaffAccount,
-  suppliedPassword: string
+  suppliedPassword: string,
+  deps: StaffPasswordVerifiers = {}
 ): Promise<boolean> {
+  const verifyNative = deps.verifyNative || verifyNativePassword;
+  const clearLegacy = deps.clearLegacy || clearLegacyAppPassword;
+  const nativeOk =
+    Boolean(account.authId && account.email) &&
+    (await verifyNative(account.email, suppliedPassword));
+  if (nativeOk) {
+    if (account.appPassword) await clearLegacy(account.authId);
+    return true;
+  }
   if (account.appPassword) return safeEqual(suppliedPassword, account.appPassword);
-  if (!account.authId || !account.email) return false;
+  return false;
+}
+
+async function verifyNativePassword(email: string, password: string): Promise<boolean> {
   try {
     const pb = new PocketBase(pbUpstream());
     pb.autoCancellation(false);
-    await pb.collection(AUTH_COLLECTION).authWithPassword(account.email, suppliedPassword);
+    await pb.collection(AUTH_COLLECTION).authWithPassword(email, password);
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Kosongkan salinan plaintext setelah login native berhasil. Kegagalan ditulis
+ * ke log saja: login pengguna tidak boleh bergantung pada pemberesan data lama.
+ */
+async function clearLegacyAppPassword(authId?: string): Promise<void> {
+  if (!authId) return;
+  try {
+    await runAsAdmin(async (pb) => {
+      await updateCredential(pb, authId, { appPassword: '' });
+    });
+    console.log(`[Staff] appPassword plaintext lama dikosongkan untuk record ${authId}.`);
+  } catch (err) {
+    console.warn(`[Staff] Gagal mengosongkan appPassword lama untuk record ${authId}: ${(err as Error)?.message || err}`);
   }
 }

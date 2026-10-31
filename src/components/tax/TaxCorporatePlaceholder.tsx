@@ -1,7 +1,7 @@
 /**
  * Coded by Langgo Bramandityo.
  * Modul SPT Tahunan PPh Badan (Formulir 1771) - Placeholder
- * Keterangan: “Under Development by Langgo Bramandityo”
+ * Keterangan: modul belum dirilis, tampil sebagai catatan "dalam pengembangan".
  */
 import React from 'react';
 import { Building2, Code2, Clock, ShieldCheck, Sparkles, AlertCircle } from 'lucide-react';
@@ -15,7 +15,7 @@ export const TaxCorporatePlaceholder: React.FC = () => {
 
       <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold tracking-wide uppercase mb-4">
         <Code2 className="w-4 h-4" />
-        <span>DEVELOPER MODULE</span>
+        <span>DALAM PENGEMBANGAN</span>
       </div>
 
       <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mb-3">
@@ -24,7 +24,7 @@ export const TaxCorporatePlaceholder: React.FC = () => {
 
       <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-6 text-center">
         <p className="text-base sm:text-lg font-bold text-slate-800">
-          Under Development by Langgo Bramandityo
+          Modul ini belum dirilis
         </p>
         <p className="text-xs sm:text-sm text-slate-500 mt-1">
           Modul SPT Tahunan Badan (PT, CV, Koperasi, Firma) dengan rekonsiliasi fiskal, lampiran I-VI, dan laporan keuangan.

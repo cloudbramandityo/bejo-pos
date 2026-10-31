@@ -1,7 +1,7 @@
 /**
  * Coded by Langgo Bramandityo. Please guys, jangan diutak-atik coding-nya ya. Thanks!
  * Modul Manajemen Proforma Invoice (PI) & Invoice Komersial (INV)
- * Khusus Akun DEVELOPER & ADMIN
+ * Dapat dipakai akun DEVELOPER, ADMIN, dan OWNER
  */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -80,7 +80,7 @@ import {
   saveInvoiceStoreIdentityCloud
 } from '../backend/pocketbaseBackend';
 import { buildOpenAccountInvoiceItems } from '../utils/openAccountStorage';
-import { canManageRecords } from '../utils/recordAccess';
+import { canManageBusinessData } from '../utils/recordAccess';
 import { exportInvoiceToPDF } from '../utils/invoicePdf';
 import { StoreLogo } from './StoreLogo';
 import { SalesTransactionPickerModal } from './modals/SalesTransactionPickerModal';
@@ -124,8 +124,8 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
   pendingOpenAccountGroup,
   onClearPendingOpenAccountGroup
 }) => {
-  // Wewenang hapus dokumen manual: DEVELOPER dan ADMIN.
-  const canManage = canManageRecords(currentUser?.role || userRole);
+  // Wewenang hapus dokumen manual: DEVELOPER, ADMIN, dan OWNER.
+  const canManage = canManageBusinessData(currentUser?.role || userRole);
 
   // Main Data States
   const [invoices, setInvoices] = useState<Invoice[]>(() => getStoredInvoices());
@@ -1124,10 +1124,10 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
     setActiveSubTab('list');
   };
 
-  // Hapus manual dokumen (Developer & Admin) — mendukung status apa pun termasuk Lunas / Paid
+  // Hapus manual dokumen (Developer, Admin, Owner) — mendukung status apa pun termasuk Lunas / Paid
   const handleDeleteInvoice = async (inv: Invoice) => {
     if (!canManage) {
-      showToast('Penghapusan dokumen manual hanya dapat dilakukan oleh akun DEVELOPER atau ADMIN.', 'error');
+      showToast('Penghapusan dokumen manual hanya dapat dilakukan oleh akun DEVELOPER, ADMIN, atau OWNER.', 'error');
       return;
     }
 
@@ -2169,7 +2169,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
               B2B & POS Billing
             </span>
             <span className="bg-slate-200 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
-              Khusus Admin PT Bejo Digital Media
+              Akses Manajemen Toko
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-1">

@@ -2678,7 +2678,7 @@ export default function App() {
         )}
 
         {currentTab === 'tax' && (userRole === 'DEVELOPER' || userRole === 'ADMIN' || userRole === 'OWNER') && (
-          <TaxScreen />
+          <TaxScreen currentUser={currentUser} />
         )}
 
         {currentTab === 'marketing' && (userRole === 'DEVELOPER' || userRole === 'ADMIN' || userRole === 'OWNER') && (

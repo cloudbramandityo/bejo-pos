@@ -48,6 +48,8 @@ interface TaxFilingHistoryViewProps {
   onSelectReturn: (spt: TaxAnnualReturn1770) => void;
   onUpdateReturn?: (spt: TaxAnnualReturn1770) => void;
   onUpdateAllReturns?: (returns: TaxAnnualReturn1770[]) => void;
+  /** Akun yang sedang login, untuk jejak perubahan. */
+  actorLabel?: string;
 }
 
 type HistoryTab = 'billing' | 'chart' | 'returns';
@@ -59,6 +61,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
   onSelectReturn,
   onUpdateReturn,
   onUpdateAllReturns,
+  actorLabel = 'Pengguna',
 }) => {
   const [activeTab, setActiveTab] = useState<HistoryTab>('billing');
   const [selectedBillingYear, setSelectedBillingYear] = useState<number>(2025);
@@ -349,7 +352,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
         {
           timestamp: new Date().toISOString(),
           action: 'SINKRONISASI_BILLING_BULANAN',
-          changedBy: 'Langgo Bramandityo (DEVELOPER)',
+          changedBy: actorLabel,
           notes: `Omzet Rp ${totalGross.toLocaleString('id-ID')} & PPh Final Rp ${totalPph.toLocaleString('id-ID')} dari Billing ${selectedBillingYear} berhasil disinkronkan ke Lampiran III SPT.`,
         },
       ],

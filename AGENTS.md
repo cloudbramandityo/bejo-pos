@@ -92,15 +92,21 @@ Setiap staf mengatur sendiri nama tampilan, foto profil, username login, dan pas
 - Akun DEVELOPER tidak punya baris direktori; perubahan profilnya ditolak server (`PROFILE_DEVELOPER_LOCKED`) dan diatur lewat `DEV_USERNAME` / `DEV_PASSWORD_HASH`.
 - Aturan wajib ganti password **tidak pernah** berlaku untuk DEVELOPER. Kredensialnya berasal dari `DEV_PASSWORD_HASH`, bukan direktori staf, sehingga flag `mustChangePassword` selalu `false` di respons login/sesi dan modal terkunci tidak boleh muncul — termasuk bila localStorage menyimpan flag lama (`true`); merge sesi di `App.tsx` menimpanya dan modal memakai `forceChange = forced && !isDeveloper`. ID `user_dev`/`sys_core_developer` juga ditolak untuk buat/ubah/hapus akun (`ACCOUNT_RESERVED`).
 
-## Wewenang ADMIN atas data operasional (wajib)
+## Wewenang ADMIN & OWNER atas data operasional (wajib)
 
-ADMIN = akses operasional penuh terhadap **data** di tab SPK Cetak, Laporan, dan Invoice. Aturan tunggal ada di `src/utils/recordAccess.ts` (`canManageRecords(role)` → DEVELOPER atau ADMIN) dan dipakai `SpkScreen`, `TransactionHistoryScreen`, `InvoiceScreen`.
+Ada **dua** aturan di `src/utils/recordAccess.ts` dan keduanya dipakai layar — jangan menyatukannya:
+
+- `canManageRecords(role)` → DEVELOPER atau ADMIN. Dipakai **tab SPK Cetak** saja (`SpkScreen`).
+- `canManageBusinessData(role)` → DEVELOPER, ADMIN, **dan OWNER**. Dipakai lima tab yang diminta pemilik (2026-10-31): **Agen, Laporan, Invoice, Pajak, Marketing** — `AgentScreen`, `TransactionHistoryScreen`, `ReconciliationScreen`, `InvoiceScreen`, `TaxScreen`.
 
 - Yang termasuk wewenang ADMIN: hapus order SPK (kartu Kanban, baris tabel, modal detail), purge arsip SPK Selesai, edit/hapus transaksi penjualan, edit/hapus mutasi stok, dan hapus dokumen PI/INV termasuk status Lunas.
-- Yang **tetap** khusus DEVELOPER: antrean/status mesin cetak, status tim, kelola akun SPK, panel diagnostik backend, dan **menyimpan** modul Jurnal (baca Jurnal punya aturannya sendiri di bawah).
+- Wewenang OWNER sama persis **kecuali** tab SPK Cetak: OWNER tidak boleh hapus order/purge arsip SPK. Perluasan sengaja tidak dilakukan lewat `canManageRecords` supaya aturan SPK tidak ikut berubah.
+- Yang **tetap** khusus DEVELOPER: antrean/status mesin cetak, status tim, kelola akun SPK, panel diagnostik backend, penyunting Website (`currentTab === 'landing_editor'`), pengaturan SI BEJO AI, dan **menyimpan** modul Jurnal (baca Jurnal punya aturannya sendiri di bawah).
 - Gerbang ini ada di sisi UI; hak tulis data ke PocketBase tidak berubah. Bagian yang benar-benar ditegakkan server hanyalah manajemen akun (`requireManageRole`, DEVELOPER/ADMIN/OWNER), profil mandiri, dan rute Jurnal.
-- Label tombol tidak boleh lagi berbunyi "Khusus DEVELOPER" bila aksinya sudah dipakai bersama ADMIN — tulisan yang menyesatkan membuat operator mengira akunnya rusak.
-- Ubah wewenang cukup di `canManageRecords`; jangan menambah pemeriksaan `role === 'DEVELOPER'` baru di komponen.
+- Label tombol tidak boleh lagi berbunyi "Khusus DEVELOPER" (atau "Khusus DEVELOPER & ADMIN", "DEVELOPER MODULE", "Under Development by …") bila aksinya sudah dipakai bersama ADMIN/OWNER — tulisan yang menyesatkan membuat operator mengira akunnya rusak. Badge modal hapus transaksi kini "AKSES MANAJEMEN TOKO", modal edit mutasi stok "MANAJEMEN STOK", dan placeholder PPh Badan "DALAM PENGEMBANGAN".
+- Jejak perubahan (audit trail) wajib memakai akun yang sedang login lewat `describeAuditActor(currentUser)` (`src/utils/auditActor.ts`) — `TaxFilingWizard` dan `TaxFilingHistoryView` menerima `actorLabel` dari `TaxScreen`, dan `App.tsx` meneruskan `currentUser`. Nama orang tetap ("Langgo Bramandityo (DEVELOPER)") membuat perubahan ADMIN/OWNER tercatat atas nama developer.
+- Ubah wewenang cukup di satu fungsi `recordAccess.ts`; jangan menambah pemeriksaan `role === 'DEVELOPER'` baru di komponen.
+- Uji regresi: `npm run check:access` (`scripts/check-business-access.mts`) — mengunci pemisahan dua aturan itu (OWNER **false** di SPK, **true** di lima tab), memanggil gerbang yang benar per layar, dan memindai label menyesatkan + nama author tetap di modul pajak.
 
 ## Hak akses modul Jurnal (wajib)
 

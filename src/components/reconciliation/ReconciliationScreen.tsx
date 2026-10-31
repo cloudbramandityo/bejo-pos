@@ -30,7 +30,7 @@ import {
   saveReconciliationRunCloud,
   subscribeReconciliationRuns,
 } from '../../backend/pocketbaseBackend';
-import { canManageRecords } from '../../utils/recordAccess';
+import { canManageBusinessData } from '../../utils/recordAccess';
 import type { UserRole } from '../../types';
 import { ReconciliationEditor } from './ReconciliationEditor';
 import { ReconciliationResults } from './ReconciliationResults';
@@ -120,7 +120,7 @@ export const ReconciliationScreen: React.FC<ReconciliationScreenProps> = ({
   }, []);
 
   const visibleRuns = useMemo(() => runs.filter((run) => run.kind === kind).sort(newerFirst), [runs, kind]);
-  const canDelete = canManageRecords(userRole);
+  const canDelete = canManageBusinessData(userRole);
 
   const patchDraft = useCallback((patch: Partial<ReconciliationRun>) => {
     setDraft((prev) => ({ ...prev, ...patch }));

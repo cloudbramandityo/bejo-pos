@@ -249,6 +249,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
     }
     if (userRole === 'DEVELOPER') return 'Langgo';
     if (userRole === 'ADMIN') return 'Syafira';
+    if (userRole === 'OWNER') return 'Pak Bejo';
     if (userRole === 'KASIR') return 'Fira';
     return 'Fira';
   };
@@ -490,9 +491,9 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
     };
   }, [currentUser?.username, dismissedMentionIds, activeMentionPopup]);
 
-  // Real-time listener for Agent Notifications (DEVELOPER & ADMIN)
+  // Real-time listener for Agent Notifications (DEVELOPER, ADMIN & OWNER)
   useEffect(() => {
-    const isPrivileged = userRole === 'DEVELOPER' || userRole === 'ADMIN';
+    const isPrivileged = userRole === 'DEVELOPER' || userRole === 'ADMIN' || userRole === 'OWNER';
     if (!isPrivileged) {
       setActiveAgentNotifPopup(null);
       return;
@@ -1905,7 +1906,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
 
       {/* Real-Time Agent Order Notification Pop-up */}
       <AnimatePresence>
-        {activeAgentNotifPopup && !isOpen && !activeMentionPopup && (userRole === 'DEVELOPER' || userRole === 'ADMIN') && (
+        {activeAgentNotifPopup && !isOpen && !activeMentionPopup && (userRole === 'DEVELOPER' || userRole === 'ADMIN' || userRole === 'OWNER') && (
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -2473,7 +2474,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                     {spkDeadlineAlerts.length}
                   </span>
                 </span>
-              ) : activeAgentNotifPopup && (userRole === 'DEVELOPER' || userRole === 'ADMIN') ? (
+              ) : activeAgentNotifPopup && (userRole === 'DEVELOPER' || userRole === 'ADMIN' || userRole === 'OWNER') ? (
                 <span className="absolute -top-1.5 -right-1.5 flex h-3 w-3">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500 border border-white" />
@@ -2491,7 +2492,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                 ? `${unreadMentionCount} Panggilan Tag Internal!`
                 : spkDeadlineAlerts.length > 0 && isUserEligibleForDeadlineAlert(userRole)
                 ? `${spkDeadlineAlerts.length} SPK Mendekati Deadline!`
-                : activeAgentNotifPopup && (userRole === 'DEVELOPER' || userRole === 'ADMIN')
+                : activeAgentNotifPopup && (userRole === 'DEVELOPER' || userRole === 'ADMIN' || userRole === 'OWNER')
                 ? 'Pesanan Agen Masuk!'
                 : 'SI BEJO AI • Chat Tim'}
             </span>

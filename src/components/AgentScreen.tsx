@@ -170,7 +170,6 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   const isAdminUser = userRole === 'ADMIN' || currentUser?.role === 'ADMIN';
   const isDeveloperUser = userRole === 'DEVELOPER' || currentUser?.role === 'DEVELOPER';
   const isOwnerUser = userRole === 'OWNER' || currentUser?.role === 'OWNER';
-  const isDeveloperOrAdmin = isDeveloperUser || isAdminUser;
   const isDeveloperOrAdminOrOwner = isDeveloperUser || isAdminUser || isOwnerUser;
   const assignedAgentInfo = useMemo(() => {
     return resolveAgentForUser(currentUser);

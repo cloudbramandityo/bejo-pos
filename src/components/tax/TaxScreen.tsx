@@ -1,13 +1,15 @@
 /**
  * Coded by Langgo Bramandityo.
- * Modul Utama Pengisian Pajak Indonesia (Khusus Akun DEVELOPER)
+ * Modul Utama Pengisian Pajak Indonesia (dipakai akun DEVELOPER, ADMIN, OWNER)
  * Mendukung SPT Tahunan Orang Pribadi 2025 & Placeholder SPT Tahunan PPh Badan
  */
 import React, { useState, useEffect } from 'react';
+import type { AppUser } from '../../types';
 import {
   TaxAnnualReturn1770,
   TaxpayerProfile,
 } from '../../types/tax';
+import { describeAuditActor } from '../../utils/auditActor';
 import {
   getStoredTaxpayerProfile,
   saveStoredTaxpayerProfile,
@@ -93,9 +95,12 @@ type TaxSubmenuKey =
 
 interface TaxScreenProps {
   onBackToApp?: () => void;
+  /** Pemakai yang sedang login; dipakai untuk menulis jejak perubahan sebenarnya. */
+  currentUser?: AppUser | null;
 }
 
-export const TaxScreen: React.FC<TaxScreenProps> = () => {
+export const TaxScreen: React.FC<TaxScreenProps> = ({ currentUser }) => {
+  const auditActor = describeAuditActor(currentUser);
   const [mainModule, setMainModule] = useState<TaxMainModule>('ORANG_PRIBADI');
   const [activeSubmenu, setActiveSubmenu] = useState<TaxSubmenuKey>('dashboard');
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -317,6 +322,7 @@ export const TaxScreen: React.FC<TaxScreenProps> = () => {
               onUpdateReturn={handleUpdateActiveReturn}
               onCloseWizard={() => setIsWizardOpen(false)}
               initialStep={wizardStartStep}
+              actorLabel={auditActor}
               onOpenPrintView={() => {
                 setIsWizardOpen(false);
                 setActiveSubmenu('print');
@@ -534,6 +540,7 @@ export const TaxScreen: React.FC<TaxScreenProps> = () => {
                     onSelectReturn={(ret) => handleSelectYear(ret.taxYear)}
                     onUpdateReturn={handleUpdateActiveReturn}
                     onUpdateAllReturns={handleUpdateAllReturns}
+                    actorLabel={auditActor}
                   />
                 )}
 

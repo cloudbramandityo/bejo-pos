@@ -39,6 +39,8 @@ interface TaxFilingWizardProps {
   onCloseWizard: () => void;
   initialStep?: number;
   onOpenPrintView?: () => void;
+  /** Akun yang sedang login, untuk jejak perubahan. */
+  actorLabel?: string;
 }
 
 export const TaxFilingWizard: React.FC<TaxFilingWizardProps> = ({
@@ -47,6 +49,7 @@ export const TaxFilingWizard: React.FC<TaxFilingWizardProps> = ({
   onCloseWizard,
   initialStep = 1,
   onOpenPrintView,
+  actorLabel = 'Pengguna',
 }) => {
   const [step, setStep] = useState<number>(initialStep);
   const [data, setData] = useState<TaxAnnualReturn1770>({ ...currentReturn });
@@ -94,7 +97,7 @@ export const TaxFilingWizard: React.FC<TaxFilingWizardProps> = ({
         {
           timestamp: now,
           action: 'PELAPORAN_SELESAI',
-          changedBy: 'Langgo Bramandityo (DEVELOPER)',
+          changedBy: actorLabel,
           notes: `SPT Tahunan Orang Pribadi Tahun Pajak ${data.taxYear} Berhasil Disimpan & Difinalisasi`,
         },
       ],

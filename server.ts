@@ -789,18 +789,23 @@ app.post("/api/ai-assistant", async (req, res) => {
       ? 'Master Developer / Lead Tech'
       : userRole === 'ADMIN'
       ? 'Administrator Toko'
+      : userRole === 'OWNER'
+      ? 'Pemilik Toko'
       : 'Kasir Toko';
 
     let effectiveCallName = userCallName;
     if (!effectiveCallName) {
       if (userName) {
         effectiveCallName = userName.replace(/\s*\([^)]*\)/g, '').trim();
-      } else if (userRole === 'DEVELOPER') {
-        effectiveCallName = 'Langgo';
-      } else if (userRole === 'ADMIN') {
-        effectiveCallName = 'Syafira';
       } else {
-        effectiveCallName = 'Fira';
+        // Tanpa nama akun yang terbaca, panggil menurut peran — jangan mengarang nama orang.
+        effectiveCallName = userRole === 'DEVELOPER'
+          ? 'Langgo'
+          : userRole === 'ADMIN'
+          ? 'Syafira'
+          : userRole === 'OWNER'
+          ? 'Pemilik Toko'
+          : 'Kasir Toko';
       }
     }
 

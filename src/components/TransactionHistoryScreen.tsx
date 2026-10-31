@@ -51,7 +51,7 @@ import { formatRupiah, formatItemTransactionSpec, formatVolume, isTransactionOnD
 import { exportTransactionsToExcel, exportStockTransactionsToExcel, exportSingleStockTransactionToExcel } from '../utils/excelExport';
 import { exportTransactionsToPDF, exportStockTransactionsToPDF, exportSingleStockTransactionToPDF } from '../utils/pdfExport';
 import { convertInvoicesToTransactions } from '../utils/invoiceStorage';
-import { canManageRecords } from '../utils/recordAccess';
+import { canManageBusinessData } from '../utils/recordAccess';
 
 import { groupStockTransactionsByBatch, normalizeStockTransaction, calculateStockItemProfit, getProductRollPakQty, calculateSalesItemCost } from '../utils/stockUtils';
 import { isDigitalPrintingProduct, isPaketProduct } from '../utils/productFilters';
@@ -103,8 +103,8 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
   onUpdateTransaction,
   onDeleteTransaction,
 }) => {
-  /** DEVELOPER dan ADMIN boleh mengedit/menghapus transaksi tersimpan. */
-  const canManage = canManageRecords(userRole);
+  /** DEVELOPER, ADMIN, dan OWNER boleh mengedit/menghapus transaksi tersimpan. */
+  const canManage = canManageBusinessData(userRole);
 
   const [reportTab, setReportTab] = useState<'analysis' | 'penjualan' | 'pembelian_bahan' | 'pengambilan_bahan'>('analysis');
   const [periodType, setPeriodType] = useState<PeriodType>('HARIAN');
@@ -133,12 +133,12 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
     reportTab === 'pengambilan_bahan' &&
     (jenisLaporanAgen === 'CETAK_AGEN' || (jenisLaporanAgen === 'SEMUA' && subTabAgenList === 'CETAK'));
 
-  // Redirect report tab if not allowed (exclusively for DEVELOPER and ADMIN)
+  // Redirect report tab if not allowed (DEVELOPER, ADMIN, dan OWNER)
   React.useEffect(() => {
-    if (reportTab === 'pengambilan_bahan' && userRole !== 'DEVELOPER' && userRole !== 'ADMIN') {
+    if (reportTab === 'pengambilan_bahan' && !canManage) {
       setReportTab('analysis');
     }
-  }, [reportTab, userRole]);
+  }, [reportTab, canManage]);
 
   // Expanded rows state
   const [expandedTxIds, setExpandedTxIds] = useState<Record<string, boolean>>({});
@@ -1379,7 +1379,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
               <Truck className={`w-4 h-4 ${reportTab === 'pembelian_bahan' ? 'text-white' : 'text-slate-500'}`} />
               <span>Laporan Pembelian Bahan</span>
             </button>
-            {(userRole === 'DEVELOPER' || userRole === 'ADMIN') && (
+            {canManage && (
               <button
                 type="button"
                 id="tab-laporan-pengambilan"
@@ -2586,7 +2586,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
                                     type="button"
                                     onClick={() => handleOpenEditSales(tx)}
                                     className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
-                                    title="Edit Transaksi Penjualan (Khusus DEVELOPER & ADMIN)"
+                                    title="Edit Transaksi Penjualan"
                                   >
                                     <Pencil className="w-3.5 h-3.5" />
                                   </button>
@@ -2594,7 +2594,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
                                     type="button"
                                     onClick={() => handleOpenDeleteSales(tx)}
                                     className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
-                                    title="Hapus Transaksi Penjualan (Khusus DEVELOPER & ADMIN)"
+                                    title="Hapus Transaksi Penjualan"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
@@ -3247,7 +3247,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
                                       type="button"
                                       onClick={() => handleOpenEditSales(tx)}
                                       className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
-                                      title="Edit Transaksi (Khusus DEVELOPER & ADMIN)"
+                                      title="Edit Transaksi"
                                     >
                                       <Pencil className="w-3.5 h-3.5" />
                                     </button>
@@ -3255,7 +3255,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
                                       type="button"
                                       onClick={() => handleOpenDeleteSales(tx)}
                                       className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
-                                      title="Hapus Transaksi (Khusus DEVELOPER & ADMIN)"
+                                      title="Hapus Transaksi"
                                     >
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </button>
@@ -3814,7 +3814,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
                   <h3 className="font-bold text-sm leading-tight">Konfirmasi Hapus Transaksi</h3>
                   <span className="text-[10px] font-mono text-rose-100 flex items-center gap-1">
                     <ShieldCheck className="w-3 h-3 text-amber-300" />
-                    AKSES KHUSUS DEVELOPER & ADMIN
+                    AKSES MANAJEMEN TOKO
                   </span>
                 </div>
               </div>
@@ -3917,7 +3917,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
                   <h3 className="font-bold text-sm leading-tight">Konfirmasi Hapus Transaksi Penjualan</h3>
                   <span className="text-[10px] font-mono text-rose-100 flex items-center gap-1">
                     <ShieldCheck className="w-3 h-3 text-amber-300" />
-                    AKSES KHUSUS DEVELOPER & ADMIN
+                    AKSES MANAJEMEN TOKO
                   </span>
                 </div>
               </div>

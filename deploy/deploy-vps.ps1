@@ -426,14 +426,21 @@ function Wait-AppHealth([string]$Url, [int]$Attempts = 30) {
 function Invoke-NativeCapture([string]$FilePath, [string[]]$Arguments) {
   $previous = $ErrorActionPreference
   try {
-    # PowerShell 5.1 mengubah stderr native menjadi terminating error saat EAP=Stop.
+    # PowerShell 5.1 mengubah stderr native menjadi ErrorRecord. Saat baris itu
+    # ikut dicetak yang muncul justru nama tipenya
+    # ("System.Management.Automation.RemoteException"), bukan pesan alatnya,
+    # sehingga laporan build dipenuhi noise. Baris galat dinormalkan ke teks
+    # aslinya sebelum dikembalikan.
     $ErrorActionPreference = 'Continue'
-    $output = & $FilePath @Arguments 2>&1
+    $raw = & $FilePath @Arguments 2>&1
     $code = $LASTEXITCODE
+    $lines = @($raw | ForEach-Object {
+      if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { [string]$_ }
+    })
   } finally {
     $ErrorActionPreference = $previous
   }
-  return [pscustomobject]@{ Output = $output; ExitCode = $code }
+  return [pscustomobject]@{ Output = $lines; ExitCode = $code }
 }
 
 # APP_URL di .env bisa berisi localhost (mis. sisa pengembangan).
@@ -473,12 +480,18 @@ function Remove-ObsoleteWrappers([string]$AppDir) {
     'pasang-always-on.ps1',
     'restart-always-on.ps1',
     'server-always-on.ps1',
-    'tunnel-always-on.ps1'
+    'tunnel-always-on.ps1',
+    # Diagnostik lama sudah diserap ke scripts\diagnose-live.ps1. Nama ditulis
+    # lengkap (bukan pola check-*.ps1) supaya skrip penjaga baru yang ditambahkan
+    # di scripts/ tidak ikut terhapus di VPS.
+    'scripts\check-vps-status.ps1',
+    'scripts\check-vps-simple.ps1'
   )
   $removed = 0
   foreach ($relative in $relativePaths) {
-    $path = Join-Path $AppDir $relative
-    if (Test-Path -LiteralPath $path) {
+    # -Force menyertakan berkas hidden/system; tanpa itu berkas tersembunyi
+    # lolos dari daftar dan tidak pernah dilaporkan terbawa.
+    foreach ($path in @(Get-ChildItem -LiteralPath (Split-Path -Path (Join-Path $AppDir $relative) -Parent) -Filter (Split-Path -Path $relative -Leaf) -File -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })) {
       Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
       if (-not (Test-Path -LiteralPath $path)) {
         $removed++
@@ -487,7 +500,7 @@ function Remove-ObsoleteWrappers([string]$AppDir) {
     }
   }
   if ($removed -eq 0) {
-    Write-Ok 'Tidak ada skrip deploy lama yang tersisa.'
+    Write-Ok 'Tidak ada skrip deploy/diagnostik lama yang tersisa.'
   } else {
     Write-Ok "$removed skrip lama dibersihkan."
   }
@@ -1511,26 +1524,46 @@ $marketingConfigured = $false
 $marketingRequiredFailed = $false
 $notLive = @()
 if (-not $SkipMarketingCheck) {
+  # Sama seperti probe broker sesi: probe ini berjalan tanpa cookie sesi staf,
+  # padahal /api/marketing adalah endpoint privat. HTTP 401 berarti rute hidup
+  # dan penjaga sesinya bekerja, bukan kegagalan - jangan dilaporkan sebagai
+  # "tidak merespons".
+  $marketingStatus = 0
+  $marketingBody = $null
   try {
-    $marketing = Invoke-RestMethod -Uri "$localBaseUrl/api/marketing/status" -TimeoutSec 20
-    $channels = @(
-      [pscustomobject]@{ Name = 'WhatsApp (Meta)'; Configured = [bool]$marketing.meta.configured; Missing = @($marketing.meta.missing) },
-      [pscustomobject]@{ Name = 'TikTok'; Configured = [bool]$marketing.tiktok.configured; Missing = @($marketing.tiktok.missing) },
-      [pscustomobject]@{ Name = 'Shopee'; Configured = [bool]$marketing.shopee.configured; Missing = @($marketing.shopee.missing) }
-    )
-    $incomplete = @()
-    foreach ($channel in $channels) {
-      if ($channel.Configured) {
-        Write-Ok "$($channel.Name): env terkonfigurasi"
-      } else {
-        $missing = if ($channel.Missing.Count -gt 0) { $channel.Missing -join ', ' } else { 'tidak diketahui' }
-        Write-Warn2 "$($channel.Name): env belum lengkap ($missing)"
-        $incomplete += $channel.Name
-      }
-    }
-    $marketingConfigured = ($incomplete.Count -eq 0)
+    $marketingProbe = Invoke-WebRequest -Uri "$localBaseUrl/api/marketing/status" -UseBasicParsing -TimeoutSec 20
+    $marketingStatus = [int]$marketingProbe.StatusCode
+    $marketingBody = $marketingProbe.Content
   } catch {
-    Write-Warn2 "Endpoint Marketing tidak merespons: $($_.Exception.Message)"
+    try { if ($_.Exception.Response) { $marketingStatus = [int]$_.Exception.Response.StatusCode } } catch { }
+    if ($marketingStatus -ne 401) {
+      Write-Warn2 "Endpoint Marketing tidak merespons: $($_.Exception.Message)"
+    }
+  }
+  if ($marketingStatus -eq 401) {
+    Write-Ok 'Rute Marketing hidup dan penjaga sesinya bekerja (HTTP 401 tanpa login).'
+  } elseif ($marketingStatus -ge 200 -and $marketingStatus -lt 300) {
+    try {
+      $marketing = $marketingBody | ConvertFrom-Json
+      $channels = @(
+        [pscustomobject]@{ Name = 'WhatsApp (Meta)'; Configured = [bool]$marketing.meta.configured; Missing = @($marketing.meta.missing) },
+        [pscustomobject]@{ Name = 'TikTok'; Configured = [bool]$marketing.tiktok.configured; Missing = @($marketing.tiktok.missing) },
+        [pscustomobject]@{ Name = 'Shopee'; Configured = [bool]$marketing.shopee.configured; Missing = @($marketing.shopee.missing) }
+      )
+      $incomplete = @()
+      foreach ($channel in $channels) {
+        if ($channel.Configured) {
+          Write-Ok "$($channel.Name): env terkonfigurasi"
+        } else {
+          $missing = if ($channel.Missing.Count -gt 0) { $channel.Missing -join ', ' } else { 'tidak diketahui' }
+          Write-Warn2 "$($channel.Name): env belum lengkap ($missing)"
+          $incomplete += $channel.Name
+        }
+      }
+      $marketingConfigured = ($incomplete.Count -eq 0)
+    } catch {
+      Write-Warn2 "Respons Marketing tidak terbaca: $($_.Exception.Message)"
+    }
   }
 }
 

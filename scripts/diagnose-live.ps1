@@ -48,6 +48,8 @@
     -SkipAccounts                Lewati seksi F (pemeriksaan akun, paling lambat)
     -SkipProvisioning            Lewati seksi I dan J (provisioning/Caddy/bundel)
     -RequireClean                Exit code 2 bila masih ada WARN (untuk CI/cron)
+    -SelfTest                    Uji logika penilaian port dengan contoh aturan
+                                 nyata, tanpa membaca sistem (untuk workstation)
 
   Exit code:
     0 tidak ada kegagalan kritis
@@ -70,7 +72,8 @@ param(
   [string]$ReportPath = '',
   [switch]$SkipAccounts,
   [switch]$SkipProvisioning,
-  [switch]$RequireClean
+  [switch]$RequireClean,
+  [switch]$SelfTest
 )
 
 $ErrorActionPreference = 'Continue'
@@ -249,6 +252,100 @@ function Get-ExeVersion([string]$path) {
   } catch { return '' }
 }
 
+# ---------------------------------------------------------------------
+# Penilaian paparan port lewat aturan firewall Windows.
+#
+# Aturan bawaan Windows (AllJoyn Router, Remote Desktop Shadow, Cortana,
+# Desktop App Web Viewer, dst.) memakai LocalPort '*' dan RemoteAddress 'Any'
+# TETAPI terikat pada satu program atau service. Menyimpulkan "port 3000
+# terbuka dari internet" dari aturan semacam itu menghasilkan FAIL palsu yang
+# membuat operator mengira servernya bocor. Yang dihitung paparan hanya aturan
+# yang: protokolnya TCP/Any, portnya cocok, sumbernya internet, profilnya
+# berlaku untuk jaringan publik, dan tidak dipatok ke program/service tertentu.
+# ---------------------------------------------------------------------
+function Test-FwTcpProtocol([string]$protocol) {
+  if ([string]::IsNullOrWhiteSpace($protocol)) { return $true }
+  return [bool]($protocol -match '(?i)^(tcp|any|\*)$')
+}
+
+function Test-FwPortMatch([string]$ports, [int]$port) {
+  $list = @($ports -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
+  if ($list.Count -eq 0) { return $true }
+  foreach ($entry in $list) {
+    if ($entry -match '(?i)^(any|\*)$') { return $true }
+    if ($entry -match '^(\d+)-(\d+)$') {
+      if ($port -ge [int]$Matches[1] -and $port -le [int]$Matches[2]) { return $true }
+      continue
+    }
+    if ($entry -eq [string]$port) { return $true }
+  }
+  return $false
+}
+
+function Test-FwInternetRemote([string]$remote) {
+  $list = @($remote -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
+  if ($list.Count -eq 0) { return $true }
+  foreach ($entry in $list) {
+    if ($entry -match '(?i)^(any|\*|0\.0\.0\.0/0|::/0|internet)$') { return $true }
+  }
+  return $false
+}
+
+function Test-FwPublicProfile([string]$profile) {
+  if ([string]::IsNullOrWhiteSpace($profile)) { return $true }
+  return [bool]($profile -match '(?i)^(any|public)$' -or $profile -match '(?i)public')
+}
+
+function Test-FwProgramScoped([string]$applicationName, [string]$packageId, [string]$service) {
+  if (-not [string]::IsNullOrWhiteSpace($applicationName)) { return $true }
+  if (-not [string]::IsNullOrWhiteSpace($packageId)) { return $true }
+  if (-not [string]::IsNullOrWhiteSpace($service) -and $service -notmatch '(?i)^(any|\*)$') { return $true }
+  return $false
+}
+
+function Test-FwCouldExposePort($map, [int]$port) {
+  return (Test-FwTcpProtocol ([string]$map.Protocol)) -and (Test-FwPortMatch ([string]$map.Ports) $port) -and (Test-FwInternetRemote ([string]$map.Remote)) -and (Test-FwPublicProfile ([string]$map.Profile))
+}
+
+# Contoh aturan diambil persis dari laporan VPS 2026-10-30 yang sempat
+# menghasilkan FAIL palsu: semuanya Enabled=True, Action=Allow, Inbound,
+# LocalPort '*', RemoteAddress 'Any' - yang membedakan hanya protokol, profil,
+# dan ikatan program/service.
+function Invoke-FirewallSelfTest {
+  $failed = 0
+  $cases = @(
+    @{ n = 'UDP tidak dihitung untuk port TCP'; map = @{ Name = 'AllJoyn Router (UDP-In)'; Protocol = 'UDP'; Ports = '*'; Remote = 'Any'; Profile = 'Any' }; port = 3000; expect = $false },
+    @{ n = 'ICMPv6 tidak dihitung'; map = @{ Name = 'Core Networking - IPv6 (IPv6-In)'; Protocol = '58'; Ports = '*'; Remote = 'Any'; Profile = 'Any' }; port = 8090; expect = $false },
+    @{ n = 'Aturan UWP Cortana (hanya cocok lewat port) tetap kandidat'; map = @{ Name = 'Cortana'; Protocol = 'Any'; Ports = '*'; Remote = 'Any'; Profile = 'Any' }; port = 3000; expect = $true },
+    @{ n = 'Hanya profil Domain bukan paparan publik'; map = @{ Name = 'Remote Desktop - Shadow (TCP-In)'; Protocol = 'TCP'; Ports = '*'; Remote = 'Any'; Profile = 'Domain' }; port = 3000; expect = $false },
+    @{ n = 'RemoteAddress LocalSubnet bukan dari internet'; map = @{ Name = 'Work or school account'; Protocol = 'TCP'; Ports = '*'; Remote = 'LocalSubnet'; Profile = 'Any' }; port = 8090; expect = $false },
+    @{ n = 'Port spesifik 0.0.0.0/0 = paparan internet'; map = @{ Name = 'Bejo POS Terbuka'; Protocol = 'TCP'; Ports = '3000'; Remote = '0.0.0.0/0'; Profile = 'Any' }; port = 3000; expect = $true },
+    @{ n = 'Rentang port ikut dinilai'; map = @{ Name = 'Cast to Device streaming server (RTCP-Streaming-In)'; Protocol = 'UDP'; Ports = '50000-65535'; Remote = 'Any'; Profile = 'Any' }; port = 8090; expect = $false },
+    @{ n = 'Rentang port yang memuat port target, TCP'; map = @{ Name = 'Rentang TCP'; Protocol = 'TCP'; Ports = '3000-3010'; Remote = 'Any'; Profile = 'Public' }; port = 3000; expect = $true },
+    @{ n = 'Daftar port tanpa target tidak cocok'; map = @{ Name = 'Web (80,443)'; Protocol = 'TCP'; Ports = '80,443'; Remote = 'Any'; Profile = 'Any' }; port = 3000; expect = $false }
+  )
+  foreach ($c in $cases) {
+    $got = Test-FwCouldExposePort ([pscustomobject]$c.map) $c.port
+    if ($got -eq $c.expect) { Write-Host "  OK   $($c.n)" -ForegroundColor Green }
+    else { Write-Host "  FAIL $($c.n) (dapat=$got harus=$($c.expect))" -ForegroundColor Red; $failed++ }
+  }
+  $scoped = @(
+    @{ a = 'C:\Windows\System32\svchost.exe'; p = ''; s = 'Any'; expect = $true },
+    @{ a = ''; p = 'Microsoft.Windows.Cortana_cw5n1h2txyewy'; s = 'Any'; expect = $true },
+    @{ a = ''; p = ''; s = 'AllJoynRouterService'; expect = $true },
+    @{ a = ''; p = ''; s = 'Any'; expect = $false },
+    @{ a = ''; p = ''; s = ''; expect = $false }
+  )
+  foreach ($c in $scoped) {
+    $got = Test-FwProgramScoped $c.a $c.p $c.s
+    if ($got -eq $c.expect) { Write-Host "  OK   terikat program/service '$($c.a)$($c.p)$($c.s)'" -ForegroundColor Green }
+    else { Write-Host "  FAIL terikat program/service '$($c.a)$($c.p)$($c.s)' (dapat=$got harus=$($c.expect))" -ForegroundColor Red; $failed++ }
+  }
+  if ($failed -gt 0) { Write-Host "  SELFTEST GAGAL: $failed kasus salah." -ForegroundColor Red; return 1 }
+  Write-Host '  Semua kasus penilaian port firewall lulus.' -ForegroundColor Green
+  return 0
+}
+
 # Aksi pemulihan service dibaca dari registri (sama dengan yang dipakai NSSM),
 # bukan dari properti Win32_Service yang memang tidak menyediakannya.
 function Get-ServiceRecovery([string]$serviceName) {
@@ -277,6 +374,14 @@ function Find-LogFiles {
       ForEach-Object { $files.Add($_.FullName) }
   }
   return ($files | Select-Object -Unique)
+}
+
+# -SelfTest dijawab sebelum transcript dibuka: ia hanya menguji fungsi
+# penilaian port, tidak menyentuh service, firewall, maupun database, sehingga
+# bisa dipakai di workstation sebagai penjaga regresi.
+if ($SelfTest) {
+  $selfTestCode = Invoke-FirewallSelfTest
+  exit $selfTestCode
 }
 
 $transcriptStarted = $false
@@ -345,7 +450,7 @@ try {
           try { $headPkgVersion = ($headJson | ConvertFrom-Json).version } catch { }
         }
         if ($headPkgVersion -and $pkg -and ($headPkgVersion -ne $pkg.version)) {
-          Warn "Source terpasang versi $($pkg.version) tetapi commit HEAD versi $headPkgVersion (source disalin deploy, git VPS belum mengikuti). Bawa source lewat deploy-vps.ps1, jangan git pull di $AppDir."
+          Info "Versi di HEAD git ($headPkgVersion) berbeda dari source terpasang ($($pkg.version)); di VPS ini wajar karena source disalin deploy, jadi jangan git pull."
         } elseif ($dirty -gt 0) {
           Info "$dirty file berbeda dengan HEAD. Di VPS ini wajar karena deploy menyalin source tanpa commit; di workstation berarti ada perubahan yang belum di-commit."
         }
@@ -1001,9 +1106,12 @@ console.log(JSON.stringify(out, null, 2));
           $portFilter = Get-NetFirewallPortFilter -AssociatedNetFirewallRule $rule -ErrorAction Stop
           $addrFilter = Get-NetFirewallAddressFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue
           [pscustomobject]@{
-            Name   = [string]$rule.DisplayName
-            Ports  = (@($portFilter.LocalPort) -join ',')
-            Remote = (@($addrFilter.RemoteAddress) -join ',')
+            Name     = [string]$rule.DisplayName
+            Protocol = [string]$portFilter.Protocol
+            Ports    = (@($portFilter.LocalPort) -join ',')
+            Remote   = (@($addrFilter.RemoteAddress) -join ',')
+            Profile  = [string]$rule.Profile
+            Rule     = $rule
           }
         } catch { }
       })
@@ -1017,18 +1125,48 @@ console.log(JSON.stringify(out, null, 2));
       }
 
       if ($fwReadable) {
+        # Aturan Block dipakai untuk membedakan "tidak ada aturan sama sekali"
+        # dari "memang sengaja diblokir" - dua kesimpulan yang berbeda bagi
+        # operator, walau sama-sama aman.
+        $blockMaps = @(Get-NetFirewallRule -Direction Inbound -Enabled True -Action Block -ErrorAction SilentlyContinue 2>$null | ForEach-Object {
+          $rule = $_
+          try {
+            $portFilter = Get-NetFirewallPortFilter -AssociatedNetFirewallRule $rule -ErrorAction Stop
+            [pscustomobject]@{ Name = [string]$rule.DisplayName; Protocol = [string]$portFilter.Protocol; Ports = (@($portFilter.LocalPort) -join ',') }
+          } catch { }
+        })
         foreach ($p in @(3000, 8090)) {
-          $open = @($allowMaps | Where-Object {
-            ($_.Ports -eq 'Any' -or $_.Ports -match "(^|,)\s*$p\s*(,|$)") -and ($_.Remote -match '(?i)any|0\.0\.0\.0/0')
-          })
+          $candidates = @($allowMaps | Where-Object { Test-FwCouldExposePort $_ $p })
+          $open = @()
+          $scopedCount = 0
+          foreach ($c in $candidates) {
+            $appName = ''
+            $pkgId = ''
+            $svcBound = ''
+            try {
+              $appFilter = Get-NetFirewallApplicationFilter -AssociatedNetFirewallRule $c.Rule -ErrorAction SilentlyContinue
+              $svcFilter = Get-NetFirewallServiceFilter -AssociatedNetFirewallRule $c.Rule -ErrorAction SilentlyContinue
+              $appName = [string]$appFilter.ApplicationName
+              $pkgId = [string]$appFilter.PackageId
+              $svcBound = [string]$svcFilter.Service
+            } catch { }
+            if (Test-FwProgramScoped $appName $pkgId $svcBound) { $scopedCount++; continue }
+            $open += $c
+          }
+          $nameList = (($open | Select-Object -First 5 | ForEach-Object { $_.Name }) -join ' | ')
+          if ($open.Count -gt 5) { $nameList += " (+$($open.Count - 5) lainnya)" }
           if ($open.Count -gt 0) {
-            Fail "Port $p diizinkan masuk dari internet oleh aturan: $(($open | ForEach-Object { $_.Name }) -join ' | ') - hanya Caddy (80/443) yang boleh publik."
+            Fail "Port $p benar-benar dibuka ke internet oleh aturan: $nameList - hanya Caddy (80/443) yang boleh publik."
           } else {
-            Ok "Port $p tidak punya aturan Allow inbound dari internet."
+            $blocked = @($blockMaps | Where-Object { (Test-FwTcpProtocol $_.Protocol) -and (Test-FwPortMatch $_.Ports $p) })
+            $why = ''
+            if ($blocked.Count -gt 0) { $why = " dan ada aturan Block eksplisit ($($blocked[0].Name))" }
+            elseif ($scopedCount -gt 0) { $why = " ($scopedCount aturan yang cocok portnya terikat program/service, bukan pembuka port umum)" }
+            Ok "Port $p tidak dibuka ke internet$why."
           }
         }
         foreach ($p in @(80, 443)) {
-          $open = @($allowMaps | Where-Object { $_.Ports -eq 'Any' -or $_.Ports -match "(^|,)\s*$p\s*(,|$)" })
+          $open = @($allowMaps | Where-Object { (Test-FwTcpProtocol $_.Protocol) -and (Test-FwPortMatch $_.Ports $p) })
           if ($open.Count -gt 0) { Ok "Port $p ada aturan Allow inbound." }
           else { Info "Tidak ada aturan Allow eksplisit untuk port $p (mungkin diizinkan lewat profil/security group VPS)." }
         }

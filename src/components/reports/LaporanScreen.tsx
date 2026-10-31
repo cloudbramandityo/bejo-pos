@@ -25,7 +25,7 @@ import {
   AssetAdjustment,
 } from '../../types';
 import { FinancialSettings } from '../../utils/financialStorage';
-import { getJournalAccess } from '../journal/journalAccess';
+import { getJournalAccess } from '../../utils/journalAccessPolicy';
 
 const LaporanJurnalScreen = React.lazy(() =>
   import('../journal/LaporanJurnalScreen').then((module) => ({

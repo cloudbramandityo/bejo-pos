@@ -1,6 +1,6 @@
 import React from 'react';
 import type { UserRole } from '../../types';
-import { getJournalAccess } from './journalAccess';
+import { getJournalAccess } from '../../utils/journalAccessPolicy';
 import { JournalWorkspace } from './journalWorkspace';
 import { useJournalScreenModel } from './useJournalScreenModel';
 

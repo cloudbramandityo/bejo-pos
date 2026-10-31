@@ -1,6 +1,10 @@
 /**
- * Modul Jurnal (khusus DEVELOPER).
+ * Modul Jurnal.
  *
+ * - Baca: DEVELOPER, OWNER, ADMIN. Ditoleransi lewat cookie sesi Jurnal ATAU
+ *   cookie sesi dashboard, sehingga admin di perangkat lain tetap melihat data
+ *   tanpa harus punya cookie DEVELOPER.
+ * - Tulis: hanya DEVELOPER, selalu lewat cookie sesi Jurnal.
  * - Sesi developer dibuat lewat POST /api/journal/session dan disimpan sebagai
  *   cookie HttpOnly bertanda tangan HMAC (bukan localStorage).
  * - Seluruh akses data lewat Express; koleksi PocketBase dikunci admin-only
@@ -16,6 +20,7 @@ import type { Express, Request, Response } from 'express';
 import PocketBase from 'pocketbase/cjs';
 import crypto from 'crypto';
 import { verifyPassword } from './passwordHash';
+import { canReadJournal } from '../src/utils/journalAccessPolicy';
 
 const COOKIE_NAME = 'bejo_jurnal_session';
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
@@ -162,9 +167,39 @@ function readSession(req: Request): SessionPayload | null {
 function requireDeveloper(req: Request): SessionPayload {
   const session = readSession(req);
   if (!session) {
-    throw new JournalError('Sesi DEVELOPER tidak aktif. Buka kembali modul Jurnal untuk login.', 401);
+    throw new JournalError('Sesi DEVELOPER tidak aktif. Login ulang untuk menyimpan data Jurnal.', 401);
   }
   return session;
+}
+
+/**
+ * Gerbang baca: cookie sesi Jurnal ATAU sesi dashboard dengan peran pembaca.
+ *
+ * Cookie Jurnal hanya terbit saat login DEVELOPER, jadi sebelumnya admin di
+ * perangkat lain selalu kena 401 dan layar tampak kosong. Daftar peran pembaca
+ * memakai aturan yang sama dengan UI (`src/utils/journalAccessPolicy.ts`) —
+ * kalau daftarnya berbeda, admin melihat menunya tapi datanya kosong.
+ * Tulis tetap lewat `requireDeveloper`.
+ */
+function requireJournalReader(req: Request, deps: JournalRouteDeps): void {
+  if (readSession(req)) return;
+
+  const role = deps.getDashboardRole(req);
+  if (!role) {
+    throw new JournalError(
+      'Sesi dashboard tidak aktif. Silakan login ke dashboard terlebih dahulu.',
+      401
+    );
+  }
+  if (!canReadJournal(role)) {
+    throw new JournalError('Menu Jurnal hanya dapat diakses DEVELOPER, OWNER, atau ADMIN.', 403);
+  }
+}
+
+/** Dependensi dari `server.ts`; dipakai untuk membaca sesi dashboard tanpa siklus impor. */
+export interface JournalRouteDeps {
+  /** Peran pemanggil dari cookie sesi dashboard, atau null bila tidak login. */
+  getDashboardRole: (req: Request) => string | null;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -634,17 +669,21 @@ function handle(fn: (req: Request, res: Response) => Promise<void>) {
 /* ---------------------------------------------------------------------- */
 /*  Routes                                                                 */
 /* ---------------------------------------------------------------------- */
-export function registerJournalRoutes(app: Express): void {
+export function registerJournalRoutes(app: Express, deps: JournalRouteDeps): void {
   app.get(
     '/api/journal/session',
     handle(async (req, res) => {
       const config = journalConfig();
       const session = readSession(req);
+      const role = deps.getDashboardRole(req);
       res.setHeader('Cache-Control', 'no-store');
       res.json({
         success: true,
         authenticated: Boolean(session),
         username: session?.sub || null,
+        dashboardRole: role,
+        canRead: Boolean(session) || canReadJournal(role),
+        canWrite: Boolean(session),
         configured: {
           developerLogin: Boolean(config.devPasswordHash || config.devPassword),
           pocketbaseAdmin: Boolean(config.adminEmail && config.adminPassword),
@@ -658,10 +697,40 @@ export function registerJournalRoutes(app: Express): void {
     '/api/journal/session',
     handle(async (req, res) => {
       assertSameOrigin(req);
+      const config = journalConfig();
+
+      // Perpanjangan tanpa kredensial: sesi dashboard DEVELOPER yang masih sah
+      // sudah membuktikan identitasnya, jadi cookie Jurnal tidak perlu minta
+      // password developer lagi setiap 8 jam.
+      const wantsRenew = Boolean(req.body?.renew);
+      if (wantsRenew) {
+        if (deps.getDashboardRole(req) !== 'DEVELOPER') {
+          throw new JournalError('Hanya sesi DEVELOPER yang bisa memperbarui sesi Jurnal.', 403);
+        }
+        if (!config.sessionSecret) {
+          throw new JournalError(
+            'JOURNAL_SESSION_SECRET (atau PB_ADMIN_PASSWORD) belum disetel di server.',
+            503
+          );
+        }
+        const exp = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
+        setSessionCookie(
+          req,
+          res,
+          signSession({ sub: config.devUser, role: 'DEVELOPER', exp }, config.sessionSecret)
+        );
+        res.json({
+          success: true,
+          username: config.devUser,
+          renewed: true,
+          expiresAt: new Date(exp * 1000).toISOString(),
+        });
+        return;
+      }
+
       const ip = clientIp(req);
       checkLoginRate(ip);
 
-      const config = journalConfig();
       if (!config.devPasswordHash && !config.devPassword) {
         throw new JournalError('DEV_PASSWORD_HASH belum disetel di server.', 503);
       }
@@ -706,7 +775,7 @@ export function registerJournalRoutes(app: Express): void {
   app.get(
     '/api/journal/config',
     handle(async (req, res) => {
-      requireDeveloper(req);
+      requireJournalReader(req, deps);
       await ensureConfigCollection();
 
       const pb = await getAdminClient();
@@ -777,7 +846,7 @@ export function registerJournalRoutes(app: Express): void {
   app.get(
     '/api/journal/sheets',
     handle(async (req, res) => {
-      requireDeveloper(req);
+      requireJournalReader(req, deps);
       const tahun = parseYear(req.query.tahun);
       await ensureCollection();
 

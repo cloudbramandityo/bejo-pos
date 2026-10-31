@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "4.10.3",
+  "version": "4.10.5",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -13,6 +13,7 @@
     "check:trend": "tsx scripts/check-asset-trend.mts",
     "check:agent-period": "tsx scripts/check-agent-period.mts",
     "check:reconciliation": "tsx scripts/check-reconciliation.mts",
+    "check:journal": "tsx scripts/check-journal-access.mts",
     "check:copy": "node scripts/check-ui-language.mjs",
     "check:ps1": "node scripts/check-powershell-syntax.mjs",
     "check:copy:strict": "node scripts/check-ui-language.mjs --strict",

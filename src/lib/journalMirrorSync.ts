@@ -43,7 +43,10 @@ export function describeJournalCloudError(error: unknown): string {
       return 'Belum bisa menyimpan ke server. Tautan tetap tersimpan di perangkat ini.';
     }
     if (error.status === 401) {
-      return 'Sesi DEVELOPER tidak aktif. Klik Coba lagi untuk membuat sesi baru.';
+      return 'Sesi login dashboard belum aktif atau sudah berakhir. Login ulang, lalu klik Coba lagi.';
+    }
+    if (error.status === 403) {
+      return 'Akun ini tidak punya hak akses ke menu Jurnal.';
     }
     return error.message;
   }

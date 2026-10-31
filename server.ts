@@ -2091,7 +2091,7 @@ process.on('uncaughtException', (err) => {
   console.error('[Server] Uncaught exception:', err);
 });
 
-registerJournalRoutes(app);
+registerJournalRoutes(app, { getDashboardRole: (req) => getPosSession(req)?.role ?? null });
 registerPosAuthRoutes(app);
 registerDevAuthRoutes(app);
 registerPbSessionRoutes(app);

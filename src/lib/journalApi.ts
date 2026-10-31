@@ -15,6 +15,12 @@ export interface JurnalRecord {
 export interface JournalSessionInfo {
   authenticated: boolean;
   username: string | null;
+  /** Peran dari sesi dashboard, atau null bila belum login. */
+  dashboardRole: string | null;
+  /** Boleh membaca data Jurnal (punya cookie Jurnal ATAU peran OWNER/ADMIN). */
+  canRead: boolean;
+  /** Boleh menyimpan data Jurnal (cookie DEVELOPER aktif). */
+  canWrite: boolean;
   configured: {
     developerLogin: boolean;
     pocketbaseAdmin: boolean;
@@ -65,16 +71,40 @@ export async function getJournalSession(): Promise<JournalSessionInfo> {
   return {
     authenticated: Boolean(data.authenticated),
     username: data.username || null,
+    dashboardRole: data.dashboardRole || null,
+    canRead: Boolean(data.canRead),
+    canWrite: Boolean(data.canWrite),
     configured: data.configured,
   };
 }
 
+async function renewJournalSession(): Promise<JournalSessionInfo> {
+  await request<{ success: true }>('/api/journal/session', {
+    method: 'POST',
+    body: JSON.stringify({ renew: true }),
+  });
+  return getJournalSession();
+}
+
+/**
+ * Memastikan pemanggil boleh membaca data Jurnal.
+ *
+ * - DEVELOPER dengan cookie Jurnal kedaluwarsa (masa berlaku 8 jam) diperbarui
+ *   otomatis lewat sesi dashboard, jadi tombol "Coba lagi" benar-benar bekerja.
+ * - OWNER/ADMIN tidak pernah punya cookie itu; mereka membaca memakai sesi
+ *   dashboard, sehingga tidak perlu diminta login developer.
+ */
 export async function ensureJournalSession(): Promise<JournalSessionInfo> {
   const info = await getJournalSession();
   if (info.authenticated) return info;
+  if (info.dashboardRole === 'DEVELOPER') {
+    const renewed = await renewJournalSession();
+    if (renewed.authenticated) return renewed;
+  }
+  if (info.canRead) return info;
 
   throw new JournalApiError(
-    'Sesi DEVELOPER tidak aktif. Login ulang sebagai DEVELOPER untuk membuka modul Jurnal.',
+    'Sesi login dashboard belum aktif atau sudah berakhir. Login ulang, lalu klik Coba lagi.',
     401
   );
 }

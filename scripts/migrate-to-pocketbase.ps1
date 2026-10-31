@@ -197,8 +197,8 @@ $pbBlock = @"
 # development: http://localhost:8090 | production: https://bejodigitalprint.com/api/pb
 VITE_POCKETBASE_URL=http://localhost:8090
 # Akun sinkronisasi milik APLIKASI (password harus sama dengan di PocketBase)
-VITE_PB_SYNC_EMAIL=sync@bejo.local
-VITE_PB_SYNC_PASSWORD=sync_password_bejo_2026
+# VITE_PB_SYNC_* sengaja tidak ditulis: variabel berprefix VITE_ ikut dibundel
+# ke browser, sedangkan yang dibaca server hanya PB_SYNC_*.
 PB_SYNC_EMAIL=sync@bejo.local
 PB_SYNC_PASSWORD=sync_password_bejo_2026
 POCKETBASE_UPSTREAM=http://127.0.0.1:8090

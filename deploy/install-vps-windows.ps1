@@ -217,6 +217,11 @@ $nodeExe = (Get-Command node).Source
 & $nssm set $ServiceName Start SERVICE_AUTO_START | Out-Null
 & $nssm set $ServiceName AppExit Default Restart | Out-Null
 & $nssm set $ServiceName AppThrottle 5000 | Out-Null
+# Dua lapis pemulihan. AppExit di atas hanya mengembalikan NSSM ke bawaannya
+# ("Default" dibaca sebagai reset, token setelahnya diabaikan) - bawaan itu
+# sudah Restart, jadi tidak ada yang perlu ditulis di sana. Yang menutup celah
+# adalah lapis Windows: menghidupkan ulang service bila proses NSSM-nya sendiri mati.
+& sc.exe failure $ServiceName reset= 0 actions= restart/5000 | Out-Null
 Write-Ok "Service '$ServiceName' terdaftar (auto start + auto restart)"
 
 # --- service caddy ---
@@ -230,6 +235,7 @@ Write-Ok "Service '$ServiceName' terdaftar (auto start + auto restart)"
 & $nssm set $CaddyService Start SERVICE_AUTO_START | Out-Null
 & $nssm set $CaddyService AppExit Default Restart | Out-Null
 & $nssm set $CaddyService AppThrottle 5000 | Out-Null
+& sc.exe failure $CaddyService reset= 0 actions= restart/5000 | Out-Null
 Write-Ok "Service '$CaddyService' terdaftar"
 
 Write-Host ""

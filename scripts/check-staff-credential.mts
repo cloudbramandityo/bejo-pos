@@ -12,6 +12,7 @@ import {
   credentialFallbackEmail,
   verifyStaffPassword,
 } from '../server/staffStore.ts';
+import { readFileSync, readdirSync } from 'node:fs';
 
 type Rec = Record<string, any>;
 
@@ -225,6 +226,31 @@ function check(label: string, condition: boolean, extra = '') {
   const noAuth = { ...account('', 'lama123'), email: '' } as any;
   const fourth = await verifyStaffPassword(noAuth, 'lama123', { verifyNative: ok, clearLegacy: clear });
   check('I: record tanpa authId tetap login lewat appPassword', fourth === true);
+}
+
+// J. Kredensial sinkronisasi tidak boleh ditulis ke .env dengan prefix VITE_:
+//    variabel itu ikut dibundel ke browser. Gejalanya (laporan VPS 2026-10-31):
+//    WARN "VITE_PB_SYNC_* masih ada di .env" selalu balik lagi walau barisnya
+//    sudah dihapus, karena skrip provisioning menuliskannya ulang tiap deploy.
+{
+  const read = (rel: string) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8');
+  const writesEnvValue = /^\s*VITE_PB_SYNC_[A-Z]+\s*=|Set-EnvValue\s+\S+\s+'VITE_PB_SYNC/m;
+  const penulisan: string[] = [];
+  for (const dir of ['deploy', 'scripts']) {
+    for (const name of readdirSync(new URL(`../${dir}/`, import.meta.url))) {
+      if (!name.endsWith('.ps1')) continue;
+      const rel = `${dir}/${name}`;
+      const sumber = read(rel);
+      const baris = sumber.split(/\r?\n/).filter((line) => writesEnvValue.test(line));
+      if (baris.length > 0) penulisan.push(`${rel}: ${baris[0].trim()}`);
+    }
+  }
+  check('J: tidak ada skrip .ps1 yang menulis VITE_PB_SYNC_* ke .env', penulisan.length === 0, penulisan.join(' | '));
+
+  // Broker sesi hanya boleh memakai PB_SYNC_*; fallback VITE_PB_SYNC_* hanya ada
+  // di Landing API (menoleransi .env lama) dan tidak boleh meluas ke jalur tulis.
+  const broker = read('server/pbSession.ts');
+  check('J: broker sesi hanya membaca PB_SYNC_*', !/process\.env\.VITE_PB_SYNC|env\('VITE_PB_SYNC/.test(broker));
 }
 
 console.log(failures === 0 ? 'SEMUA LULUS' : `${failures} GAGAL`);

@@ -320,8 +320,6 @@ Write-Host "   Mengisi variabel wajib..." -ForegroundColor DarkGray
 Set-EnvValue $envPath 'APP_URL' "https://$Domain"
 Set-EnvValue $envPath 'PORT' '3000'
 Set-EnvValue $envPath 'VITE_POCKETBASE_URL' "https://$Domain/api/pb"
-Set-EnvValue $envPath 'VITE_PB_SYNC_EMAIL' $SyncEmail
-Set-EnvValue $envPath 'VITE_PB_SYNC_PASSWORD' $SyncPassword
 Set-EnvValue $envPath 'PB_SYNC_EMAIL' $SyncEmail
 Set-EnvValue $envPath 'PB_SYNC_PASSWORD' $SyncPassword
 Set-EnvValue $envPath 'POCKETBASE_UPSTREAM' "http://127.0.0.1:$PB_PORT"

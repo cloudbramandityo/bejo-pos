@@ -257,11 +257,13 @@ function Get-ExeVersion([string]$path) {
 #
 # Aturan bawaan Windows (AllJoyn Router, Remote Desktop Shadow, Cortana,
 # Desktop App Web Viewer, dst.) memakai LocalPort '*' dan RemoteAddress 'Any'
-# TETAPI terikat pada satu program atau service. Menyimpulkan "port 3000
+# TETAPI terikat pada satu program, paket, atau service. Menyimpulkan "port 3000
 # terbuka dari internet" dari aturan semacam itu menghasilkan FAIL palsu yang
 # membuat operator mengira servernya bocor. Yang dihitung paparan hanya aturan
-# yang: protokolnya TCP/Any, portnya cocok, sumbernya internet, profilnya
-# berlaku untuk jaringan publik, dan tidak dipatok ke program/service tertentu.
+# yang: protokolnya TCP/Any, portnya cocok, sumbernya internet, profilnya berlaku
+# untuk jaringan publik, dan keempat kolom ikatannya terbaca serta semuanya
+# bernilai bebas (Any/'*'/kosong). Ikatan yang tidak terbaca menghasilkan WARN
+# "tidak disimpulkan", bukan FAIL dan bukan OK.
 # ---------------------------------------------------------------------
 function Test-FwTcpProtocol([string]$protocol) {
   if ([string]::IsNullOrWhiteSpace($protocol)) { return $true }
@@ -296,15 +298,92 @@ function Test-FwPublicProfile([string]$profile) {
   return [bool]($profile -match '(?i)^(any|public)$' -or $profile -match '(?i)public')
 }
 
-function Test-FwProgramScoped([string]$applicationName, [string]$packageId, [string]$service) {
-  if (-not [string]::IsNullOrWhiteSpace($applicationName)) { return $true }
-  if (-not [string]::IsNullOrWhiteSpace($packageId)) { return $true }
-  if (-not [string]::IsNullOrWhiteSpace($service) -and $service -notmatch '(?i)^(any|\*)$') { return $true }
-  return $false
+# Nilai 'Any'/'*'/'kosong' pada kolom ikatan berarti kolom itu tidak membatasi.
+# 'Any' harus dihitung sebagai tidak membatasi: kalau tidak, setiap aturan umum
+# justru disangka dipatok satu program.
+function Test-FwUnrestrictedValue([string]$value) {
+  if ([string]::IsNullOrWhiteSpace($value)) { return $true }
+  return [bool]($value -match '(?i)^(any|\*)$')
+}
+
+# Menilai satu aturan kandidat pembuka port: 'umum' (boleh disimpulkan sebagai
+# paparan), 'terikat' (dibatok program/paket/service, bukan pembuka port umum),
+# atau 'tak terbaca' (ikatan tidak bisa dibaca - tidak boleh disimpulkan apa pun).
+#
+# SEMUA kolom ikatan diperiksa. Aturan bawaan Windows seperti
+# 'Remote Desktop - Shadow (TCP-In)' dan 'Desktop App Web Viewer' menyimpan
+# programnya di kolom 'Application' berupa path (svchost.exe), sementara
+# 'ApplicationName' kosong. Membaca 'ApplicationName' saja membuat aturan itu
+# disangka pembuka port umum dan menghasilkan FAIL palsu "Port 3000 dibuka ke
+# internet" di VPS, padahal portnya tidak bisa tersambung dari luar.
+function Get-FwScopeVerdict($binding) {
+  if (-not $binding -or -not [bool]$binding.Readable) {
+    return [pscustomobject]@{ State = 'tak terbaca'; Detail = 'ikatan program/paket/service tidak terbaca' }
+  }
+  $parts = @()
+  $fields = @(
+    @{ label = 'program'; value = [string]$binding.App },
+    @{ label = 'namaProgram'; value = [string]$binding.AppName },
+    @{ label = 'paket'; value = [string]$binding.Pkg },
+    @{ label = 'service'; value = [string]$binding.Svc }
+  )
+  foreach ($pair in $fields) {
+    if (-not (Test-FwUnrestrictedValue $pair.value)) { $parts += ("{0}={1}" -f $pair.label, $pair.value) }
+  }
+  if ($parts.Count -gt 0) {
+    return [pscustomobject]@{ State = 'terikat'; Detail = ($parts -join ', ') }
+  }
+  return [pscustomobject]@{ State = 'umum'; Detail = 'tanpa ikatan program/paket/service' }
 }
 
 function Test-FwCouldExposePort($map, [int]$port) {
   return (Test-FwTcpProtocol ([string]$map.Protocol)) -and (Test-FwPortMatch ([string]$map.Ports) $port) -and (Test-FwInternetRemote ([string]$map.Remote)) -and (Test-FwPublicProfile ([string]$map.Profile))
+}
+
+function Join-FwFilterValues($items, [string]$property) {
+  $values = @()
+  foreach ($item in @($items)) {
+    $prop = $item.PSObject.Properties[$property]
+    if (-not $prop) { continue }
+    $textValue = [string]$prop.Value
+    if ($textValue -ne '') { $values += $textValue }
+  }
+  return ($values -join ',')
+}
+
+# Baca SEMUA kolom ikatan satu aturan. ErrorRecord dikumpulkan lewat
+# -ErrorVariable (bukan -ErrorAction Stop) supaya tidak meninggalkan baris noise
+# di transcript, dan stream-nya dibungkam. Tidak ada objek ApplicationFilter =
+# ikatannya tidak terbaca, jadi portnya tidak boleh disimpulkan.
+function Read-FwRuleBinding($rule) {
+  $appErr = $null
+  $svcErr = $null
+  $appFilter = @(Get-NetFirewallApplicationFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue -ErrorVariable appErr 2>$null)
+  $svcFilter = @(Get-NetFirewallServiceFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue -ErrorVariable svcErr 2>$null)
+  return @{
+    Readable = ($appFilter.Count -gt 0 -and -not $appErr -and -not $svcErr)
+    App      = Join-FwFilterValues $appFilter 'Application'
+    AppName  = Join-FwFilterValues $appFilter 'ApplicationName'
+    Pkg      = Join-FwFilterValues $appFilter 'PackageId'
+    Svc      = Join-FwFilterValues $svcFilter 'Service'
+  }
+}
+
+# Bagi aturan kandidat pembuka port menjadi tiga keadaan: umum (paparan nyata),
+# terikat program/paket/service (bukan pembuka port umum), dan tidak terbaca.
+function Get-FwPortAssessment($candidates) {
+  $umum = @()
+  $terikat = @()
+  $takTerbaca = @()
+  foreach ($c in @($candidates)) {
+    if (-not $c) { continue }
+    $verdict = Get-FwScopeVerdict (Read-FwRuleBinding $c.Rule)
+    $entry = @{ Name = [string]$c.Name; Detail = [string]$verdict.Detail }
+    if ($verdict.State -eq 'umum') { $umum += $entry }
+    elseif ($verdict.State -eq 'terikat') { $terikat += $entry }
+    else { $takTerbaca += $entry }
+  }
+  return @{ Umum = @($umum); Terikat = @($terikat); TakTerbaca = @($takTerbaca) }
 }
 
 # Contoh aturan diambil persis dari laporan VPS 2026-10-30 yang sempat
@@ -329,20 +408,95 @@ function Invoke-FirewallSelfTest {
     if ($got -eq $c.expect) { Write-Host "  OK   $($c.n)" -ForegroundColor Green }
     else { Write-Host "  FAIL $($c.n) (dapat=$got harus=$($c.expect))" -ForegroundColor Red; $failed++ }
   }
-  $scoped = @(
-    @{ a = 'C:\Windows\System32\svchost.exe'; p = ''; s = 'Any'; expect = $true },
-    @{ a = ''; p = 'Microsoft.Windows.Cortana_cw5n1h2txyewy'; s = 'Any'; expect = $true },
-    @{ a = ''; p = ''; s = 'AllJoynRouterService'; expect = $true },
-    @{ a = ''; p = ''; s = 'Any'; expect = $false },
-    @{ a = ''; p = ''; s = ''; expect = $false }
+  $scopeCases = @(
+    @{ n = 'path Application terisi = terikat (kasus aturan bawaan VPS)'; b = @{ Readable = $true; App = 'C:\Windows\System32\svchost.exe'; AppName = ''; Pkg = ''; Svc = 'Any' }; expect = 'terikat' },
+    @{ n = 'hanya PackageId terisi = terikat'; b = @{ Readable = $true; App = 'Any'; AppName = ''; Pkg = 'Microsoft.Windows.Cortana_cw5n1h2txyewy'; Svc = 'Any' }; expect = 'terikat' },
+    @{ n = 'hanya Service terisi = terikat'; b = @{ Readable = $true; App = 'Any'; AppName = ''; Pkg = ''; Svc = 'AllJoynRouterService' }; expect = 'terikat' },
+    @{ n = 'nama program saja terisi = terikat'; b = @{ Readable = $true; App = 'Any'; AppName = 'Desktop App Web Viewer'; Pkg = ''; Svc = 'Any' }; expect = 'terikat' },
+    @{ n = 'semua kolom Any = pembuka port umum'; b = @{ Readable = $true; App = 'Any'; AppName = 'Any'; Pkg = 'Any'; Svc = 'Any' }; expect = 'umum' },
+    @{ n = 'semua kolom kosong = pembuka port umum'; b = @{ Readable = $true; App = ''; AppName = ''; Pkg = ''; Svc = '' }; expect = 'umum' },
+    @{ n = 'ikatan tidak terbaca = jangan menyimpulkan'; b = @{ Readable = $false }; expect = 'tak terbaca' },
+    @{ n = 'aturan tanpa objek ikatan = jangan menyimpulkan'; b = $null; expect = 'tak terbaca' }
   )
-  foreach ($c in $scoped) {
-    $got = Test-FwProgramScoped $c.a $c.p $c.s
-    if ($got -eq $c.expect) { Write-Host "  OK   terikat program/service '$($c.a)$($c.p)$($c.s)'" -ForegroundColor Green }
-    else { Write-Host "  FAIL terikat program/service '$($c.a)$($c.p)$($c.s)' (dapat=$got harus=$($c.expect))" -ForegroundColor Red; $failed++ }
+  foreach ($c in $scopeCases) {
+    $got = Get-FwScopeVerdict $c.b
+    if ([string]$got.State -eq [string]$c.expect) { Write-Host "  OK   $($c.n)" -ForegroundColor Green }
+    else { Write-Host "  FAIL $($c.n) (dapat=$($got.State) harus=$($c.expect))" -ForegroundColor Red; $failed++ }
   }
+
+  # Uji JALAN BACA ikatan, bukan hanya keputusannya. Kesalahannya dulu ada di
+  # kolom yang dibaca (hanya ApplicationName, padahal Shadow menulis svchost.exe
+  # di Application), jadi kasus semacam ini harus dijalankan lewat kode asli.
+  # Cmdlet filter dipalsukan dengan fungsi bernama sama di scope ini - lookup
+  # perintah PowerShell memakai dynamic scope, jadi Read-FwRuleBinding di bawah
+  # memanggil versi palsu itu dan tidak ada perubahan sistem yang terjadi.
+  $appByRule = @{
+    'hanya-path' = @([pscustomobject]@{ Application = 'C:\Windows\System32\svchost.exe'; ApplicationName = ''; PackageId = '' })
+    'paket-saja' = @([pscustomobject]@{ Application = 'Any'; ApplicationName = ''; PackageId = 'Microsoft.Windows.Cortana_cw5n1h2txyewy' })
+    'bebas' = @([pscustomobject]@{ Application = 'Any'; ApplicationName = 'Any'; PackageId = 'Any' })
+    'kosong' = @()
+    'galat' = @()
+  }
+  $svcByRule = @{
+    'hanya-path' = @([pscustomobject]@{ Service = 'Any' })
+    'paket-saja' = @([pscustomobject]@{ Service = 'Any' })
+    'bebas' = @([pscustomobject]@{ Service = 'Any' })
+    'kosong' = @()
+    'galat' = @([pscustomobject]@{ Service = 'TermService' })
+  }
+  function Get-NetFirewallApplicationFilter {
+    [CmdletBinding()]
+    param($AssociatedNetFirewallRule)
+    $kunci = [string]$AssociatedNetFirewallRule.RuleName
+    if ($kunci -eq 'galat') { Write-Error 'ikatan tidak terbaca'; return }
+    return $appByRule[$kunci]
+  }
+  function Get-NetFirewallServiceFilter {
+    [CmdletBinding()]
+    param($AssociatedNetFirewallRule)
+    return $svcByRule[[string]$AssociatedNetFirewallRule.RuleName]
+  }
+
+  $bucketCases = @(
+    @{ n = 'Shadow (hanya path Application) masuk Terikat, bukan paparan'; kunci = 'hanya-path'; harus = 'Terikat'; mengandung = 'svchost.exe' },
+    @{ n = 'paket UWP masuk Terikat'; kunci = 'paket-saja'; harus = 'Terikat'; mengandung = 'Cortana' },
+    @{ n = 'aturan bebas masuk Umum (boleh disebut paparan)'; kunci = 'bebas'; harus = 'Umum'; mengandung = '' },
+    @{ n = 'ikatan tidak ada objek masuk TakTerbaca'; kunci = 'kosong'; harus = 'TakTerbaca'; mengandung = '' },
+    @{ n = 'cmdlet gagal masuk TakTerbaca'; kunci = 'galat'; harus = 'TakTerbaca'; mengandung = '' }
+  )
+  foreach ($c in $bucketCases) {
+    $candidates = @(@{ Name = 'Aturan Uji'; Rule = [pscustomobject]@{ RuleName = $c.kunci } })
+    $hasil = Get-FwPortAssessment $candidates
+    $total = @($hasil.Umum).Count + @($hasil.Terikat).Count + @($hasil.TakTerbaca).Count
+    $isi = @($hasil[$c.harus])
+    $ok = ($total -eq 1 -and $isi.Count -eq 1)
+    if ($ok -and $c.mengandung) { $ok = ([string]$isi[0].Detail -match [regex]::Escape($c.mengandung)) }
+    if ($ok) { Write-Host "  OK   $($c.n)" -ForegroundColor Green }
+    else { Write-Host "  FAIL $($c.n) (total=$total, bucket=$($c.harus) isi=$($isi.Count))" -ForegroundColor Red; $failed++ }
+  }
+  # Penilaian aksi pemulihan service: dulu FailureActions kosong langsung
+  # dilaporkan "belum ada aksi pemulihan", padahal service NSSM (semua service
+  # toko ini) tidak pernah menulisnya dan punya pengawas restart sendiri.
+  $recoveryCases = @(
+    @{ n = 'Windows restart-service = dipulihkan Windows'; s = @{ Windows = 'restart-service'; Nssm = $false; AppExit = '' }; harus = 'windows' },
+    @{ n = 'NSSM tanpa AppExit tertulis = bawaan Restart, tetap dipulihkan'; s = @{ Windows = 'none'; Nssm = $true; AppExit = '' }; harus = 'nssm-bawaan' },
+    @{ n = 'NSSM AppExit=Restart = dipulihkan NSSM'; s = @{ Windows = 'none'; Nssm = $true; AppExit = 'Restart' }; harus = 'nssm' },
+    @{ n = 'NSSM AppExit=Exit = benar-benar tanpa restart'; s = @{ Windows = 'none'; Nssm = $true; AppExit = 'Exit' }; harus = 'nssm-dimatikan' },
+    @{ n = 'NSSM AppExit=Ignore = benar-benar tanpa restart'; s = @{ Windows = 'none'; Nssm = $true; AppExit = 'Ignore' }; harus = 'nssm-dimatikan' },
+    @{ n = 'bukan NSSM tanpa FailureActions = tanpa pengawas'; s = @{ Windows = 'none'; Nssm = $false; AppExit = '' }; harus = 'tanpa-pengawas' },
+    @{ n = 'Windows reboot bukan restart service'; s = @{ Windows = 'reboot'; Nssm = $false; AppExit = '' }; harus = 'tanpa-pengawas' },
+    @{ n = 'registri tidak terbaca = jangan menyimpulkan'; s = @{ Windows = 'tak terbaca'; Nssm = $false; AppExit = '' }; harus = 'tak terbaca' }
+  )
+  foreach ($c in $recoveryCases) {
+    $got = (Get-RecoveryVerdict $c.s).Level
+    if ([string]$got -eq [string]$c.harus) { Write-Host "  OK   $($c.n)" -ForegroundColor Green }
+    else { Write-Host "  FAIL $($c.n) (dapat=$got harus=$($c.harus))" -ForegroundColor Red; $failed++ }
+  }
+
+  Remove-Item Function:Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue
+  Remove-Item Function:Get-NetFirewallServiceFilter -ErrorAction SilentlyContinue
   if ($failed -gt 0) { Write-Host "  SELFTEST GAGAL: $failed kasus salah." -ForegroundColor Red; return 1 }
-  Write-Host '  Semua kasus penilaian port firewall lulus.' -ForegroundColor Green
+  Write-Host '  Semua kasus penilaian port firewall & aksi pemulihan service lulus.' -ForegroundColor Green
   return 0
 }
 
@@ -362,6 +516,46 @@ function Get-ServiceRecovery([string]$serviceName) {
       default { return 'none' }
     }
   } catch { return 'tak terbaca' }
+}
+
+# Ada DUA pengawas restart yang berbeda dan keduanya harus dilihat. FailureActions
+# hanya dipakai Windows Service Control Manager; service yang dibuat lewat NSSM
+# (BejoStikerPOS, Caddy, PocketBase di VPS ini) tidak pernah menulisnya, karena
+# NSSM menyimpan pengaturan sendiri di subkey Parameters dan nilai bawaan AppExit
+# adalah Restart. Menilai FailureActions saja membuat service yang selalu dihidupkan
+# ulang dilaporkan "belum ada aksi pemulihan" - temuan palsu.
+function Get-ServiceSupervision([string]$serviceName) {
+  $key = "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName"
+  $nssmKey = Join-Path $key 'Parameters'
+  $dikelolaNssm = Test-Path -LiteralPath $nssmKey
+  $appExit = $null
+  if ($dikelolaNssm) {
+    $appExit = (Get-ItemProperty -Path $nssmKey -Name 'AppExit' -ErrorAction SilentlyContinue).AppExit
+  }
+  return @{ Windows = (Get-ServiceRecovery $serviceName); Nssm = [bool]$dikelolaNssm; AppExit = [string]$appExit }
+}
+
+# Penilaian murni dari hasil pembacaan di atas - bisa diuji lewat -SelfTest tanpa
+# menyentuh registri.
+function Get-RecoveryVerdict($state) {
+  $windows = [string]$state.Windows
+  $appExit = ([string]$state.AppExit).Trim()
+  if ($windows -eq 'restart-service') {
+    return [pscustomobject]@{ Level = 'windows'; Detail = "FailureActions=$windows" }
+  }
+  if ($state.Nssm) {
+    if ([string]::IsNullOrWhiteSpace($appExit)) {
+      return [pscustomobject]@{ Level = 'nssm-bawaan'; Detail = 'AppExit belum ditulis; bawaan NSSM = Restart' }
+    }
+    if ($appExit -match '(?i)^restart$') {
+      return [pscustomobject]@{ Level = 'nssm'; Detail = "AppExit=$appExit" }
+    }
+    return [pscustomobject]@{ Level = 'nssm-dimatikan'; Detail = "AppExit=$appExit" }
+  }
+  if ($windows -eq 'tak terbaca') {
+    return [pscustomobject]@{ Level = 'tak terbaca'; Detail = 'registri aksi pemulihan tidak terbaca dan service tidak dikelola NSSM' }
+  }
+  return [pscustomobject]@{ Level = 'tanpa-pengawas'; Detail = "failure action Windows: $windows" }
 }
 
 function Find-LogFiles {
@@ -407,8 +601,8 @@ try {
 
   try {
     $drive = Get-PSDrive -Name C -ErrorAction Stop
-    $freeGb = [math]::Round($drive.Free / 1GB, 1)
-    if ($freeGb -lt 10) { Warn "Disk C: hanya $freeGb GB tersisa" } else { Ok "Disk C: tersisa $freeGb GB" }
+    $script:DiskFreeGb = [math]::Round($drive.Free / 1GB, 1)
+    if ($script:DiskFreeGb -lt 10) { Warn "Disk C: hanya $script:DiskFreeGb GB tersisa" } else { Ok "Disk C: tersisa $script:DiskFreeGb GB" }
   } catch { Warn 'Gagal membaca kapasitas disk C:.' }
 
   if (-not (Test-Path $AppDir)) {
@@ -625,7 +819,7 @@ import dotenv from 'dotenv';
 import PocketBase from 'pocketbase';
 
 const [envPath, pbUrl] = process.argv.slice(2);
-const out = { pbUrl, generatedAt: new Date().toISOString(), sync: {}, admin: {}, users: {}, appUsers: {}, collections: {}, risk: {} };
+const out = { pbUrl, generatedAt: new Date().toISOString(), sync: {}, admin: {}, users: {}, appUsers: {}, collections: {}, risk: {}, logs: {} };
 // dotenv dipakai apa adanya supaya hasilnya sama dengan server POS. Parser
 // buatan sendiri tidak menangani escape (\" dan \\) sehingga password ber-escape
 // dikirim salah dan login admin dilaporkan gagal padahal kredensialnya benar.
@@ -843,6 +1037,41 @@ if (adminPb) {
   } catch (e) {
     out.collections.listError = `${e?.status || ''} ${e?.message || e}`.trim();
   }
+
+  // Isi berkas database sekunder (auxiliary.db pada PocketBase 0.28) tidak boleh
+  // disimpulkan dari namanya. Volume log permintaan diukur lewat API resmi memakai
+  // token admin yang sudah ada; kegagalan dicatat apa adanya, bukan dianggap nol.
+  out.logs.available = false;
+  const authHeader = { Authorization: adminPb.authStore.token };
+  const logPage = async (params) => {
+    const res = await fetch(`${pbUrl}/api/logs/records?${params}`, { headers: authHeader });
+    if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 160)}`);
+    return res.json();
+  };
+  try {
+    let page;
+    try {
+      page = await logPage('perPage=1&sort=-@created');
+    } catch {
+      page = await logPage('perPage=1');
+    }
+    out.logs.available = true;
+    out.logs.totalItems = Number(page.totalItems ?? 0);
+    out.logs.newest = page.items?.[0]?.created ?? null;
+  } catch (e) {
+    out.logs.error = String(e?.message || e).slice(0, 200);
+  }
+  try {
+    const res = await fetch(`${pbUrl}/api/settings`, { headers: authHeader });
+    if (res.ok) {
+      const settings = await res.json();
+      out.logs.settings = Object.fromEntries(Object.entries(settings).filter(([k]) => /log/i.test(k)));
+    } else {
+      out.logs.settingsError = `${res.status} ${(await res.text()).slice(0, 160)}`;
+    }
+  } catch (e) {
+    out.logs.settingsError = String(e?.message || e).slice(0, 200);
+  }
 }
 
 console.log(JSON.stringify(out, null, 2));
@@ -959,19 +1188,50 @@ console.log(JSON.stringify(out, null, 2));
   $pbData = $pbDataCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
   if ($pbData) {
     Ok "Folder data PocketBase: $pbData"
+    $pbFiles = @()
     foreach ($file in @('data.db', 'auxiliary.db', 'logs.db')) {
       $full = Join-Path $pbData $file
-      if (Test-Path $full) {
-        $sizeMb = [math]::Round((Get-Item $full).Length / 1MB, 1)
-        $info = "$file $sizeMb MB (ubah $((Get-Item $full).LastWriteTime))"
-        if ($sizeMb -gt 2048) { Warn "Ukuran $info - pertimbangkan backup/arsip." } else { Info $info }
+      if (-not (Test-Path -LiteralPath $full)) { continue }
+      $item = Get-Item -LiteralPath $full
+      $sizeMb = [math]::Round($item.Length / 1MB, 1)
+      $pbFiles += [pscustomobject]@{ Name = $item.Name; Mb = $sizeMb }
+      if ($sizeMb -gt 2048) { Warn "$($item.Name) $sizeMb MB (ubah $($item.LastWriteTime)) - pertimbangkan backup/arsip." }
+      else { Info "$($item.Name) $sizeMb MB (ubah $($item.LastWriteTime))" }
+    }
+
+    # Berkas database yang membesar dilaporkan bersama sisa disk dan volume log
+    # TERUKUR dari API. Tanpa angka itu skrip tidak boleh menyebut penyebabnya -
+    # "isi auxiliary.db pasti log permintaan" hanya dugaan kalau tidak diukur.
+    $logInfo = $null
+    if ($nodeResult) { $logInfo = $nodeResult.logs }
+    if ($logInfo -and [bool]$logInfo.available) {
+      Info "Log permintaan PocketBase terukur: $($logInfo.totalItems) record (terbaru $($logInfo.newest))"
+    }
+    if ($logInfo -and $logInfo.settings) {
+      $props = @($logInfo.settings.PSObject.Properties)
+      if ($props.Count -gt 0) {
+        Info ("Retensi log terbaca dari pengaturan server: {0}" -f (($props | ForEach-Object { "$($_.Name)=$($_.Value)" }) -join ' '))
       }
     }
-    $wal = Join-Path $pbData 'data.db-wal'
-    if (Test-Path $wal) {
-      $walMb = [math]::Round((Get-Item $wal).Length / 1MB, 1)
-      if ($walMb -gt 200) { Warn "WAL PocketBase $walMb MB (checkpoint tertahan; cek disk/pembukaan koneksi)." }
-      else { Info "WAL data.db-wal $walMb MB" }
+    foreach ($f in $pbFiles) {
+      if ($f.Mb -le 512) { continue }
+      $pctDisk = 0
+      if ($script:DiskFreeGb -gt 0) { $pctDisk = [math]::Round(100 * ($f.Mb / 1024) / $script:DiskFreeGb, 1) }
+      if ($logInfo -and [bool]$logInfo.available) {
+        Warn ("{0} {1} MB = {2}% dari sisa disk C: ({3} GB). Kalau bertambahnya dari log permintaan (lihat jumlah record di atas), perpendek retensinya di panel Logs PocketBase." -f `
+          $f.Name, $f.Mb, $pctDisk, $script:DiskFreeGb)
+      } else {
+        $alasan = 'volume log belum terukur (pemeriksaan akun dilewati atau login admin gagal)'
+        if ($logInfo -and $logInfo.error) { $alasan = "volume log gagal diukur: $($logInfo.error)" }
+        Warn "$($f.Name) $($f.Mb) MB = $pctDisk% dari sisa disk C: ($($script:DiskFreeGb) GB); $alasan - isi berkas tidak disimpulkan."
+      }
+    }
+    foreach ($db in @('data.db', 'auxiliary.db', 'logs.db')) {
+      $wal = Join-Path $pbData "$db-wal"
+      if (-not (Test-Path -LiteralPath $wal)) { continue }
+      $walMb = [math]::Round((Get-Item -LiteralPath $wal).Length / 1MB, 1)
+      if ($walMb -gt 200) { Warn "WAL $db-wal $walMb MB (checkpoint tertahan; cek disk/pembukaan koneksi)." }
+      else { Info "WAL $db-wal $walMb MB" }
     }
   } else { Warn 'Folder data PocketBase tidak ditemukan di lokasi umum.' }
 
@@ -1075,9 +1335,27 @@ console.log(JSON.stringify(out, null, 2));
       if ($detail) {
         if ($detail.StartMode -eq 'Auto') { Ok "$svcName mulai otomatis (StartMode Auto)" }
         else { Warn "$svcName StartMode=$($detail.StartMode) - service tidak akan hidup sendiri setelah host restart." }
-        $recovery = Get-ServiceRecovery $svcName
-        if ($recovery -eq 'restart-service') { Ok "$svcName dipulihkan otomatis oleh Windows saat crash" }
-        else { Warn "$svcName belum ada aksi pemulihan 'restart pada kegagalan' (failure action: $recovery); set lewat nssm set $svcName AppExit Default Restart." }
+        $recovery = Get-RecoveryVerdict (Get-ServiceSupervision $svcName)
+        switch ($recovery.Level) {
+          'windows' {
+            Ok "$svcName dipulihkan otomatis oleh Windows saat crash ($($recovery.Detail))"
+          }
+          'nssm' {
+            Ok "$svcName dipulihkan otomatis oleh NSSM ($($recovery.Detail))"
+          }
+          'nssm-bawaan' {
+            Ok "$svcName dipulihkan otomatis oleh NSSM ($($recovery.Detail)); cek nilainya dengan nssm get $svcName AppExit"
+          }
+          'nssm-dimatikan' {
+            Warn "$svcName TIDAK dihidupkan ulang saat prosesnya mati (NSSM $($recovery.Detail)); kembalikan ke Restart pada nilai registri AppExit di subkey Parameters service ini, lalu nssm get $svcName AppExit untuk memastikan."
+          }
+          'tak terbaca' {
+            Warn "$svcName aksi pemulihan TIDAK disimpulkan ($($recovery.Detail)) - jalankan skrip sebagai Administrator."
+          }
+          default {
+            Warn "$svcName tidak dikelola NSSM dan tanpa restart otomatis Windows ($($recovery.Detail)); set lewat sc.exe failure $svcName reset=0 actions=restart/5000 atau pindahkan pemasangannya ke NSSM."
+          }
+        }
       }
     }
 
@@ -1137,31 +1415,26 @@ console.log(JSON.stringify(out, null, 2));
         })
         foreach ($p in @(3000, 8090)) {
           $candidates = @($allowMaps | Where-Object { Test-FwCouldExposePort $_ $p })
-          $open = @()
-          $scopedCount = 0
-          foreach ($c in $candidates) {
-            $appName = ''
-            $pkgId = ''
-            $svcBound = ''
-            try {
-              $appFilter = Get-NetFirewallApplicationFilter -AssociatedNetFirewallRule $c.Rule -ErrorAction SilentlyContinue
-              $svcFilter = Get-NetFirewallServiceFilter -AssociatedNetFirewallRule $c.Rule -ErrorAction SilentlyContinue
-              $appName = [string]$appFilter.ApplicationName
-              $pkgId = [string]$appFilter.PackageId
-              $svcBound = [string]$svcFilter.Service
-            } catch { }
-            if (Test-FwProgramScoped $appName $pkgId $svcBound) { $scopedCount++; continue }
-            $open += $c
-          }
-          $nameList = (($open | Select-Object -First 5 | ForEach-Object { $_.Name }) -join ' | ')
-          if ($open.Count -gt 5) { $nameList += " (+$($open.Count - 5) lainnya)" }
-          if ($open.Count -gt 0) {
-            Fail "Port $p benar-benar dibuka ke internet oleh aturan: $nameList - hanya Caddy (80/443) yang boleh publik."
+          $nilai = Get-FwPortAssessment $candidates
+          $umum = $nilai.Umum
+          $terikat = $nilai.Terikat
+          $takTerbaca = $nilai.TakTerbaca
+          $nameList = ((@($umum | Select-Object -First 5 | ForEach-Object { "$($_.Name) [$($_.Detail)]" }) -join ' | '))
+          if ($umum.Count -gt 5) { $nameList += " (+$($umum.Count - 5) lainnya)" }
+          if ($umum.Count -gt 0) {
+            Fail "Port $p dibuka ke internet oleh aturan umum tanpa ikatan program: $nameList - hanya Caddy (80/443) yang boleh publik."
+          } elseif ($takTerbaca.Count -gt 0) {
+            $unknownList = ((@($takTerbaca | Select-Object -First 5 | ForEach-Object { $_.Name }) -join ' | '))
+            if ($takTerbaca.Count -gt 5) { $unknownList += " (+$($takTerbaca.Count - 5) lainnya)" }
+            Warn "Port $p TIDAK disimpulkan: $($takTerbaca.Count) aturan cocok port/profil/sumbernya tetapi ikatan program/service-nya tidak terbaca ($unknownList). Jalankan skrip sebagai Administrator, dan pastikan port dari luar sebelum menyebutnya aman atau bocor."
           } else {
             $blocked = @($blockMaps | Where-Object { (Test-FwTcpProtocol $_.Protocol) -and (Test-FwPortMatch $_.Ports $p) })
             $why = ''
             if ($blocked.Count -gt 0) { $why = " dan ada aturan Block eksplisit ($($blocked[0].Name))" }
-            elseif ($scopedCount -gt 0) { $why = " ($scopedCount aturan yang cocok portnya terikat program/service, bukan pembuka port umum)" }
+            elseif ($terikat.Count -gt 0) {
+              $contoh = (($terikat | Select-Object -First 2 | ForEach-Object { "$($_.Name) [$($_.Detail)]" }) -join '; ')
+              $why = " ($($terikat.Count) aturan yang cocok portnya terikat program/paket/service, contoh: $contoh)"
+            }
             Ok "Port $p tidak dibuka ke internet$why."
           }
         }

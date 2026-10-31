@@ -91,6 +91,7 @@ if (-not (Test-Path $nssm)) {
     & $nssm set $ServiceName Start SERVICE_AUTO_START | Out-Null
     & $nssm set $ServiceName AppExit Default Restart | Out-Null
     & $nssm set $ServiceName AppThrottle 5000 | Out-Null
+    & sc.exe failure $ServiceName reset= 0 actions= restart/5000 | Out-Null
     New-Item -ItemType Directory -Path "$PB_DIR\logs" -Force | Out-Null
     & $nssm start $ServiceName | Out-Null
     Write-Ok "Service '$ServiceName' terdaftar (auto start + auto restart)"

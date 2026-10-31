@@ -59,6 +59,7 @@ import {
 import { Customer, CustomerCategory, Transaction, UserRole, AppUser, Supplier, Agent, StoreProfile, CustomRole, PrintSettings, StockTransaction, Product } from '../types';
 import { formatRupiah } from '../utils/formatters';
 import { StoreInfo, getStoredDefaultLogo, saveStoredDefaultLogo, clearStoredDefaultLogo, isDefaultCustomerCategory, DEFAULT_MASTER_STORE_PROFILE, getStoredPrintSettings, saveStoredPrintSettings, DEFAULT_PRINT_SETTINGS } from '../utils/storage';
+import { LOGO_TARGET_CHARS, compressLogoFromDataUrl, compressLogoImage } from '../utils/storeLogoImage';
 import { downloadBackupJSON, validateBackupPayload, restoreBackupToStorage, restoreBackupToCloud, PosBackupPayload } from '../utils/backupUtils';
 import { DeveloperJokerIcon } from './DeveloperJokerIcon';
 import { StoreLogo } from './StoreLogo';
@@ -647,32 +648,11 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
       const img = new Image();
       img.onload = () => {
         try {
-          // Resize to maximum 400x400 while preserving aspect ratio
-          const maxDimension = 400;
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > maxDimension) {
-              height = Math.round((height * maxDimension) / width);
-              width = maxDimension;
-            }
+          const dataUrl = compressLogoImage(img);
+          if (!dataUrl) {
+            setLogoUploadError('Gambar logo tidak dapat dibaca. Coba file lain.');
           } else {
-            if (height > maxDimension) {
-              width = Math.round((width * maxDimension) / height);
-              height = maxDimension;
-            }
-          }
-
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, width, height);
-            const dataUrl = canvas.toDataURL('image/png', 0.92);
-            
-            // Set and save as permanent default logo across storage and store info
+            // Logo ikut tersebar ke perangkat lain lewat catatan toko, jadi ukurannya diperkecil lebih dulu.
             saveStoredDefaultLogo(dataUrl);
             const updatedStoreInfo: StoreInfo = {
               ...storeForm,
@@ -680,7 +660,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
             };
             setStoreForm(updatedStoreInfo);
             onSaveStoreInfo(updatedStoreInfo);
-            setLogoSuccessToast('Logo berhasil diunggah dan dijadikan Logo Default aplikasi.');
+            setLogoSuccessToast('Logo berhasil diunggah dan dikirim ke semua perangkat.');
             setTimeout(() => setLogoSuccessToast(null), 4000);
           }
         } catch (err) {
@@ -710,13 +690,30 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
     if (e.target) e.target.value = '';
   };
 
-  const handleSetAsDefaultLogo = () => {
-    if (storeForm.logoUrl) {
-      saveStoredDefaultLogo(storeForm.logoUrl);
-      onSaveStoreInfo({ ...storeForm, logoUrl: storeForm.logoUrl });
-      setLogoSuccessToast('Logo ini ditetapkan sebagai Logo Default aplikasi.');
-      setTimeout(() => setLogoSuccessToast(null), 3500);
+  /**
+   * Logo yang terlalu besar tidak akan pernah terbaca di perangkat lain, jadi
+   * diperkecil lebih dulu. Bila masih terlalu besar, penyimpanan dibatalkan dan
+   * operator diberi tahu — bukan disimpan diam-diam tanpa logo.
+   */
+  const prepareLogoForSave = async (logoUrl?: string): Promise<string | null> => {
+    if (!logoUrl || logoUrl.length <= LOGO_TARGET_CHARS) return logoUrl || '';
+    const compressed = await compressLogoFromDataUrl(logoUrl);
+    if (compressed.length > LOGO_TARGET_CHARS) {
+      setLogoUploadError('Logo terlalu besar untuk dikirim ke perangkat lain. Unggah gambar yang lebih sederhana.');
+      return null;
     }
+    return compressed;
+  };
+
+  const handleSetAsDefaultLogo = async () => {
+    if (!storeForm.logoUrl) return;
+    const logoUrl = await prepareLogoForSave(storeForm.logoUrl);
+    if (logoUrl === null) return;
+    saveStoredDefaultLogo(logoUrl);
+    setStoreForm({ ...storeForm, logoUrl });
+    onSaveStoreInfo({ ...storeForm, logoUrl });
+    setLogoSuccessToast('Logo ini ditetapkan sebagai Logo Default aplikasi.');
+    setTimeout(() => setLogoSuccessToast(null), 3500);
   };
 
   const handleResetLogo = () => {
@@ -733,12 +730,15 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
     }
   };
 
-  const handleSaveStoreSubmit = (e: React.FormEvent) => {
+  const handleSaveStoreSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!storeForm.storeName.trim()) {
       alert('Nama toko wajib diisi.');
       return;
     }
+    const logoUrl = await prepareLogoForSave(storeForm.logoUrl);
+    if (logoUrl === null) return;
+    setStoreForm({ ...storeForm, logoUrl });
     onSaveStoreInfo({
       storeName: storeForm.storeName.trim(),
       appTitle: (storeForm.appTitle || '').trim() || 'Point of Sales',
@@ -746,7 +746,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
       address: storeForm.address.trim(),
       phone: storeForm.phone.trim(),
       receiptFooter: storeForm.receiptFooter.trim(),
-      logoUrl: storeForm.logoUrl || '',
+      logoUrl,
       storeStatus: 'ONLINE'
     });
     setStoreSavedToast(true);

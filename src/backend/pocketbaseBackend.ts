@@ -58,6 +58,7 @@ import {
   DEFAULT_MACHINES,
   DEFAULT_SPK_ORDERS
 } from '../utils/storage';
+import { sanitizeForDb } from '../utils/dbSanitize';
 import {
   INITIAL_CATEGORIES,
   INITIAL_CUSTOMERS,
@@ -664,37 +665,10 @@ function stopRealtimeWatchdogIfIdle(): void {
 /*  Sanitizer                                                                 */
 /* -------------------------------------------------------------------------- */
 /**
- * Membersihkan data sebelum disimpan ke PocketBase:
- * - membuang undefined / function
- * - mengubah NaN menjadi 0
- * - membuang payload base64 gigantic (> 50.000 karakter)
+ * Aturan ukuran ada di `src/utils/dbSanitize.ts` supaya bisa diuji tanpa koneksi
+ * server: lampiran base64 biasa dibuang, tetapi `logoUrl` punya batas sendiri agar
+ * logo toko sampai ke perangkat lain.
  */
-export function sanitizeForDb<T>(obj: T): T {
-  if (obj === null || obj === undefined) return obj;
-  if (typeof obj === 'number') return (isNaN(obj) ? 0 : obj) as unknown as T;
-  if (typeof obj === 'string') {
-    if (obj.length > 50000 && (obj.startsWith('data:') || obj.startsWith('blob:'))) {
-      return '' as unknown as T;
-    }
-    return obj;
-  }
-  if (Array.isArray(obj)) {
-    return obj
-      .filter((item) => item !== undefined && typeof item !== 'function')
-      .map((item) => sanitizeForDb(item)) as unknown as T;
-  }
-  if (typeof obj === 'object' && !(obj instanceof Date)) {
-    const cleanObj: Record<string, any> = {};
-    for (const [key, value] of Object.entries(obj as any)) {
-      if (key === 'fileDataUrl' || key === 'previewThumbnail' || key === 'blob') continue;
-      if (value !== undefined && typeof value !== 'function') {
-        cleanObj[key] = sanitizeForDb(value);
-      }
-    }
-    return cleanObj as T;
-  }
-  return obj;
-}
 
 /** Alias lama (kompatibilitas) */
 export const sanitizeForFirestore = sanitizeForDb;

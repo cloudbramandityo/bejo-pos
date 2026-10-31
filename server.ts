@@ -17,6 +17,7 @@ import {
   getPublishedLandingIdentity,
   type PublishedLandingIdentity,
 } from "./server/landingApi";
+import { registerBrandingRoutes } from "./server/brandingApi";
 import { APP_NAME, APP_VERSION } from "./src/config/brand";
 
 dotenv.config();
@@ -2103,5 +2104,6 @@ registerPbSessionRoutes(app);
 registerUserAdminRoutes(app);
 registerMarketingRoutes(app);
 registerLandingRoutes(app);
+registerBrandingRoutes(app);
 
 setupVite();

@@ -18,6 +18,7 @@ import {
   PosAuthError,
   type SiteMode,
 } from '../lib/posAuth';
+import { getPublicBranding, type PublicBranding } from '../lib/branding';
 import { APP_NAME, APP_VERSION } from '../config/brand';
 
 interface LoginScreenProps {
@@ -39,6 +40,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [siteMode, setSiteMode] = useState<SiteMode | null>(null);
+  const [branding, setBranding] = useState<PublicBranding | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,10 +53,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         // login lokal (password tersimpan di browser) tidak diizinkan.
         if (!cancelled) setSiteMode({ publicSite: true, mode: 'public', staffLoginReady: false, developerLoginReady: false });
       });
+    getPublicBranding().then((value) => {
+      if (!cancelled && value) setBranding(value);
+    });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const brandName = branding?.storeName || storeName;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -138,7 +145,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             <StoreLogo
               size="2xl"
               rounded="rounded-xl"
-              storeName={storeName}
+              storeName={brandName}
+              customLogoUrl={branding?.logoUrl}
               className="p-1 bg-white rounded-xl border border-slate-250 shadow-xs"
             />
           </div>

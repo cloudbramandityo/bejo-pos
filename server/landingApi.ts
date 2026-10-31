@@ -199,6 +199,14 @@ function recordPayload(record: any): Record<string, any> | null {
   return flat;
 }
 
+/**
+ * Isi salah satu record `settings` menurut id aplikasi. Dipakai juga oleh endpoint
+ * branding toko supaya koneksi dan kredensial PocketBase hanya ada satu tempat.
+ */
+export async function readSettingsPayload(legacyId: string): Promise<Record<string, any> | null> {
+  return recordPayload(await findRecordByLegacyId(legacyId));
+}
+
 export interface PublishedLandingIdentity {
   siteTitle: string;
   metaDescription: string;

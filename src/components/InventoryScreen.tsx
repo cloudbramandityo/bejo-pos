@@ -40,6 +40,7 @@ import { isDigitalPrintingProduct, isProductionSuppliesProduct, isPaketProduct }
 import { getMaterialStockFormula, formatStandardKemasan, formatStockDisplay } from '../utils/stockUtils';
 import { StoreLogo } from './StoreLogo';
 import { ProductImageModal } from './modals/ProductImageModal';
+import { canEditCatalog } from '../utils/recordAccess';
 
 interface InventoryScreenProps {
   products: Product[];
@@ -63,6 +64,9 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
   userRole = 'DEVELOPER',
 }) => {
   const isDeveloper = userRole === 'DEVELOPER';
+  // Akun SPK boleh membuka Katalog untuk melihat daftar produk; tombol ubah,
+  // tambah produk, dan kelola kategori disembunyikan untuk yang tidak berhak.
+  const canEdit = canEditCatalog(userRole);
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -224,6 +228,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
   };
 
   const openAddModal = () => {
+    if (!canEdit) return;
     setEditingProduct(null);
     setFormCode('');
     setFormName('');
@@ -260,6 +265,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
   };
 
   const openEditModal = (p: Product) => {
+    if (!canEdit) return;
     setEditingProduct(p);
     setFormCode(p.code);
     setFormName(p.name);
@@ -406,6 +412,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
 
   // Category modal actions
   const handleOpenCategoryModal = () => {
+    if (!canEdit) return;
     setEditingCatId(null);
     setCatFormName('');
     setCatFormColor('blue');
@@ -550,30 +557,40 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Kelola data produk & harga. Semua produk selalu tersedia (tanpa batas stok) dan otomatis tersimpan ke server.
+              {canEdit
+                ? 'Kelola data produk & harga. Semua produk selalu tersedia (tanpa batas stok) dan otomatis tersimpan ke server.'
+                : 'Daftar produk, harga jual, dan stok toko. Perubahan hanya lewat akun yang berhak.'}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleOpenCategoryModal}
-            className="px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl border border-slate-300 shadow-2xs flex items-center gap-2 transition-all active:scale-[0.98] cursor-pointer"
-            title="Kelola & Ubah Kategori Produk"
-          >
-            <Tags className="w-4 h-4 text-blue-600" />
-            Kelola Kategori
-          </button>
+          {canEdit ? (
+            <>
+              <button
+                type="button"
+                onClick={handleOpenCategoryModal}
+                className="px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl border border-slate-300 shadow-2xs flex items-center gap-2 transition-all active:scale-[0.98] cursor-pointer"
+                title="Kelola & Ubah Kategori Produk"
+              >
+                <Tags className="w-4 h-4 text-blue-600" />
+                Kelola Kategori
+              </button>
 
-          <button
-            type="button"
-            onClick={openAddModal}
-            className="px-4 py-2.5 bg-[#1e295d] hover:bg-[#151e44] text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 transition-all active:scale-[0.98] cursor-pointer"
-          >
-            <Plus className="w-4 h-4 text-sky-400" />
-            Input Produk Baru
-          </button>
+              <button
+                type="button"
+                onClick={openAddModal}
+                className="px-4 py-2.5 bg-[#1e295d] hover:bg-[#151e44] text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 transition-all active:scale-[0.98] cursor-pointer"
+              >
+                <Plus className="w-4 h-4 text-sky-400" />
+                Input Produk Baru
+              </button>
+            </>
+          ) : (
+            <span className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-xs font-bold">
+              Hanya melihat — ubah harga atau kategori memakai akun yang berhak.
+            </span>
+          )}
         </div>
       </div>
 
@@ -827,14 +844,16 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                       {/* Aksi */}
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(product)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-                            title="Edit Produk"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(product)}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                              title="Edit Produk"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                          )}
                             {isDeveloper && (
                               <button
                                 type="button"

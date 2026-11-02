@@ -10,8 +10,12 @@ import {
   TAX_CONFIG_2026,
   PtkpStatus,
   MonthlyTaxBilling,
-  MonthlyBillingsByYear
+  MonthlyBillingsByYear,
+  DEFAULT_DPP_BASIS_MODE,
+  dppBasisModeOfYear,
+  exemptThresholdForMode
 } from '../types/tax';
+import { recomputeMonthlyBillingYear } from './taxBillingMath';
 import { getStoredTransactions } from './storage';
 import { getStoredInvoices, convertInvoicesToTransactions } from './invoiceStorage';
 import { convertDdMmYyToYyyyMmDd } from './formatters';
@@ -136,7 +140,7 @@ export const createInitialTaxReturn = (year: number, taxpayer?: TaxpayerProfile)
       nppnRatePercent: 20, // 20% misal norma industri percetakan
       netIncomeCalculated: 0,
       isUmkmPp55: true,
-      umkmTaxExemptThreshold: 500000000,
+      umkmTaxExemptThreshold: exemptThresholdForMode(DEFAULT_DPP_BASIS_MODE),
       umkmTaxableRevenue: 0,
       umkmTaxAmount: 0,
     },
@@ -200,7 +204,8 @@ export const recomputeTaxReturn = (spt: TaxAnnualReturn1770): TaxAnnualReturn177
     if (updated.businessActivity.isUmkmPp55) {
       // UMKM PP 55/2022
       const gross = Math.max(0, updated.businessActivity.grossRevenue || 0);
-      const threshold = updated.businessActivity.umkmTaxExemptThreshold || 500000000;
+      const threshold = updated.businessActivity.umkmTaxExemptThreshold
+        ?? TAX_CONFIG_2025.umkmExemptThresholdOp;
       const taxable = Math.max(0, gross - threshold);
       // Prefer explicit umkmTaxAmount if already set/synced from monthly billing records
       const tax = typeof updated.businessActivity.umkmTaxAmount === 'number' && updated.businessActivity.umkmTaxAmount > 0
@@ -351,55 +356,11 @@ export const MONTH_NAMES = [
 ];
 
 /**
- * Recomputes monthly billing for a year:
- * - If PPh Final Disetor is entered and rate is provided:
- *   DPP = PPh Final Disetor / (Tarif / 100)
- *   Peredaran Bruto = DPP
- * - Calculates Kumulatif Omzet (Running Cumulative Sum)
+ * Aturan hitung bulanan ada di `taxBillingMath.ts` (bersih, bisa dijalankan
+ * penjaga tanpa peramban). Diimpor ulang di sini supaya seluruh layar pajak tetap
+ * membaca satu jalur penyimpanan.
  */
-export const recomputeMonthlyBillingYear = (items: MonthlyTaxBilling[]): MonthlyTaxBilling[] => {
-  let runningCumulative = 0;
-  return items.map((item) => {
-    const tariff = typeof item.tariffRatePercent === 'number' && item.tariffRatePercent > 0
-      ? item.tariffRatePercent
-      : 0.5;
-
-    let pph = Number(item.pphFinalPaid) || 0;
-    let dpp = Number(item.taxableBaseDpp) || 0;
-    let gross = Number(item.grossRevenue) || 0;
-
-    // Intelligent auto-calculation
-    if (pph > 0) {
-      dpp = Math.round(pph / (tariff / 100));
-      if (!gross || gross === 0) {
-        gross = dpp;
-      }
-    }
-
-    const cumulativeBefore = runningCumulative;
-    runningCumulative += gross;
-
-    if (pph <= 0 && gross > 0) {
-      // PP 55/2022: omzet s.d. Rp 500 juta/tahun tidak dikenai PPh Final.
-      // PPh dihitung dari bagian omzet kumulatif yang melewati ambang tersebut.
-      const exemptThreshold = 500_000_000;
-      const cumulativeTaxable = Math.max(0, runningCumulative - exemptThreshold);
-      const previousTaxable = Math.max(0, cumulativeBefore - exemptThreshold);
-      const monthlyTaxable = Math.max(0, cumulativeTaxable - previousTaxable);
-      dpp = Math.round(monthlyTaxable);
-      pph = Math.round(monthlyTaxable * (tariff / 100));
-    }
-
-    return {
-      ...item,
-      pphFinalPaid: pph,
-      tariffRatePercent: tariff,
-      taxableBaseDpp: dpp,
-      grossRevenue: gross,
-      cumulativeRevenue: runningCumulative,
-    };
-  });
-};
+export { recomputeMonthlyBillingYear, getYearDppBasisMode, setYearDppBasisMode } from './taxBillingMath';
 
 /**
  * Daftar billing 12 bulan kosong (Rp 0) untuk setiap tahun pajak yang aktif.
@@ -425,6 +386,7 @@ export const generateDefaultMonthlyBillings = (): MonthlyBillingsByYear => {
         paymentBank: '',
         isPaid: false,
         notes: '',
+        dppBasisMode: DEFAULT_DPP_BASIS_MODE,
       };
     });
 
@@ -524,6 +486,8 @@ export const saveStoredMonthlyBillings = (data: MonthlyBillingsByYear, fromCloud
 /**
  * Synchronize an annual return (Formulir 1770) with the monthly billing records from Riwayat Pelaporan
  * - Aligns gross revenue, DPP, and PPh Final disetor
+ * - Bagian omzet yang tidak masuk DPP ikut dibawa, jadi SPT memakai dasar DPP yang
+ *   sama dengan mode yang disetel di tabel billing
  * - Updates finalIncomes (UMKM PP 55) and audit trail
  */
 export const syncReturnWithMonthlyBillings = (
@@ -535,6 +499,8 @@ export const syncReturnWithMonthlyBillings = (
 
   const totalGross = yearBillings.reduce((sum, item) => sum + (item.grossRevenue || 0), 0);
   const totalPphPaid = yearBillings.reduce((sum, item) => sum + (item.pphFinalPaid || 0), 0);
+  const totalDpp = yearBillings.reduce((sum, item) => sum + (item.taxableBaseDpp || 0), 0);
+  const exemptAmount = Math.max(0, totalGross - totalDpp);
 
   const updatedFinalIncomes = [...(ret.finalIncomes || [])];
   const pp55Idx = updatedFinalIncomes.findIndex(f => f.categoryCode === 'UMKM_PP55');
@@ -565,11 +531,8 @@ export const syncReturnWithMonthlyBillings = (
       hasBusinessIncome: true,
       isUmkmPp55: true,
       grossRevenue: totalGross,
-      umkmTaxExemptThreshold: ret.businessActivity.umkmTaxExemptThreshold || 500000000,
-      umkmTaxableRevenue: Math.max(
-        0,
-        totalGross - (ret.businessActivity.umkmTaxExemptThreshold || 500000000)
-      ),
+      umkmTaxExemptThreshold: exemptAmount,
+      umkmTaxableRevenue: totalDpp,
       umkmTaxAmount: totalPphPaid,
     },
     finalIncomes: updatedFinalIncomes,
@@ -779,6 +742,9 @@ export const importBillingsFromPosTransactions = (year: number): MonthlyTaxBilli
     return parseInt(dateKey.slice(0, 4), 10) === year;
   });
 
+  // Mengimpor omzet tidak boleh diam-diam mengubah dasar DPP yang sudah disetel tahun ini.
+  const previousMode = dppBasisModeOfYear(getStoredMonthlyBillings()[year]);
+
   const rawList: MonthlyTaxBilling[] = MONTH_NAMES.map((monthName, idx) => {
     const monthNum = idx + 1;
     const monthStr = monthNum < 10 ? `0${monthNum}` : `${monthNum}`;
@@ -805,6 +771,7 @@ export const importBillingsFromPosTransactions = (year: number): MonthlyTaxBilli
       paymentBank: '',
       isPaid: false,
       notes: monthGross > 0 ? `Sinkronisasi omzet riil dari ${monthTransactions.length} transaksi penjualan Toko Bejo` : '',
+      dppBasisMode: previousMode,
     };
   });
 

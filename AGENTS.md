@@ -58,13 +58,26 @@ Lokasi folder hanya boleh datang dari konfigurasi bersama, tidak pernah dikarang
 
 Akun staf tidak boleh dikenali hanya dari id aplikasi.
 
-- Restore backup dari perangkat lain membawa id lama (`user_1789...`), sedangkan orang yang sama di cloud bisa punya id PocketBase. Mencocokkan per id saja membuat akun ditolak (`USERNAME_TAKEN`) atau digandakan.
+- Restore backup dari perangkat lain tidak lagi membawa akun staf (lihat **Cakupan berkas cadangan**) — id lama `user_1789...` tidak muncul di berkas. Yang masih harus dicocokkan adalah orang yang sama di cloud dengan id PocketBase miliknya sendiri, lewat `POST /api/users`.
 - `POST /api/users` mencocokkan berurutan: `legacyId` → username → email kredensial `<username>@staff.bejo.local` → email cadangan `<username>-<id>@staff.bejo.local`. Bila sudah ada, akun **diadopsi**: profil diperbarui, tetapi id cloud, status aktif, dan password yang berlaku dipertahankan.
 - Password akun cloud yang sudah ada tidak pernah ditimpa data backup.
 - Record kredensial tidak pernah dibuat tanpa pengecekan ketiga penanda di atas, dan record hasil email cadangan selalu membawa `legacyId` agar bisa ditemukan lagi.
 - Penolakan PocketBase diteruskan beserta detail field (`details`) supaya penyebabnya tidak berhenti di "Failed to create record.".
-- Hasil restore memisahkan `skippedRecords` (digabungkan) dari `failedRecords`, dan hanya menyarankan "Coba Lagi" bila `retryable` (jaringan/5xx).
+- Hasil restore hanya memisahkan `syncedRecords` dari `failedRecords`, dan hanya menyarankan "Coba Lagi" bila `retryable` (jaringan/5xx). Konsep `skippedRecords` sudah dihapus bersama hilangnya task 'Pengguna' dari pemulihan.
 - Uji regresi tanpa database: `npm run check:users` (PocketBase palsu di memori).
+
+## Cakupan berkas cadangan (wajib)
+
+Berkas cadangan berisi **semua data aplikasi kecuali akun login staf**. Nama masuk, kata sandi, foto profil, dan flag wajib ganti sandi tidak boleh masuk maupun keluar berkas — pemulihannya adalah tugas halaman Hak Akses & Akun, bukan berkas `.json`.
+
+- Sumber kebenaran: `src/utils/backupDomains.ts` (`BACKUP_DOMAINS`, `EXCLUDED_STORAGE_KEYS`). Modul itu **murni** — dilarang mengimpor `pocketbaseBackend` supaya penjaga bisa menjalankan logikanya di Node.
+- Satu domain = satu kunci dengan `key`, `label`, `group`, `shape` (`array`/`object`/`scalar`), `storageKeys`, `cloudChannel`, dan `cloudWrite` (`record`/`payload`/`none`). Menambah cermin localStorage baru wajib menambah barisnya; `npm run check:backup` bagian C gagal kalau ada kunci yang tidak terdaftar maupun daftar yang menunjuk kunci tak nyata.
+- Payload, pratinjau, pemulihan ke perangkat, dan antrean kirim ke server semuanya membaca daftar yang sama (`DOMAIN_ACCESS` di `src/utils/backupUtils.ts` hanya menyediakan `read`/`restore`/`cloud` per kunci). Dilarang menambah field manual di `generateBackupPayload`, menyusun ulang daftar domain di layar, atau menulis ringkasan `totalXxx` per domain — bagian E penjaga menolaknya.
+- Bentuk berkas `version: '3.0.0'` dengan `data` berisi kunci domain dan `summary: { totalRecords, counts }`. Berkas lama tetap bisa dipulihkan: `validateBackupPayload` menghapus `data.users`/`data.authUser` sebelum masuk, dan jumlah domain yang tidak punya field ringkasan dihitung ulang dari isinya.
+- Domain tanpa `cloudWrite` jujur sebagai **hanya-perangkat** (`deviceOnlyDomainLabels()` tampil di layar cadangan). Data semacam ini hilang saat perangkat diganti, jadi jangan pernah menuliskannya sebagai "ikut tersimpan di server" — solusinya menambah jalur tulis server, bukan memperindah teks.
+- Urutan daftar dipakai restore: tagihan PPh bulanan sebelum SPT tahunan (cermin tahun tidak boleh tertimpa dari arah salah), dan `activeShift` satu-satunya domain `allowsNull` karena menghapus shift aktif berarti mengirim `null`.
+- Kunci yang sengaja dikeluarkan punya alasan tertulis di `EXCLUDED_STORAGE_KEYS` (berisi nama masuk/kata sandi, mode tema, izin folder per peramban, antrean kirim ulang, dan alamat lembar Google Sheet milik toko). Menambah kunci localStorage baru tanpa memasukkannya ke salah satu daftar membuat penjaga gagal — itu tujuannya.
+- Uji regresi: `npm run check:backup` (`scripts/check-backup-coverage.mts`) — konsistensi daftar (A), pengecualian akun (B), pemindaian seluruh pemakaian `localStorage` di `src/` (C), jalur kirim per domain (D), aturan registry-driven (E), berkas lama (F), dan perhitungan jumlah isi (G).
 
 ## Kebijakan kredensial akun staf (wajib)
 
@@ -92,12 +105,27 @@ Setiap staf mengatur sendiri nama tampilan, foto profil, username login, dan pas
 - Akun DEVELOPER tidak punya baris direktori; perubahan profilnya ditolak server (`PROFILE_DEVELOPER_LOCKED`) dan diatur lewat `DEV_USERNAME` / `DEV_PASSWORD_HASH`.
 - Aturan wajib ganti password **tidak pernah** berlaku untuk DEVELOPER. Kredensialnya berasal dari `DEV_PASSWORD_HASH`, bukan direktori staf, sehingga flag `mustChangePassword` selalu `false` di respons login/sesi dan modal terkunci tidak boleh muncul — termasuk bila localStorage menyimpan flag lama (`true`); merge sesi di `App.tsx` menimpanya dan modal memakai `forceChange = forced && !isDeveloper`. ID `user_dev`/`sys_core_developer` juga ditolak untuk buat/ubah/hapus akun (`ACCOUNT_RESERVED`).
 
+## Daftar wewenang akun — USER-ROLE.md (wajib)
+
+`USER-ROLE.md` di root proyek adalah **daftar tunggal** role → tab, wewenang ubah/hapus, dan mode akses Jurnal. Pemilik minta satu tempat untuk mengatur wewenang (2026-11-02), jadi berkas itu **tidak boleh** jadi tulisan cantik yang tertinggal:
+
+- Isi tabel dibaca `npm run check:access` (seksi H). Kolom role dibandingkan dengan union `UserRole` di `src/types.ts` (tambah role baru = tabel wajib ditambah), baris tab dibandingkan dengan `allowed()` di `Navbar.tsx`, baris wewenang dibandingkan dengan hasil fungsi aslinya di `recordAccess.ts` + `journalAccessPolicy.ts`, dan gerbang pasang layar di `App.tsx` dibandingkan dengan baris tab yang sama. Sel berbeda = penjaga gagal, lengkap dengan `dokumen "…" vs kode "…"`.
+- Urutan mengubah: **edit fungsi di `recordAccess.ts` → sesuaikan baris di `USER-ROLE.md` → `npm run check:access`**. Jangan menulis daftar role di komponen supaya "cukup update file ini" — berkas `.md` tidak menegakkan apa pun; yang menegakkan adalah fungsi + penjaga.
+- Fungsi baru yang Aturan Wewenang-nya ingin didaftarkan harus diimpor penjaga lewat `src/utils/recordAccess.ts` atau `src/utils/journalAccessPolicy.ts` (kolom "Fungsi" dicari di kedua modul itu); nama fungsi yang tidak ada membuat H7 gagal, bukan dilewati diam-diam.
+- Ekspresi gerbang di Navbar dievaluasi penjaga dari **sumber aslinya** (`const isX = role === 'Y'`, `const canAccessX = …`, `case '<tab>': return …`), jadi tidak ada tabel makna kedua yang bisa salah tulis. Ekspresi di luar bentuk itu (variabel tak dikenal, karakter tak wajar) membuat penjaga gagal dengan pesan "ekspresi tidak dikenal" — tambahkan ruang lingkup evaluasinya secara sadar, jangan dilonggarkan.
+- `USER-ROLE.md` ikut menandai jujur: gerbang wewenang data operasional masih di sisi tampilan; yang ditegakkan server hanya akun, profil mandiri, Jurnal, dan blueprint.
+
 ## Wewenang ADMIN & OWNER atas data operasional (wajib)
 
-Ada **dua** aturan di `src/utils/recordAccess.ts` dan keduanya dipakai layar — jangan menyatukannya:
+Ada **enam** aturan di `src/utils/recordAccess.ts` dan semuanya dipakai layar — jangan menyatukannya:
 
 - `canManageRecords(role)` → DEVELOPER atau ADMIN. Dipakai **tab SPK Cetak** saja (`SpkScreen`).
 - `canManageBusinessData(role)` → DEVELOPER, ADMIN, **dan OWNER**. Dipakai lima tab yang diminta pemilik (2026-10-31): **Agen, Laporan, Invoice, Pajak, Marketing** — `AgentScreen`, `TransactionHistoryScreen`, `ReconciliationScreen`, `InvoiceScreen`, `TaxScreen`.
+- `canViewCatalog(role)` → DEVELOPER, ADMIN, OWNER, **dan SPK**. Membuka tab Katalog (permintaan pemilik 2026-11-02).
+- `canEditCatalog(role)` → DEVELOPER, ADMIN, OWNER. **SPK tidak termasuk**: hak ubah harga kulak akan ikut menggeser nilai aset toko.
+- `canViewSalesReport(role)` → DEVELOPER, ADMIN, OWNER, **dan SPK**. Membuka tab Laporan.
+- `canViewAllReportMenus(role)` → DEVELOPER, ADMIN, OWNER. Mengatur menu **Laporan Keuangan** dan **Rekonsiliasi** di dalam tab Laporan; SPK hanya melihat **Laporan Penjualan**. Menu Jurnal tetap dari `journalAccessPolicy.ts` — jangan menyatukannya.
+- `canDownloadBlueprint(role)` → DEVELOPER saja (lihat seksi blueprint di bawah).
 
 - Yang termasuk wewenang ADMIN: hapus order SPK (kartu Kanban, baris tabel, modal detail), purge arsip SPK Selesai, edit/hapus transaksi penjualan, edit/hapus mutasi stok, dan hapus dokumen PI/INV termasuk status Lunas.
 - Wewenang OWNER sama persis **kecuali** tab SPK Cetak: OWNER tidak boleh hapus order/purge arsip SPK. Perluasan sengaja tidak dilakukan lewat `canManageRecords` supaya aturan SPK tidak ikut berubah.
@@ -106,7 +134,13 @@ Ada **dua** aturan di `src/utils/recordAccess.ts` dan keduanya dipakai layar —
 - Label tombol tidak boleh lagi berbunyi "Khusus DEVELOPER" (atau "Khusus DEVELOPER & ADMIN", "DEVELOPER MODULE", "Under Development by …") bila aksinya sudah dipakai bersama ADMIN/OWNER — tulisan yang menyesatkan membuat operator mengira akunnya rusak. Badge modal hapus transaksi kini "AKSES MANAJEMEN TOKO", modal edit mutasi stok "MANAJEMEN STOK", dan placeholder PPh Badan "DALAM PENGEMBANGAN".
 - Jejak perubahan (audit trail) wajib memakai akun yang sedang login lewat `describeAuditActor(currentUser)` (`src/utils/auditActor.ts`) — `TaxFilingWizard` dan `TaxFilingHistoryView` menerima `actorLabel` dari `TaxScreen`, dan `App.tsx` meneruskan `currentUser`. Nama orang tetap ("Langgo Bramandityo (DEVELOPER)") membuat perubahan ADMIN/OWNER tercatat atas nama developer.
 - Ubah wewenang cukup di satu fungsi `recordAccess.ts`; jangan menambah pemeriksaan `role === 'DEVELOPER'` baru di komponen.
-- Uji regresi: `npm run check:access` (`scripts/check-business-access.mts`) — mengunci pemisahan dua aturan itu (OWNER **false** di SPK, **true** di lima tab), memanggil gerbang yang benar per layar, dan memindai label menyesatkan + nama author tetap di modul pajak.
+- Cara SPK memakai dua tab yang baru dibuka (2026-11-02):
+  - **Katalog = hanya melihat.** `InventoryScreen` menghitung `const canEdit = canEditCatalog(userRole)` lalu memasang `if (!canEdit) return;` di **tiga jalan masuk** perubahan — `openAddModal`, `openEditModal`, `handleOpenCategoryModal` — dan menyembunyikan tombol "Kelola Kategori", "Input Produk Baru", serta "Edit Produk" per baris. Semua tulis (`onSaveProduct`, `onSaveProductCategory`, `onRenameProductCategory`, `setCategoryToDelete`) lewat modal yang hanya terbuka dari tiga fungsi itu, jadi gerbangnya tidak bisa dilewati. Hapus produk tetap `isDeveloper`. Jangan menambah gerbang role keempat di dalam tombol.
+  - Peran yang tidak boleh mengubah isi **wajib diberi tulisan**, bukan deretan tombol yang hilang: chip "Hanya melihat — ubah harga atau kategori memakai akun yang berhak." dan penjelasan header ikut `canEdit`.
+  - **Laporan = hanya menu Laporan Penjualan.** `LaporanScreen` menyusun `subTabs` dengan `...(canSeeAllMenus ? [...] : [])` dan konten dibaca dari `visibleSubTab` (hasil normalisasi `activeSubTab` terhadap daftar menu yang ada), supaya sub-tab yang tidak diizinkan tidak pernah ter-render walau role berubah saat layar terbuka.
+  - **Seluruh format laporan terbuka untuk SPK**: tombol Harian/Mingguan/Bulanan/Semua Waktu dan pemilih tanggal/bulan/tahun di `TransactionHistoryScreen` **tidak boleh** digerbang role — `canManage` di layar itu hanya untuk tulis (edit/hapus baris) dan tab "Laporan Agen".
+  - Efek pemaksa tab di `App.tsx` (deps `[currentUser, currentTab]`) dulu mengunci SPK di tab `spk` dan akan memantul keluar dari Katalog/Laporan. Role `SPK` sekarang boleh `spk` + `inventory` + `transactions`; syaratnya dibaca dari **fungsi aturan yang sama** (`canViewCatalog(currentUser.role)` / `canViewSalesReport(currentUser.role)`), bukan daftar nama tab baru di komponen.
+- Uji regresi: `npm run check:access` (`scripts/check-business-access.mts`) — mengunci pemisahan dua aturan kelola (OWNER **false** di SPK, **true** di lima tab), memanggil gerbang yang benar per layar, memindai label menyesatkan + nama author tetap di modul pajak, dan seksi G mengunci akses SPK (empat fungsi aturan, gerbang Navbar/App, tiga `if (!canEdit) return;`, menu laporan yang disembunyikan, empat format laporan tanpa gerbang), dan seksi H membandingkan seluruh tabel `USER-ROLE.md` dengan kode.
 
 ## Hak akses modul Jurnal (wajib)
 
@@ -126,7 +160,7 @@ Aturan tunggal ada di `src/utils/journalAccessPolicy.ts` (`canReadJournal` = DEV
 `PB_SYNC_EMAIL` / `PB_SYNC_PASSWORD` di `.env` adalah **sumber kebenaran** kredensial akun sinkronisasi yang dipakai broker `/api/pocketbase/session`. Record `users` miliknya dikelola server, bukan staf.
 
 - Akun sinkronisasi **tidak boleh punya baris `app_users`**. Baris seperti itu tampil di Hak Akses dan pernah membuat restore backup menulis ulang email/password akun tersebut, sehingga broker 503 dan aplikasi jatuh ke Mode Lokal.
-- `ensureStaffDirectory` menghapus baris direktori yang `authId`-nya record sinkronisasi; `loadStaffAccounts` menyembunyikan akun ber-email sinkronisasi; `saveCredential` dan `deleteAccount` menolaknya (`ACCOUNT_RESERVED`); username `sync` ditolak (`USERNAME_RESERVED`); restore backup menghitung kedua kode itu sebagai dilewati.
+- `ensureStaffDirectory` menghapus baris direktori yang `authId`-nya record sinkronisasi; `loadStaffAccounts` menyembunyikan akun ber-email sinkronisasi; `saveCredential` dan `deleteAccount` menolaknya (`ACCOUNT_RESERVED`); username `sync` ditolak (`USERNAME_RESERVED`). Restore backup tidak lagi menyentuh akun sama sekali (lihat **Cakupan berkas cadangan**), jadi kedua kode itu tidak pernah muncul lagi dari jalur pemulihan.
 - `ensureSyncAccount` (`server/staffStore.ts`) menyamakan record dengan `.env` saat boot dan sekali lagi ketika login sinkronisasi ditolak; **jangan** menghapus panggilan ini. Tanpa `PB_ADMIN_EMAIL`/`PB_ADMIN_PASSWORD` yang valid perbaikan dilewati (tidak menebak).
 - Bila live terlanjur Mode Lokal, jalankan di VPS: `powershell -ExecutionPolicy Bypass -File C:\bejo-pos\scripts\repair-sync-account.ps1` (periksa) lalu tambahkan `-Apply` (menulis) atau `-Apply -RestartService`. Skrip tidak pernah merotasi password superuser.
 - Skrip PowerShell yang memanggil Node: PowerShell 5.1 **membuang argumen string kosong**, jadi URL PocketBase harus menjadi argumen terakhir dan skrip Node wajib menolak URL yang tidak diawali `http://`/`https://`. Tanpa itu URL bisa menerima nilai seperti `check` dan semua login gagal dengan pesan SDK "Something went wrong." yang menyesatkan.
@@ -206,6 +240,22 @@ Tahun mana saja yang boleh diisi di tab Pajak adalah **satu daftar pengaturan**,
 - Editor tambah/kurang tahun ada di submenu **13. Pengaturan Pajak** bagian "5. Tahun Pajak yang Diisi"; status pengirimannya dibaca dari `getSyncStatus()` / `onSyncStatusChange()`, bukan tulisan tetap.
 - Angka di Riwayat Pelaporan wajib terukur: pertumbuhan antar tahun (`yoyGrowth`) dan bulan omzet terbesar (`peakRevenueMonth`) dihitung dari catatan billing. Tulisan "+21.4%" dan "Puncak Tertinggi: Bulan Desember" adalah fabrikasi dan sudah dihapus.
 - Uji regresi: `npm run check:tax-years` (bawaan + pembersihan nilai, cermin dan event, aturan tambah/kurang, tahun terpilih saat layar dibuka, label rentang, layar + editor + penyimpanan membaca daftar, kanal server dan `fromCloud`, tidak ada klaim angka karangan).
+
+## Dasar pengenaan PPh Final bulanan (wajib)
+
+Permintaan pemilik 2026-11-02: di tab Pajak → menu **12. Riwayat Pelaporan**, ketik **Peredaran Bruto** maka **PPh Disetor** terisi sendiri dengan asumsi DPP dikenakan = Peredaran Bruto. Fasilitas Rp 500 juta (PP 55/2022) tetap harus bisa dipakai, jadi ada **dua mode per tahun** dan bawaannya bruto penuh (pilihan pemilik: "Dua mode, bruto penuh bawaan").
+
+- Aturan mode ada di `src/types/tax.ts`: `DppBasisMode` = `'BRUTO_PENUH' | 'AMBANG_500_JUTA'`, `DEFAULT_DPP_BASIS_MODE` = `BRUTO_PENUH`, `DPP_BASIS_MODE_LABEL` (tulisan layar, **persis**: "Seluruh Peredaran Bruto" dan "Omzet di atas Rp 500 juta (PP 55/2022)"), `DPP_BASIS_MODES`, `normalizeDppBasisMode`, `dppBasisModeOfYear`, `exemptThresholdForMode`, `isFullGrossBasis` (layar menulis penjelasan lewat predikat ini, bukan membandingkan nama mode). Jangan menulis ulang nama mode atau angka Rp 500 juta di komponen — ambang hanya dari `TAX_CONFIG_2025.umkmExemptThresholdOp`, dan `exemptThresholdForMode('BRUTO_PENUH')` = 0.
+- Perhitungannya ada di `src/utils/taxBillingMath.ts` (murni, **tidak boleh** menggantung ke modul koneksi server, sama seperti `taxYears.ts`, supaya penjaga menjalankannya di Node): `recomputeMonthlyBillingYear` (kedua arah input: ketik Bruto → PPh dan DPP ikut hitung sesuai mode; ketik PPh → DPP = PPh ÷ tarif dan Bruto diisi bila kosong), `getYearDppBasisMode`, `setYearDppBasisMode`. `src/utils/taxStorage.ts` hanya mengimpor dan mengekspor ulang — layar memanggil lewat `taxStorage`.
+- Mode disimpan **di baris billing** (`MonthlyTaxBilling.dppBasisMode`), bukan di koleksi baru. `billingsByYear` adalah field JSON di record `tax_monthly_billings/all_years`, jadi **tidak ada** perubahan skema di `scripts/create-pocketbase-collections.mjs`, `diagnose-live.ps1`, maupun `deploy/finish-deploy.ps1`, dan **tidak boleh** menambah langganan baru — mode ikut terkirim lewat kanal billing yang sudah ada dan muncul di perangkat lain.
+- Ganti mode **wajib menghitung ulang dari Peredaran Bruto**: `setYearDppBasisMode` mengosongkan `pphFinalPaid` (bila bruto bulan itu terisi) dan `taxableBaseDpp` lebih dulu. Tanpa pengosongan itu, PPh hasil hitungan sebelumnya terbaca sebagai input manual dan perpindahan mode tidak mengubah apa pun (bug yang dijaga I18).
+- Pemilih ada di banner "Dasar DPP:" pada `TaxFilingHistoryView.tsx` (`handleBillingModeChange` → `setYearDppBasisMode` → `saveStoredMonthlyBillings` → tandai `hasUnsavedChanges`), dan satu tahun penuh ikut dihitung ulang; bulan yang PPh-nya diketik manual tanpa Bruto tidak tertimpa.
+- Nilai SPT 1770 dibaca dari **jumlah DPP tabel billing**, bukan dihitung ulang dengan ambang: `syncReturnWithMonthlyBillings` memakai `umkmTaxableRevenue = totalDpp` dan `umkmTaxExemptThreshold = totalGross - totalDpp`, sehingga mode bruto penuh menulis ambang 0 apa adanya.
+- Angka ambang di layar **wajib** dibaca dengan `??`, bukan `||`: `umkmTaxExemptThreshold ?? TAX_CONFIG_2025.umkmExemptThresholdOp` (`TaxIncomeView`, `TaxFinalNonTaxableView`, `TaxDashboard`, `recomputeTaxReturn`). Dengan `||`, nilai 0 yang benar dari mode bruto penuh diam-diam berubah jadi Rp 500 juta.
+- `TaxOfficialPrintView.tsx` mencetak satu kalimat jujur tentang dasar yang dipakai tahun itu (`Dasar pengenaan PPh Final tahun …: <label mode>`) dan label totalnya tidak lagi berbunyi "TOTAL SETAHUN (PP 55/2022)"; kutipan PP 55/2022 tetap tercetak sebagai dasar hukum, bukan sebagai klaim perhitungan. Kepala Lampiran III menulis **DASAR DPP**, bukan "FASILITAS: Bebas Pajak s.d Rp 500 Juta".
+- Angka ambang yang tampil di layar dibaca dari isian tahun itu: `TaxDashboard.tsx`, `TaxIncomeView.tsx`, `TaxFinalNonTaxableView.tsx` mencetak `formatRupiah(umkmThreshold)` (nol berarti bruto penuh), dan penjelasan fasilitas memakai `isFullGrossBasis` / `exemptThresholdForMode`. Tulisan "Rp 500.000.000" sebagai teks tetap di tiga layar itu adalah fabrikasi; kutipan aturan di **13. Pengaturan Pajak** boleh tetap karena memang mengutip regulasi, dengan satu kalimat penunjuk tempat memilih dasar.
+- Mengimpor omzet dari transaksi POS tidak boleh diam-diam mengganti mode tahun itu — `importBillingsFromPosTransactions` membaca `dppBasisModeOfYear` lama dan memakainya untuk baris baru.
+- Uji regresi: `npm run check:tax-years` seksi I (dua mode + bawaan bruto penuh, label persis, ambang dari konfigurasi, DPP = Bruto dan PPh = Bruto × tarif pada tarif 0,5% dan 1%, fasilitas 500 juta tetap utuh, kumulatif, arah input PPh, baris tanpa mode, ganti mode dua arah menghitung ulang, tidak ada kolom server baru, layar tidak menulis mode/angka sendiri, cetak menyebut dasar, angka ambang di layar berasal dari isian tahun).
 
 ## Koneksi server & sinkronisasi realtime (wajib)
 

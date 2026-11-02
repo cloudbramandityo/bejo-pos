@@ -24,6 +24,47 @@ export function canManageBusinessData(role?: UserRole | string | null): boolean 
 }
 
 /**
+ * Wewenang membuka tab Katalog di navigasi. DEVELOPER, ADMIN, OWNER, dan akun
+ * kategori SPK. Yang tiga peran pertama boleh mengubah isi; SPK hanya melihat
+ * (hak ubahnya ada di `canEditCatalog` di bawah).
+ */
+export function canViewCatalog(role?: UserRole | string | null): boolean {
+  const normalized = normalizeRole(role);
+  return normalized === 'DEVELOPER' || normalized === 'OWNER' || normalized === 'ADMIN' || normalized === 'SPK';
+}
+
+/**
+ * Wewenang mengubah isi Katalog: tambah produk, ubah produk, kelola kategori.
+ * DEVELOPER, ADMIN, OWNER — SPK sengaja tidak termasuk supaya operator cetak
+ * tidak bisa mengubah harga kulak yang ikut menggeser nilai aset toko.
+ * Menghapus produk tetap hanya DEVELOPER (diperiksa terpisah di layar).
+ */
+export function canEditCatalog(role?: UserRole | string | null): boolean {
+  const normalized = normalizeRole(role);
+  return normalized === 'DEVELOPER' || normalized === 'ADMIN' || normalized === 'OWNER';
+}
+
+/**
+ * Wewenang membuka tab Laporan. DEVELOPER, ADMIN, OWNER, dan akun kategori SPK.
+ * Untuk SPK menu yang muncul hanya Laporan Penjualan — lihat
+ * `canViewAllReportMenus` di bawah.
+ */
+export function canViewSalesReport(role?: UserRole | string | null): boolean {
+  const normalized = normalizeRole(role);
+  return normalized === 'DEVELOPER' || normalized === 'OWNER' || normalized === 'ADMIN' || normalized === 'SPK';
+}
+
+/**
+ * Wewenang melihat menu Laporan Keuangan dan Rekonsiliasi di dalam tab Laporan:
+ * DEVELOPER, ADMIN, OWNER. Modul Jurnal punya aturannya sendiri di
+ * `journalAccessPolicy.ts` dan tidak ikut dibuka di sini.
+ */
+export function canViewAllReportMenus(role?: UserRole | string | null): boolean {
+  const normalized = normalizeRole(role);
+  return normalized === 'DEVELOPER' || normalized === 'ADMIN' || normalized === 'OWNER';
+}
+
+/**
  * Wewenang mengunduh "Master Prompt & Blueprint Arsitektur Aplikasi" dari menu
  * Backup Data. Hanya DEVELOPER.
  *

@@ -302,9 +302,49 @@ export interface MonthlyTaxBilling {
   paymentBank?: string; // Bank Persepsi / Pos (Mandiri, BCA, BRI, BNI, Pos Indonesia)
   isPaid: boolean;
   notes?: string;
+  /** Dasar DPP tahun ini; baris serumayah selalu membawa nilai yang sama. */
+  dppBasisMode?: DppBasisMode;
 }
 
 export type MonthlyBillingsByYear = Record<number, MonthlyTaxBilling[]>;
+
+/**
+ * Cara PPh Final dihitung ketika Peredaran Bruto yang diinput.
+ * - `BRUTO_PENUH`: DPP = seluruh peredaran bruto bulan itu, PPh = Bruto x tarif.
+ * - `AMBANG_500_JUTA`: fasilitas PP 55/2022 — hanya omzet kumulatif yang melewati
+ *   Rp 500 juta dalam setahun yang masuk DPP.
+ */
+export type DppBasisMode = 'BRUTO_PENUH' | 'AMBANG_500_JUTA';
+
+/** Bawaan sesuai permintaan pemilik (2026-11-02): bruto penuh. */
+export const DEFAULT_DPP_BASIS_MODE: DppBasisMode = 'BRUTO_PENUH';
+
+/** Label mode seperti yang disetujui pemilik; dibaca layar dan penjaga. */
+export const DPP_BASIS_MODE_LABEL: Record<DppBasisMode, string> = {
+  BRUTO_PENUH: 'Seluruh Peredaran Bruto',
+  AMBANG_500_JUTA: 'Omzet di atas Rp 500 juta (PP 55/2022)',
+};
+
+export const DPP_BASIS_MODES: readonly DppBasisMode[] = ['BRUTO_PENUH', 'AMBANG_500_JUTA'];
+
+/** Nilai yang tidak dikenal (= data lama tanpa mode) jatuh ke bawaan. */
+export const normalizeDppBasisMode = (value: unknown): DppBasisMode =>
+  DPP_BASIS_MODES.includes(value as DppBasisMode) ? (value as DppBasisMode) : DEFAULT_DPP_BASIS_MODE;
+
+/** Mode satu tahun billing; baris pertama yang membawa nilai dipakai, kalau tidak ada = bawaan. */
+export const dppBasisModeOfYear = (items?: readonly MonthlyTaxBilling[]): DppBasisMode => {
+  for (const item of items || []) {
+    if (item?.dppBasisMode) return normalizeDppBasisMode(item.dppBasisMode);
+  }
+  return DEFAULT_DPP_BASIS_MODE;
+};
+
+/** Bagian omzet yang tidak dikenai PPh Final pada mode terpilih (Rp). */
+export const exemptThresholdForMode = (mode: DppBasisMode): number =>
+  mode === 'BRUTO_PENUH' ? 0 : TAX_CONFIG_2025.umkmExemptThresholdOp;
+
+/** Layar menulis penjelasan tanpa menuliskan ulang nama mode. */
+export const isFullGrossBasis = (mode: DppBasisMode): boolean => mode === 'BRUTO_PENUH';
 
 /**
  * Daftar tahun pajak yang aktif di seluruh tab Pajak, seperti yang dikirim ke

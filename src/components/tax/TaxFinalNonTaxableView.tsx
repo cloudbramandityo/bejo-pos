@@ -3,7 +3,7 @@
  * Submenu 9: Penghasilan Yang Dikenakan PPh Final & Yang Tidak Termasuk Objek Pajak (Lampiran 2 Formulir 1770)
  */
 import React from 'react';
-import { TaxAnnualReturn1770 } from '../../types/tax';
+import { TaxAnnualReturn1770, TAX_CONFIG_2025 } from '../../types/tax';
 import { formatRupiah } from '../../utils/formatters';
 import { Percent, Shield, Plus, Sparkles, Building2, CheckCircle2 } from 'lucide-react';
 
@@ -19,7 +19,8 @@ export const TaxFinalNonTaxableView: React.FC<TaxFinalNonTaxableViewProps> = ({
   onNavigateSubmenu,
 }) => {
   const umkmGross = currentReturn.businessActivity?.grossRevenue || 0;
-  const umkmThreshold = currentReturn.businessActivity?.umkmTaxExemptThreshold || 500000000;
+  const umkmThreshold = currentReturn.businessActivity?.umkmTaxExemptThreshold
+    ?? TAX_CONFIG_2025.umkmExemptThresholdOp;
   const umkmTaxable = Math.max(0, umkmGross - umkmThreshold);
   const umkmTax = currentReturn.businessActivity?.umkmTaxAmount > 0
     ? currentReturn.businessActivity.umkmTaxAmount
@@ -61,7 +62,7 @@ export const TaxFinalNonTaxableView: React.FC<TaxFinalNonTaxableViewProps> = ({
           </div>
           <div>
             <span className="text-slate-500 block">Fasilitas Tidak Kena Pajak:</span>
-            <span className="font-mono font-bold text-emerald-700 text-sm">Rp 500.000.000</span>
+            <span className="font-mono font-bold text-emerald-700 text-sm">{formatRupiah(umkmThreshold)}</span>
           </div>
           <div>
             <span className="text-slate-500 block">PPh Final Terutang / Disetor:</span>

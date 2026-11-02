@@ -36,6 +36,7 @@ import {
   User,
 } from 'lucide-react';
 import { Shift, AppUser } from '../types';
+import { canViewCatalog, canViewSalesReport } from '../utils/recordAccess';
 import { DeveloperJokerIcon } from './DeveloperJokerIcon';
 import { StoreLogo } from './StoreLogo';
 import { APP_VERSION } from '../config/brand';
@@ -175,12 +176,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isSpk = role === 'SPK';
 
   const canAccessPos = !isAgent && !isSpk;
-  const canAccessInventory = isDeveloper || isOwner || isAdmin;
+  // Katalog boleh dibuka akun SPK, tetapi hanya melihat (hak ubah dicek di layar).
+  const canAccessCatalog = canViewCatalog(role);
+  const canAccessStock = isDeveloper || isOwner || isAdmin;
   const canAccessCustomers = isDeveloper || isOwner || isAdmin;
-  const canAccessTransactions = isDeveloper || isOwner || isAdmin;
+  const canAccessTransactions = canViewSalesReport(role);
   const canAccessShift = !isAgent && !isSpk;
   const canAccessAgen = isAgent || isDeveloper || isOwner || isAdmin;
-  const canAccessSpk = isSpk || isDeveloper || isOwner || isAdmin || canAccessPos;
+  const canAccessSpk = isSpk || isDeveloper || isOwner || isAdmin;
   const canAccessInvoice = isDeveloper || isAdmin || isOwner;
 
   const allowed = (id: TabId): boolean => {
@@ -188,9 +191,9 @@ export const Navbar: React.FC<NavbarProps> = ({
       case 'pos':
         return canAccessPos;
       case 'inventory':
-        return canAccessInventory;
+        return canAccessCatalog;
       case 'stock':
-        return canAccessInventory && isStoreOnline;
+        return canAccessStock && isStoreOnline;
       case 'customers':
         return canAccessCustomers;
       case 'transactions':

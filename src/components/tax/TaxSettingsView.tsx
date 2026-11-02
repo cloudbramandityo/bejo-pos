@@ -219,6 +219,9 @@ export const TaxSettingsView: React.FC<TaxSettingsViewProps> = ({ onClearDummyDa
         <p className="text-amber-800 leading-relaxed">
           Usaha orang pribadi dengan omzet sampai <strong>Rp 500.000.000,00 (lima ratus juta rupiah)</strong> dalam satu tahun tidak kena Pajak Penghasilan (PPh). Omzet di atas itu kena PPh Final <strong>0,5%</strong>.
         </p>
+        <p className="text-amber-800 leading-relaxed">
+          Dasar hitung yang dipakai toko ini bisa dipilih per tahun di Riwayat Pelaporan, bagian "Dasar DPP:".
+        </p>
       </div>
 
       {/* 4. Pembersihan Data Dummy & Reset Formulir Pajak */}

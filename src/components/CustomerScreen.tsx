@@ -1,7 +1,7 @@
 /**
  * Coded by Langgo Bramandityo. Please guys, jangan diutak-atik coding-nya ya. Thanks!
  */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Users,
   UserPlus,
@@ -60,7 +60,20 @@ import { Customer, CustomerCategory, Transaction, UserRole, AppUser, Supplier, A
 import { formatRupiah } from '../utils/formatters';
 import { StoreInfo, getStoredDefaultLogo, saveStoredDefaultLogo, clearStoredDefaultLogo, isDefaultCustomerCategory, DEFAULT_MASTER_STORE_PROFILE, getStoredPrintSettings, saveStoredPrintSettings, DEFAULT_PRINT_SETTINGS } from '../utils/storage';
 import { LOGO_TARGET_CHARS, compressLogoFromDataUrl, compressLogoImage } from '../utils/storeLogoImage';
-import { downloadBackupJSON, validateBackupPayload, restoreBackupToStorage, restoreBackupToCloud, PosBackupPayload } from '../utils/backupUtils';
+import {
+  downloadBackupJSON,
+  validateBackupPayload,
+  restoreBackupToStorage,
+  restoreBackupToCloud,
+  payloadDomainCounts,
+  PosBackupPayload,
+} from '../utils/backupUtils';
+import {
+  BACKUP_DOMAINS,
+  CREDENTIAL_EXCLUSION_NOTE,
+  backupGroups,
+  deviceOnlyDomainLabels,
+} from '../utils/backupDomains';
 import { downloadBlueprintMarkdown, downloadBlueprintPdf } from '../utils/blueprintDownload';
 import { canDownloadBlueprint } from '../utils/recordAccess';
 import { DeveloperJokerIcon } from './DeveloperJokerIcon';
@@ -774,6 +787,18 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
   const backupFileInputRef = useRef<HTMLInputElement>(null);
   const [blueprintBusy, setBlueprintBusy] = useState<'md' | 'pdf' | null>(null);
 
+  /** Isi berkas yang sedang dipilih, dikelompokkan seperti daftar domain cadangan. */
+  const restoreGroups = useMemo(() => {
+    const rows = payloadDomainCounts(restorePendingPayload).filter((row) => row.count > 0);
+    const byGroup = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const list = byGroup.get(row.group) || [];
+      list.push(row);
+      byGroup.set(row.group, list);
+    }
+    return [...byGroup.entries()];
+  }, [restorePendingPayload]);
+
   const handleDownloadBlueprint = async (format: 'md' | 'pdf') => {
     if (blueprintBusy) return;
     setBlueprintBusy(format);
@@ -792,7 +817,10 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
   const handleDownloadBackup = () => {
     try {
       const res = downloadBackupJSON(storeInfo?.name);
-      setBackupToastMsg(`Cadangan berhasil diunduh (${res.fileName}). Isi: ${res.summary.totalProducts} produk, ${res.summary.totalCustomers} pelanggan, ${res.summary.totalTransactions} transaksi.`);
+      const c = res.summary.counts;
+      setBackupToastMsg(
+        `Cadangan diunduh: ${res.fileName}. Berisi ${res.summary.totalRecords} data, termasuk ${c.products} produk dan ${c.transactions} transaksi.`
+      );
       setTimeout(() => setBackupToastMsg(null), 5000);
     } catch (e) {
       setBackupToastMsg('Gagal mengunduh berkas cadangan.');
@@ -820,7 +848,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
         setIsRestoreModalOpen(true);
       } catch (err) {
         setRestorePendingPayload(null);
-        setRestoreError('Gagal membaca file. Pastikan yang dipilih berkas .json hasil cadangan aplikasi ini.');
+        setRestoreError('Gagal membaca berkas. Pastikan yang dipilih berkas .json hasil cadangan aplikasi ini.');
         setIsRestoreModalOpen(true);
       }
     };
@@ -853,16 +881,13 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
 
       if (!cloudResult.success) {
         const detail = cloudResult.errors.length > 0 ? ` Detail: ${cloudResult.errors.slice(0, 3).join(' | ')}` : '';
-        const adopted = cloudResult.skippedRecords > 0
-          ? ` ${cloudResult.skippedRecords} data digabungkan ke akun server yang sudah ada.`
-          : '';
         // Penolakan data tidak akan berubah walau diulang, jadi jangan sarankan
         // "Coba Lagi" untuk kasus itu.
         const hint = cloudResult.retryable
           ? ' Periksa koneksi internet lalu klik "Coba Lagi".'
-          : ' Perbaiki data yang ditolak dulu; mengulang restore akan memberi hasil yang sama.';
+          : ' Perbaiki data yang ditolak dulu; mengulang pemulihan akan memberi hasil yang sama.';
         setRestoreError(
-          `Data di perangkat ini berhasil dipulihkan, tetapi ${cloudResult.failedRecords} data gagal dikirim ke server.${detail}${adopted}${hint}`
+          `Data di perangkat ini berhasil dipulihkan, tetapi ${cloudResult.failedRecords} data gagal dikirim ke server.${detail}${hint}`
         );
         return;
       }
@@ -871,10 +896,7 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
       setRestoreProgress('Data terkirim ke server. Memuat ulang aplikasi...');
       setIsRestoreModalOpen(false);
       setRestorePendingPayload(null);
-      const adoptedNote = cloudResult.skippedRecords > 0
-        ? ` ${cloudResult.skippedRecords} data digabungkan ke akun yang sudah ada.`
-        : '';
-      setBackupToastMsg(`Restore berhasil: ${cloudResult.syncedRecords} data terkirim ke server.${adoptedNote} Memuat ulang aplikasi...`);
+      setBackupToastMsg(`Pemulihan berhasil: ${cloudResult.syncedRecords} data terkirim ke server. Memuat ulang aplikasi...`);
       setTimeout(() => {
         window.location.reload();
       }, 1500);
@@ -3693,12 +3715,13 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                   <p className="text-xs text-slate-500">
                     Satu tempat untuk mengunduh dan memulihkan seluruh data aplikasi.
                   </p>
+                  <p className="text-xs text-slate-500">{CREDENTIAL_EXCLUSION_NOTE}</p>
                 </div>
               </div>
             </div>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-bold font-mono">
               <FileJson className="w-3.5 h-3.5 text-emerald-600" />
-              JSON v2.1
+              {BACKUP_DOMAINS.length} jenis data
             </span>
           </div>
 
@@ -3730,9 +3753,31 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                 </div>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Mencakup produk, kategori, pelanggan, supplier, agen, transaksi, shift, mutasi stok,
-                SPK, mesin, profil toko, hak akses, invoice, dan pengaturan landing page.
+                Kelompok data yang ikut tersimpan di berkas:
               </p>
+              <div className="flex flex-wrap gap-1.5">
+                {backupGroups().map((entry) => (
+                  <span
+                    key={entry.group}
+                    className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600"
+                  >
+                    {entry.group}
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Hanya tersimpan di perangkat ini, tidak ikut terkirim ke server:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {deviceOnlyDomainLabels().map((label) => (
+                  <span
+                    key={label}
+                    className="px-2 py-1 bg-amber-50 border border-amber-200 rounded-lg text-[10px] font-bold text-amber-800"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
               <button
                 type="button"
                 onClick={handleDownloadBackup}
@@ -4563,19 +4608,39 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200 text-center">
-                      <div className="bg-white p-2 rounded-lg border border-slate-200">
-                        <div className="text-[10px] text-slate-500 font-bold">PRODUK</div>
-                        <div className="text-xs font-black text-slate-900">{restorePendingPayload.summary?.totalProducts ?? restorePendingPayload.data?.products?.length ?? 0}</div>
+                    <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2.5">
+                      <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                        Isi berkas yang akan dipulihkan
                       </div>
-                      <div className="bg-white p-2 rounded-lg border border-slate-200">
-                        <div className="text-[10px] text-slate-500 font-bold">PELANGGAN</div>
-                        <div className="text-xs font-black text-slate-900">{restorePendingPayload.summary?.totalCustomers ?? restorePendingPayload.data?.customers?.length ?? 0}</div>
-                      </div>
-                      <div className="bg-white p-2 rounded-lg border border-slate-200">
-                        <div className="text-[10px] text-slate-500 font-bold">TRANSAKSI</div>
-                        <div className="text-xs font-black text-slate-900">{restorePendingPayload.summary?.totalTransactions ?? restorePendingPayload.data?.transactions?.length ?? 0}</div>
-                      </div>
+                      {restoreGroups.length === 0 ? (
+                        <p className="text-xs text-slate-600">
+                          Berkas ini tidak memuat data yang dikenal aplikasi ini.
+                        </p>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {restoreGroups.map(([group, rows]) => (
+                            <div key={group} className="space-y-1">
+                              <div className="text-[10px] font-black text-slate-700 uppercase tracking-wider">
+                                {group}
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {rows.map((row) => (
+                                  <span
+                                    key={row.key}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-md text-[10px] font-bold text-slate-600"
+                                  >
+                                    {row.label}
+                                    <span className="font-mono text-slate-900">{row.count}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-[11px] text-slate-500 leading-relaxed pt-1 border-t border-slate-200">
+                        {CREDENTIAL_EXCLUSION_NOTE}
+                      </p>
                     </div>
                   </div>
                 </div>

@@ -215,6 +215,7 @@ import {
   subscribeTaxYears
 } from './backend/pocketbaseBackend';
 import { DEFAULT_AGENTS_LIST } from './utils/agentMapping';
+import { canViewCatalog, canViewSalesReport } from './utils/recordAccess';
 import {
   adjustmentsFromProductEdit,
   adjustmentsFromCostEdit,
@@ -876,7 +877,13 @@ export default function App() {
   // When logged in user role changes or on switch, enforce tab access restrictions
   useEffect(() => {
     if (currentUser?.role === 'SPK') {
-      if (currentTab !== 'spk') {
+      // Akun SPK memakai tab SPK Cetak, Katalog (hanya melihat), dan Laporan
+      // (menu Laporan Penjualan). Keputusannya tetap di recordAccess.ts.
+      const bolehDibuka =
+        currentTab === 'spk' ||
+        (currentTab === 'inventory' && canViewCatalog(currentUser.role)) ||
+        (currentTab === 'transactions' && canViewSalesReport(currentUser.role));
+      if (!bolehDibuka) {
         setCurrentTab('spk');
       }
     } else if (currentUser?.role === 'AGEN') {
@@ -2497,7 +2504,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'inventory' && (userRole === 'DEVELOPER' || userRole === 'OWNER' || userRole === 'ADMIN') && (
+        {currentTab === 'inventory' && canViewCatalog(userRole) && (
           <InventoryScreen
             products={products}
             productCategories={productCategories}
@@ -2560,7 +2567,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'transactions' && (userRole === 'DEVELOPER' || userRole === 'OWNER' || userRole === 'ADMIN') && (
+        {currentTab === 'transactions' && canViewSalesReport(userRole) && (
           <LaporanScreen
             transactions={transactions}
             stockTransactions={stockTransactions}

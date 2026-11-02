@@ -52,7 +52,7 @@ export const TaxAttachmentsView: React.FC<TaxAttachmentsViewProps> = ({ currentR
     {
       id: 'doc-6',
       title: 'Lampiran Khusus: Rekapitulasi Peredaran Bruto Bulanan (PP 55/2022)',
-      description: 'Laporan rincian omzet 12 bulan & fasilitas bebas pajak Rp 500 Juta',
+      description: 'Laporan rincian omzet 12 bulan & dasar pengenaan PPh Final',
       status: 'TERSEDIA OTOMATIS',
       required: true,
     },

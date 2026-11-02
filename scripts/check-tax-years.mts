@@ -13,6 +13,8 @@
  *   F  seluruh layar tahun membaca daftar itu, bukan angka yang ditulis di komponen
  *   G  jalur server: kanal dipasang & dibersihkan, data dari server tidak ditulis balik
  *   H  tidak ada angka yang dikarang di Riwayat Pelaporan
+ *   I  dasar DPP: dua mode, bruto penuh bawaan, tanpa perubahan skema server
+ *   J  daftar tidak pernah kosong di layar
  */
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -270,7 +272,146 @@ check(
 );
 
 /* ---------------------------------------------------------------- */
-/*  I. daftar tidak pernah kosong di layar                            */
+/*  I. dasar DPP: dua mode, bruto penuh bawaan                        */
+/* ---------------------------------------------------------------- */
+const {
+  DEFAULT_DPP_BASIS_MODE,
+  DPP_BASIS_MODES,
+  DPP_BASIS_MODE_LABEL,
+  TAX_CONFIG_2025,
+  dppBasisModeOfYear,
+  exemptThresholdForMode,
+  normalizeDppBasisMode,
+} = await import('../src/types/tax.ts');
+
+const {
+  getYearDppBasisMode,
+  recomputeMonthlyBillingYear,
+  setYearDppBasisMode,
+} = await import('../src/utils/taxBillingMath.ts');
+
+const mathSource = read('src/utils/taxBillingMath.ts');
+const printSource = read('src/components/tax/TaxOfficialPrintView.tsx');
+const collectionsSource = read('scripts/create-pocketbase-collections.mjs');
+
+/** Baris billing seperti bentuk aslinya; nilai yang tidak disebut memakai 0. */
+const billingRow = (year: number, month: number, over: Record<string, unknown> = {}): any => ({
+  id: `billing-${year}-${month}`,
+  year,
+  month,
+  monthName: `Bulan ${month}`,
+  pphFinalPaid: 0,
+  tariffRatePercent: 0.5,
+  taxableBaseDpp: 0,
+  grossRevenue: 0,
+  cumulativeRevenue: 0,
+  billingCode: '',
+  ntpn: '',
+  paymentDate: '',
+  paymentBank: '',
+  isPaid: false,
+  notes: '',
+  ...over,
+});
+
+/** Daftar 12 bulan dengan omzet yang sama, siap dipakai dua mode. */
+const grossYear = (year: number, monthlyGross: number, mode: string): any[] =>
+  Array.from({ length: 12 }, (_, i) =>
+    billingRow(year, i + 1, { grossRevenue: monthlyGross, dppBasisMode: mode })
+  );
+
+const sumBy = (list: any[], key: string) => list.reduce((s, item) => s + (item[key] || 0), 0);
+
+check('I1 dua mode tersedia, bruto penuh yang pertama', DPP_BASIS_MODES.join() === 'BRUTO_PENUH,AMBANG_500_JUTA');
+check('I2 bawaan sesuai pilihan pemilik: bruto penuh', DEFAULT_DPP_BASIS_MODE === 'BRUTO_PENUH');
+check('I3 label mode persis seperti yang disetujui', (() => {
+  return DPP_BASIS_MODE_LABEL.BRUTO_PENUH === 'Seluruh Peredaran Bruto'
+    && DPP_BASIS_MODE_LABEL.AMBANG_500_JUTA === 'Omzet di atas Rp 500 juta (PP 55/2022)';
+})());
+check('I4 ambang hanya dibaca dari konfigurasi', TAX_CONFIG_2025.umkmExemptThresholdOp === 500000000
+  && exemptThresholdForMode('AMBANG_500_JUTA') === 500000000
+  && exemptThresholdForMode('BRUTO_PENUH') === 0);
+
+// Inti permintaan: ketik Peredaran Bruto -> PPh terisi sendiri, DPP = Bruto.
+const penuh = recomputeMonthlyBillingYear([billingRow(2026, 1, { grossRevenue: 80000000, dppBasisMode: 'BRUTO_PENUH' })]);
+check('I5 bruto penuh: DPP = Peredaran Bruto', penuh[0].taxableBaseDpp === 80000000, JSON.stringify(penuh[0]));
+check('I6 bruto penuh: PPh = Bruto x tarif', penuh[0].pphFinalPaid === 400000);
+check('I7 bruto penuh: tarif 1% ikut', (() => {
+  const one = recomputeMonthlyBillingYear([billingRow(2026, 1, { grossRevenue: 80000000, tariffRatePercent: 1, dppBasisMode: 'BRUTO_PENUH' })]);
+  return one[0].pphFinalPaid === 800000 && one[0].taxableBaseDpp === 80000000;
+})());
+
+// Mode kedua tetap utuh: fasilitas PP 55/2022 dengan ambang Rp 500 juta setahun.
+const ambangKecil = recomputeMonthlyBillingYear([billingRow(2026, 1, { grossRevenue: 80000000, dppBasisMode: 'AMBANG_500_JUTA' })]);
+check('I8 mode ambang: omzet di bawah Rp 500 juta belum kena PPh', ambangKecil[0].pphFinalPaid === 0 && ambangKecil[0].taxableBaseDpp === 0);
+const ambangTahun = recomputeMonthlyBillingYear(grossYear(2026, 50000000, 'AMBANG_500_JUTA'));
+check('I9 mode ambang: hanya bagian di atas 500 juta yang kena', sumBy(ambangTahun, 'pphFinalPaid') === 500000, String(sumBy(ambangTahun, 'pphFinalPaid')));
+check('I10 mode ambang: DPP setahun = selisih kumulatif', sumBy(ambangTahun, 'taxableBaseDpp') === 100000000);
+const penuhTahun = recomputeMonthlyBillingYear(grossYear(2026, 50000000, 'BRUTO_PENUH'));
+check('I11 bruto penuh: PPh setahun = 600 juta x 0,5%', sumBy(penuhTahun, 'pphFinalPaid') === 3000000, String(sumBy(penuhTahun, 'pphFinalPaid')));
+check('I12 kumulatif omzet tetap berjalan di kedua mode',
+  penuhTahun[11].cumulativeRevenue === 600000000 && ambangTahun[11].cumulativeRevenue === 600000000);
+
+// Arah input lama (ketik PPh) tidak boleh berubah oleh mode apa pun.
+for (const mode of DPP_BASIS_MODES) {
+  const dariPph = recomputeMonthlyBillingYear([billingRow(2026, 1, { pphFinalPaid: 500000, dppBasisMode: mode })]);
+  check(`I13 input PPh tetap menghitung DPP & Bruto (mode ${mode})`,
+    dariPph[0].taxableBaseDpp === 100000000 && dariPph[0].grossRevenue === 100000000 && dariPph[0].pphFinalPaid === 500000);
+}
+
+// Data lama tidak punya kolom mode: dinilai dengan bawaan, bukan dibuang.
+const tanpaMode = recomputeMonthlyBillingYear([billingRow(2026, 1, { grossRevenue: 80000000 })]);
+check('I14 baris tanpa mode memakai bawaan dan menuliskan mode',
+  tanpaMode[0].dppBasisMode === DEFAULT_DPP_BASIS_MODE && tanpaMode[0].pphFinalPaid === 400000);
+check('I15 mode tidak dikenal dinormalkan ke bawaan',
+  normalizeDppBasisMode('TIDAK_SAH') === DEFAULT_DPP_BASIS_MODE && normalizeDppBasisMode(undefined) === DEFAULT_DPP_BASIS_MODE);
+check('I16 mode tahun dibaca dari barisnya', dppBasisModeOfYear(grossYear(2026, 1, 'AMBANG_500_JUTA')) === 'AMBANG_500_JUTA'
+  && dppBasisModeOfYear([]) === DEFAULT_DPP_BASIS_MODE);
+
+const yearData = { 2026: grossYear(2026, 80000000, 'BRUTO_PENUH') };
+check('I17 ganti mode memasang nilai di seluruh bulan', (() => {
+  const pindah = setYearDppBasisMode(yearData, 2026, 'AMBANG_500_JUTA');
+  return pindah[2026].length === 12
+    && pindah[2026].every((b: any) => b.dppBasisMode === 'AMBANG_500_JUTA')
+    && sumBy(pindah[2026], 'taxableBaseDpp') === 460000000
+    && sumBy(pindah[2026], 'pphFinalPaid') === 2300000;
+})(), JSON.stringify(yearData[2026][11]));
+check('I18 kembali ke bruto penuh menghitung ulang dari Peredaran Bruto', (() => {
+  const pindah = setYearDppBasisMode(setYearDppBasisMode(yearData, 2026, 'AMBANG_500_JUTA'), 2026, 'BRUTO_PENUH');
+  return sumBy(pindah[2026], 'pphFinalPaid') === 4800000 && getYearDppBasisMode(pindah, 2026) === 'BRUTO_PENUH';
+})());
+check('I19 tahun tanpa catatan memakai bawaan', getYearDppBasisMode({}, 2027) === DEFAULT_DPP_BASIS_MODE);
+
+check('I20 mesin hitung tidak menggantung ke koneksi server', !/pocketbaseBackend/.test(mathSource));
+check('I21 penyimpanan memakai mesin hitung itu', /from '\.\/taxBillingMath'/.test(storageSource));
+check('I22 layar memakai label & pengubah mode dari satu aturan',
+  /DPP_BASIS_MODE_LABEL/.test(historySource) && /setYearDppBasisMode/.test(historySource) && /handleBillingModeChange/.test(historySource));
+check('I23 layar tidak menulis mode atau ambang sendiri',
+  !/['"]BRUTO_PENUH['"]|['"]AMBANG_500_JUTA['"]|500000000/.test(
+    taxComponentFiles.map((n) => read(`src/components/tax/${n}`)).join('\n')
+  ));
+check('I24 cetak SPT menyebut dasar yang dipakai tahun itu',
+  /dppBasisModeOfYear/.test(printSource) && /DPP_BASIS_MODE_LABEL\[billingMode\]/.test(printSource)
+  && !/TOTAL SETAHUN \(PP 55\/2022\)/.test(printSource));
+check('I25 mode tidak menambah kolom server', (() => {
+  const block = /name: 'tax_monthly_billings',[\s\S]{0,200}/.exec(collectionsSource)?.[0] || '';
+  return /fields: \[J\('billingsByYear'\), N\('updatedAt'\)\]/.test(block) && !/dppBasisMode/.test(block);
+})());
+check('I26 SPT memakai jumlah DPP dari tabel billing',
+  /umkmTaxableRevenue: totalDpp/.test(storageSource) && !/umkmTaxExemptThreshold \|\| 500000000/.test(storageSource));
+
+// Semua layar yang menampilkan angka bebas pajak wajib membacanya dari tahun itu.
+const angkaLayer = ['TaxDashboard.tsx', 'TaxIncomeView.tsx', 'TaxFinalNonTaxableView.tsx']
+  .map((n) => read(`src/components/tax/${n}`)).join('\n');
+check('I27 ambang di layar dibaca dari isian, bukan ditulis sebagai teks',
+  /formatRupiah\(umkmThreshold\)/.test(angkaLayer) && !/Rp 500\.000\.000/.test(angkaLayer));
+check('I28 layar menjelaskan lewat aturan, bukan nama mode mentah',
+  /isFullGrossBasis\(billingMode\)/.test(historySource) && /exemptThresholdForMode/.test(historySource));
+check('I29 cetak tidak lagi mengklaim fasilitas saat dasarnya bruto penuh',
+  !/FASILITAS: <strong>Bebas Pajak/.test(printSource) && /DASAR DPP: <strong>\{DPP_BASIS_MODE_LABEL\[billingMode\]\}<\/strong>/.test(printSource));
+
+/* ---------------------------------------------------------------- */
+/*  J. daftar tidak pernah kosong di layar                            */
 /* ---------------------------------------------------------------- */
 resetStorage([2030]);
 assert.equal(getTaxYears().join(), '2030');

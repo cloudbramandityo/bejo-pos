@@ -6,6 +6,7 @@ import React from 'react';
 import {
   TaxAnnualReturn1770,
   TaxpayerProfile,
+  TAX_CONFIG_2025,
 } from '../../types/tax';
 import { formatRupiah } from '../../utils/formatters';
 import {
@@ -49,7 +50,8 @@ export const TaxDashboard: React.FC<TaxDashboardProps> = ({
   const totalAssetsValue = currentReturn.assets.reduce((sum, a) => sum + (a.acquisitionPrice || 0), 0);
   const totalDebtsValue = currentReturn.debts.reduce((sum, d) => sum + (d.endingBalance || 0), 0);
   const umkmGross = currentReturn.businessActivity?.grossRevenue || 0;
-  const umkmThreshold = currentReturn.businessActivity?.umkmTaxExemptThreshold || 500000000;
+  const umkmThreshold = currentReturn.businessActivity?.umkmTaxExemptThreshold
+    ?? TAX_CONFIG_2025.umkmExemptThresholdOp;
   const umkmTaxable = Math.max(0, umkmGross - umkmThreshold);
 
   return (
@@ -438,10 +440,12 @@ export const TaxDashboard: React.FC<TaxDashboardProps> = ({
           <div className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent rounded-xl border border-amber-200/80 p-5">
             <div className="flex items-center gap-2 text-amber-900 font-bold text-sm mb-2">
               <Sparkles className="w-4 h-4 text-amber-600" />
-              <span>Fasilitas UMKM (PP 55/2022)</span>
+              <span>Dasar PPh Final UMKM</span>
             </div>
             <p className="text-xs text-amber-800 leading-relaxed mb-3">
-              UMKM orang pribadi tidak kena pajak untuk omzet sampai <strong>Rp 500 Juta</strong> setahun. Selebihnya kena <strong>PPh Final 0,5%</strong>.
+              {umkmThreshold === 0
+                ? 'Seluruh omzet usaha dikenakan PPh Final 0,5%. Dasar DPP dipilih di Riwayat Pelaporan.'
+                : `Omzet sampai ${formatRupiah(umkmThreshold)} setahun bebas PPh Final. Selebihnya kena 0,5%.`}
             </p>
 
             <div className="space-y-2 text-xs">
@@ -451,10 +455,10 @@ export const TaxDashboard: React.FC<TaxDashboardProps> = ({
               </div>
               <div className="flex justify-between text-slate-700">
                 <span>Batas Bebas Pajak:</span>
-                <span className="font-semibold text-emerald-700">Rp 500.000.000</span>
+                <span className="font-semibold text-emerald-700">{formatRupiah(umkmThreshold)}</span>
               </div>
               <div className="flex justify-between text-slate-700 pt-1 border-t border-amber-200/60">
-                <span>Omzet Dikenakan 0.5%:</span>
+                <span>Omzet Dikenakan PPh:</span>
                 <span className="font-bold text-amber-900">{formatRupiah(umkmTaxable)}</span>
               </div>
               <div className="flex justify-between text-slate-900 font-bold pt-1 border-t border-amber-200/60 text-sm">

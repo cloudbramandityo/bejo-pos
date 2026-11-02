@@ -8,6 +8,8 @@ import {
   TaxAnnualReturn1770,
   TaxpayerProfile,
   TAX_CONFIG_2025,
+  DPP_BASIS_MODE_LABEL,
+  dppBasisModeOfYear,
 } from '../../types/tax';
 import { formatRupiah } from '../../utils/formatters';
 import { getStoredMonthlyBillings } from '../../utils/taxStorage';
@@ -69,6 +71,7 @@ export const TaxOfficialPrintView: React.FC<TaxOfficialPrintViewProps> = ({
   const billingTotalGross = yearMonthlyBillings.reduce((sum, b) => sum + (b.grossRevenue || 0), 0);
   const billingTotalPph = yearMonthlyBillings.reduce((sum, b) => sum + (b.pphFinalPaid || 0), 0);
   const billingTotalDpp = yearMonthlyBillings.reduce((sum, b) => sum + (b.taxableBaseDpp || 0), 0);
+  const billingMode = dppBasisModeOfYear(yearMonthlyBillings);
   const grossUmkmTotal = billingTotalGross > 0 ? billingTotalGross : (currentReturn.businessActivity?.grossRevenue || 0);
   const umkmTaxTotal = billingTotalPph > 0 ? billingTotalPph : (currentReturn.businessActivity?.umkmTaxAmount || 0);
   const months = [
@@ -1189,7 +1192,7 @@ Peredaran Bruto UMKM PP 55: ${formatRupiah(grossUmkmTotal)}
             <div className="text-[10px] font-mono mb-3 bg-amber-50/50 p-2 border border-amber-300 rounded flex justify-between">
               <span>NAMA: <strong>{taxpayer.fullName}</strong></span>
               <span>NPWP: <strong>{taxpayer.npwp}</strong></span>
-              <span>FASILITAS: <strong>Bebas Pajak s.d Rp 500 Juta</strong></span>
+              <span>DASAR DPP: <strong>{DPP_BASIS_MODE_LABEL[billingMode]}</strong></span>
             </div>
 
             <div className="border border-slate-900">
@@ -1240,7 +1243,7 @@ Peredaran Bruto UMKM PP 55: ${formatRupiah(grossUmkmTotal)}
                   )}
                   <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
                     <td colSpan={2} className="p-2 text-right border-r border-slate-300">
-                      TOTAL SETAHUN (PP 55/2022):
+                      TOTAL SETAHUN:
                     </td>
                     <td className="p-2 text-right font-mono text-blue-900 border-r border-slate-300">
                       {formatRupiah(grossUmkmTotal)}
@@ -1260,6 +1263,9 @@ Peredaran Bruto UMKM PP 55: ${formatRupiah(grossUmkmTotal)}
 
             <div className="mt-4 p-3 bg-slate-50 border border-slate-300 rounded text-[10px] text-slate-700 leading-relaxed">
               <strong>Catatan Fasilitas UU Harmonisasi Peraturan Perpajakan (UU HPP):</strong> Sesuai PP No. 55 Tahun 2022 Pasal 60 ayat (2), peredaran bruto dari usaha bagi Wajib Pajak Orang Pribadi sampai dengan <strong>Rp 500.000.000,00</strong> dalam 1 (satu) Tahun Pajak tidak dikenai Pajak Penghasilan. PPh Final 0,5% hanya dihitung dari bagian peredaran bruto yang melebihi ambang batas Rp 500 Juta.
+              <div className="mt-1.5 pt-1.5 border-t border-slate-200">
+                <strong>Dasar pengenaan PPh Final tahun {currentReturn.taxYear} pada dokumen ini:</strong> {DPP_BASIS_MODE_LABEL[billingMode]} — sesuai isian Riwayat Pelaporan.
+              </div>
             </div>
           </div>
         )}

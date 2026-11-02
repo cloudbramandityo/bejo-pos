@@ -5,12 +5,23 @@
  * Sesuai UU HPP No 7/2021 & PP 55/2022.
  */
 import React, { useState, useMemo, useEffect } from 'react';
-import { TaxAnnualReturn1770, MonthlyTaxBilling, MonthlyBillingsByYear } from '../../types/tax';
+import {
+  TaxAnnualReturn1770,
+  MonthlyTaxBilling,
+  MonthlyBillingsByYear,
+  DppBasisMode,
+  DPP_BASIS_MODES,
+  DPP_BASIS_MODE_LABEL,
+  dppBasisModeOfYear,
+  exemptThresholdForMode,
+  isFullGrossBasis
+} from '../../types/tax';
 import {
   getStoredMonthlyBillings,
   saveStoredMonthlyBillings,
   recomputeMonthlyBillingYear,
   generateDefaultMonthlyBillings,
+  setYearDppBasisMode,
   syncReturnWithMonthlyBillings,
   syncAllReturnsWithMonthlyBillings,
   importBillingsFromPosTransactions,
@@ -131,6 +142,10 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
   const currentYearBillings = useMemo(() => {
     return billingsData[selectedBillingYear] || [];
   }, [billingsData, selectedBillingYear]);
+
+  // Dasar DPP tahun ini tersimpan di baris billing-nya, jadi ia ikut ke server
+  // dan ke perangkat lain tanpa kolom tambahan.
+  const billingMode = useMemo(() => dppBasisModeOfYear(currentYearBillings), [currentYearBillings]);
 
   // Totals for selected billing year
   const summary = useMemo(() => {
@@ -297,6 +312,16 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
     showAlert(`Tarif ${rate}% berhasil diterapkan ke seluruh 12 bulan tahun ${selectedBillingYear}! Jangan lupa klik Save Data.`);
   };
 
+  // Ganti dasar DPP setahun: seluruh bruto dikenai PPh, atau hanya omzet di atas ambang
+  const handleBillingModeChange = (mode: DppBasisMode) => {
+    if (mode === billingMode) return;
+    const updatedAll = setYearDppBasisMode(billingsData, selectedBillingYear, mode);
+    setBillingsData(updatedAll);
+    saveStoredMonthlyBillings(updatedAll);
+    setHasUnsavedChanges(true);
+    showAlert(`Dasar DPP ${selectedBillingYear}: ${DPP_BASIS_MODE_LABEL[mode]}. PPh seluruh bulan dihitung ulang.`);
+  };
+
   // Handle manual gross revenue change (two-way sync)
   const handleGrossChange = (monthIdx: number, valStr: string) => {
     const grossNum = parseInt(valStr.replace(/\D/g, ''), 10) || 0;
@@ -306,7 +331,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
       ...listCopy[monthIdx],
       grossRevenue: grossNum,
       taxableBaseDpp: 0,
-      // PPh dihitung ulang otomatis dengan pembebasan kumulatif Rp500 juta/tahun
+      // PPh dihitung ulang otomatis sesuai dasar DPP tahun ini
       pphFinalPaid: 0,
       isPaid: false,
     };
@@ -370,8 +395,8 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
     const matchingReturn = allReturns.find(r => r.taxYear === selectedBillingYear) || currentReturn;
     const totalGross = summary.totalGross;
     const totalPph = summary.totalPph;
-    const exemptThreshold = matchingReturn.businessActivity.umkmTaxExemptThreshold || 500000000;
-    const taxableRevenue = Math.max(0, totalGross - exemptThreshold);
+    const taxableRevenue = summary.totalDpp;
+    const exemptAmount = Math.max(0, totalGross - taxableRevenue);
 
     const updated: TaxAnnualReturn1770 = {
       ...matchingReturn,
@@ -379,6 +404,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
         ...matchingReturn.businessActivity,
         grossRevenue: totalGross,
         isUmkmPp55: true,
+        umkmTaxExemptThreshold: exemptAmount,
         umkmTaxableRevenue: taxableRevenue,
         umkmTaxAmount: totalPph,
       },
@@ -817,33 +843,56 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
           </div>
 
           {/* Quick Rate Batch Setter & Helper Banner */}
-          <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/60 flex flex-col gap-3 text-xs">
             <div className="flex items-start gap-2.5">
               <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold text-amber-900">Perhitungan Otomatis: </span>
                 <span className="text-amber-800">
-                  Input <strong>PPh Final Disetor</strong> pada tiap bulan. Sistem otomatis menghitung <strong>Peredaran Bruto = PPh / (Tarif/100)</strong>, <strong>DPP Dikenakan</strong>, dan <strong>Kumulatif Omzet (YTD)</strong> secara presisi.
+                  Ketik <strong>Peredaran Bruto</strong>, PPh dan DPP terisi sendiri. Ketik <strong>PPh Disetor</strong>, Bruto dan DPP yang terisi.
                 </span>
+                <div className="text-amber-800 mt-1">
+                  Kumulatif Omzet ikut dihitung. Dasar DPP {selectedBillingYear}: <strong className="text-amber-900">{DPP_BASIS_MODE_LABEL[billingMode]}</strong>
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="font-semibold text-amber-900">Terapkan Tarif:</span>
-              <button
-                type="button"
-                onClick={() => handleApplyGlobalTariff(0.5)}
-                className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold font-mono text-[11px] cursor-pointer"
-              >
-                0.5% (PP 55)
-              </button>
-              <button
-                type="button"
-                onClick={() => handleApplyGlobalTariff(1.0)}
-                className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 font-bold font-mono text-[11px] cursor-pointer"
-              >
-                1.0%
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-amber-900">Dasar DPP:</span>
+                {DPP_BASIS_MODES.map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => handleBillingModeChange(mode)}
+                    className={`px-2.5 py-1 rounded-lg font-bold text-[11px] cursor-pointer ${
+                      billingMode === mode
+                        ? 'bg-amber-700 text-white'
+                        : 'bg-white border border-amber-300 hover:bg-amber-100 text-amber-900'
+                    }`}
+                  >
+                    {DPP_BASIS_MODE_LABEL[mode]}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="font-semibold text-amber-900">Terapkan Tarif:</span>
+                <button
+                  type="button"
+                  onClick={() => handleApplyGlobalTariff(0.5)}
+                  className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold font-mono text-[11px] cursor-pointer"
+                >
+                  0.5% (PP 55)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyGlobalTariff(1.0)}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 font-bold font-mono text-[11px] cursor-pointer"
+                >
+                  1.0%
+                </button>
+              </div>
             </div>
           </div>
 
@@ -862,7 +911,12 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
                   </th>
                   <th className="px-3 py-3 text-center w-24">Tarif (%)</th>
                   <th className="px-4 py-3 text-right min-w-[140px]">DPP Dikenakan (Rp)</th>
-                  <th className="px-4 py-3 text-right min-w-[150px]">Peredaran Bruto (Rp)</th>
+                  <th className="px-4 py-3 text-right min-w-[150px]">
+                    <div className="flex items-center justify-end gap-1">
+                      <span>Peredaran Bruto (Rp)</span>
+                      <span className="text-amber-300 font-normal text-[10px]">*Input</span>
+                    </div>
+                  </th>
                   <th className="px-4 py-3 text-right min-w-[150px]">Kumulatif Omzet (Rp)</th>
                   <th className="px-4 py-3 min-w-[160px]">Kode Billing DJP</th>
                   <th className="px-4 py-3 min-w-[140px]">NTPN</th>
@@ -1459,17 +1513,19 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
               </div>
             </div>
 
-            {/* Box 3: Ketentuan PP 55/2022 */}
+            {/* Box 3: Dasar pengenaan PPh Final tahun terpilih */}
             <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-2">
               <div className="flex items-center gap-2 text-slate-800 font-bold text-xs">
                 <Layers className="w-4 h-4 text-indigo-600" />
-                <span>Fasilitas PP 55/2022 Rp 500 Juta</span>
+                <span>Dasar DPP {selectedBillingYear}: {DPP_BASIS_MODE_LABEL[billingMode]}</span>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Usaha orang pribadi UMKM tidak kena PPh atas omzet sampai Rp 500.000.000. Omzet di atas itu kena PPh Final 0,5%.
+                {isFullGrossBasis(billingMode)
+                  ? 'Seluruh omzet bulan ini menjadi DPP, jadi PPh Final dihitung dari semua omzet.'
+                  : `Usaha orang pribadi tidak kena PPh atas omzet sampai ${formatRupiah(exemptThresholdForMode(billingMode))} setahun. Omzet di atas itu kena PPh Final 0,5%.`}
               </p>
               <div className="text-[11px] text-indigo-700 font-medium">
-                Penyetoran bulanan dapat langsung disinkronkan ke Lampiran III Formulir 1770 resmi DJP.
+                Ganti dasar DPP lewat tombol "Dasar DPP:" di tabel billing.
               </div>
             </div>
           </div>

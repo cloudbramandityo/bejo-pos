@@ -26,6 +26,7 @@ import {
 } from '../../types';
 import { FinancialSettings } from '../../utils/financialStorage';
 import { getJournalAccess } from '../../utils/journalAccessPolicy';
+import { canViewAllReportMenus } from '../../utils/recordAccess';
 
 const LaporanJurnalScreen = React.lazy(() =>
   import('../journal/LaporanJurnalScreen').then((module) => ({
@@ -71,16 +72,28 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
   const [activeSubTab, setActiveSubTab] = useState<LaporanSubTab>('penjualan');
   const journalAccess = getJournalAccess(props.userRole);
   const canAccessJurnal = journalAccess !== 'none';
+  // Akun SPK hanya melihat menu Laporan Penjualan; menu lain milik DEVELOPER,
+  // ADMIN, dan OWNER. Aturannya ada di recordAccess.ts.
+  const canSeeAllMenus = canViewAllReportMenus(props.userRole);
 
   const subTabs: { key: LaporanSubTab; label: string; icon: React.ElementType; desc: string }[] = [
     { key: 'penjualan', label: 'Laporan Penjualan', icon: Receipt, desc: 'Riwayat & analisis transaksi penjualan' },
-    { key: 'keuangan', label: 'Laporan Keuangan', icon: Landmark, desc: 'Laba Rugi, Modal, Neraca & Arus Kas' },
-    {
-      key: 'rekonsiliasi',
-      label: 'Rekonsiliasi',
-      icon: Scale,
-      desc: 'Analisis varians & analisis komparatif',
-    },
+    ...(canSeeAllMenus
+      ? [
+          {
+            key: 'keuangan' as const,
+            label: 'Laporan Keuangan',
+            icon: Landmark,
+            desc: 'Laba Rugi, Modal, Neraca & Arus Kas',
+          },
+          {
+            key: 'rekonsiliasi' as const,
+            label: 'Rekonsiliasi',
+            icon: Scale,
+            desc: 'Analisis varians & analisis komparatif',
+          },
+        ]
+      : []),
     ...(canAccessJurnal
       ? [{
           key: 'jurnal' as const,
@@ -93,6 +106,12 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
         }]
       : []),
   ];
+
+  // Sub-tab yang aktif harus benar-benar ada di daftar menu role ini; kalau
+  // tidak (misalnya role berubah), kembali ke Laporan Penjualan.
+  const visibleSubTab: LaporanSubTab = subTabs.some((st) => st.key === activeSubTab)
+    ? activeSubTab
+    : 'penjualan';
 
   return (
     <div className="w-full">
@@ -108,7 +127,7 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
           <div className="flex flex-wrap gap-2">
             {subTabs.map((st) => {
               const Icon = st.icon;
-              const active = activeSubTab === st.key;
+              const active = visibleSubTab === st.key;
               return (
                 <button
                   key={st.key}
@@ -131,7 +150,7 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
       </div>
 
       {/* Konten sub-tab aktif */}
-      {activeSubTab === 'jurnal' ? (
+      {visibleSubTab === 'jurnal' ? (
         canAccessJurnal ? (
           <React.Suspense
             fallback={
@@ -147,7 +166,7 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
             Modul Jurnal hanya dapat diakses oleh DEVELOPER, OWNER, dan ADMIN.
           </div>
         )
-      ) : activeSubTab === 'penjualan' ? (
+      ) : visibleSubTab === 'penjualan' ? (
         <TransactionHistoryScreen
           transactions={props.transactions}
           stockTransactions={props.stockTransactions}
@@ -168,7 +187,7 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
           onUpdateTransaction={props.onUpdateTransaction}
           onDeleteTransaction={props.onDeleteTransaction}
         />
-      ) : activeSubTab === 'rekonsiliasi' ? (
+      ) : visibleSubTab === 'rekonsiliasi' ? (
         <React.Suspense
           fallback={
             <div className="flex items-center justify-center py-24 text-sm text-slate-500">

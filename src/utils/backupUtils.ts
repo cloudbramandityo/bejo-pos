@@ -1,6 +1,14 @@
 /**
  * Backup and Export/Import Utilities for BEJO POS
  * Coded by Langgo Bramandityo.
+ *
+ * Isi berkas cadangan tidak ditulis di sini: semuanya dibaca dari daftar domain
+ * di `./backupDomains`. Menambah data baru cukup satu entri di daftar itu plus
+ * satu akses di `DOMAIN_ACCESS` di bawah — penjaga `npm run check:backup`
+ * menggagalkan build kalau salah satu dari keduanya lupa dipasang.
+ *
+ * Akun login staf (nama masuk, kata sandi, foto profil, flag wajib ganti sandi)
+ * tidak ikut dicadangkan dan tidak ikut dipulihkan.
  */
 import {
   getStoredProducts,
@@ -27,8 +35,6 @@ import {
   saveStoredAssetAdjustments,
   getStoredStoreInfo,
   saveStoredStoreInfo,
-  getStoredUsers,
-  saveStoredUsers,
   getStoredCashiers,
   saveStoredCashiers,
   getStoredActivityLogs,
@@ -46,10 +52,40 @@ import {
   getStoredCustomRoles,
   saveStoredCustomRoles,
   getStoredPrintSettings,
-  saveStoredPrintSettings
+  saveStoredPrintSettings,
+  getStoredAiChatMessages,
+  saveStoredAiChatMessages,
+  getStoredUserMentions,
+  saveStoredUserMentions,
+  getStoredPrintingRejects,
+  saveStoredPrintingRejects,
+  getStoredAiSettings,
+  saveStoredAiSettings
 } from './storage';
-import { getStoredInvoices, saveStoredInvoices } from './invoiceStorage';
-import { getStoredLandingConfig, saveStoredLandingConfig } from './landingPageStorage';
+import {
+  getStoredInvoices,
+  saveStoredInvoices,
+  getStoredInvoiceStoreIdentity,
+  saveStoredInvoiceStoreIdentity
+} from './invoiceStorage';
+import {
+  getStoredLandingConfig,
+  saveStoredLandingConfig,
+  getStoredLandingDraft,
+  saveStoredLandingDraft
+} from './landingPageStorage';
+import { getStoredOpenAccountConfigs, saveStoredOpenAccountConfigs } from './openAccountStorage';
+import { getStoredFinancialSettings, saveStoredFinancialSettings } from './financialStorage';
+import { getStoredReconciliationRuns, saveStoredReconciliationRuns } from './reconciliationStorage';
+import {
+  getStoredTaxpayerProfile,
+  saveStoredTaxpayerProfile,
+  getStoredMonthlyBillings,
+  saveStoredMonthlyBillings,
+  getStoredAnnualReturns,
+  saveStoredAnnualReturns
+} from './taxStorage';
+import { getTaxYears, writeTaxYears } from './taxYears';
 import {
   testPocketBaseConnection,
   saveProductCloud,
@@ -64,7 +100,6 @@ import {
   saveCustomRoleCloud,
   saveActiveShiftCloud,
   saveCashierCloud,
-  saveUserCloud,
   saveStockTransactionCloud,
   saveAssetAdjustmentCloud,
   saveSupplierCloud,
@@ -73,10 +108,229 @@ import {
   saveSpkOrderCloud,
   saveMachineCloud,
   saveInvoiceCloud,
-  saveLandingConfigCloud
+  saveInvoiceStoreIdentityCloud,
+  saveLandingConfigCloud,
+  saveLandingDraftCloud,
+  savePrintingRejectCloud,
+  saveAiChatMessageCloud,
+  saveUserMentionCloud,
+  saveReconciliationRunCloud,
+  saveTaxpayerProfileCloud,
+  saveTaxAnnualReturnCloud,
+  saveTaxMonthlyBillingsCloud,
+  saveTaxYearsCloud
 } from '../backend/pocketbaseBackend';
+import { BACKUP_DOMAINS, countBackupDomainValue } from './backupDomains';
 import { aggregateAdjustment } from './assetAdjustments';
 import { currentStoreAssetValue } from './assetTrend';
+
+/**
+ * Pembaca, pemulih, dan pengirim satu domain.
+ * `read` membaca salinan di perangkat ini, `restore` menulisnya kembali,
+ * `cloud` mengirimnya ke server (hanya untuk domain yang punya jalur tulis).
+ */
+interface DomainAccess {
+  read: () => any;
+  restore: (value: any) => void;
+  cloud?: (value: any) => Promise<void>;
+}
+
+const DOMAIN_ACCESS: Record<string, DomainAccess> = {
+  storeInfo: {
+    read: getStoredStoreInfo,
+    restore: (value) => saveStoredStoreInfo(value),
+    cloud: (value) => saveStoreInfoCloud(value),
+  },
+  defaultLogo: {
+    read: getStoredDefaultLogo,
+    restore: (value) => saveStoredDefaultLogo(String(value || '')),
+  },
+  storeProfiles: {
+    read: getStoredStoreProfiles,
+    restore: (value) => saveStoredStoreProfiles(value),
+    cloud: (value) => saveStoreProfileCloud(value),
+  },
+  activeProfileId: {
+    read: getStoredActiveProfileId,
+    restore: (value) => saveStoredActiveProfileId(String(value || '')),
+    cloud: (value) => saveActiveStoreProfileIdCloud(String(value || '')),
+  },
+
+  productCategories: {
+    read: getStoredProductCategories,
+    restore: (value) => saveStoredProductCategories(value),
+    cloud: (value) => saveProductCategoryCloud(value),
+  },
+  products: {
+    read: getStoredProducts,
+    restore: (value) => saveStoredProducts(value),
+    cloud: (value) => saveProductCloud(value),
+  },
+
+  customerCategories: {
+    read: getStoredCategories,
+    restore: (value) => saveStoredCategories(value),
+    cloud: (value) => saveCustomerCategoryCloud(value),
+  },
+  customers: {
+    read: getStoredCustomers,
+    restore: (value) => saveStoredCustomers(value),
+    cloud: (value) => saveCustomerCloud(value),
+  },
+  openAccountConfigs: {
+    read: getStoredOpenAccountConfigs,
+    restore: (value) => saveStoredOpenAccountConfigs(value),
+  },
+  suppliers: {
+    read: getStoredSuppliers,
+    restore: (value) => saveStoredSuppliers(value),
+    cloud: (value) => saveSupplierCloud(value),
+  },
+  agents: {
+    read: getStoredAgents,
+    restore: (value) => saveStoredAgents(value),
+    cloud: (value) => saveAgentCloud(value),
+  },
+
+  transactions: {
+    read: getStoredTransactions,
+    restore: (value) => saveStoredTransactions(value),
+    cloud: (value) => saveTransactionCloud(value),
+  },
+  shifts: {
+    read: getStoredShifts,
+    restore: (value) => saveStoredShifts(value),
+    cloud: (value) => saveShiftCloud(value),
+  },
+  activeShift: {
+    read: getStoredActiveShift,
+    restore: (value) => saveStoredActiveShift(value ?? null),
+    cloud: (value) => saveActiveShiftCloud(value ?? null),
+  },
+  cashiers: {
+    read: getStoredCashiers,
+    restore: (value) => saveStoredCashiers(value),
+    cloud: (value) => saveCashierCloud(value),
+  },
+
+  stockTransactions: {
+    read: getStoredStockTransactions,
+    restore: (value) => saveStoredStockTransactions(value),
+    cloud: (value) => saveStockTransactionCloud(value),
+  },
+  assetAdjustments: {
+    read: getStoredAssetAdjustments,
+    restore: (value) => saveStoredAssetAdjustments(value),
+    cloud: (value) => saveAssetAdjustmentCloud(value),
+  },
+
+  spkOrders: {
+    read: getStoredSpkOrders,
+    restore: (value) => saveStoredSpkOrders(value),
+    cloud: (value) => saveSpkOrderCloud(value),
+  },
+  machines: {
+    read: getStoredMachines,
+    restore: (value) => saveStoredMachines(value),
+    cloud: (value) => saveMachineCloud(value),
+  },
+  printingRejects: {
+    read: getStoredPrintingRejects,
+    restore: (value) => saveStoredPrintingRejects(value),
+    cloud: (value) => savePrintingRejectCloud(value),
+  },
+  printSettings: {
+    read: getStoredPrintSettings,
+    restore: (value) => saveStoredPrintSettings(value),
+  },
+
+  invoices: {
+    read: getStoredInvoices,
+    restore: (value) => saveStoredInvoices(value),
+    cloud: (value) => saveInvoiceCloud(value),
+  },
+  invoiceStoreIdentity: {
+    read: getStoredInvoiceStoreIdentity,
+    restore: (value) => saveStoredInvoiceStoreIdentity(value),
+    cloud: (value) => saveInvoiceStoreIdentityCloud(value),
+  },
+
+  taxpayerProfile: {
+    read: getStoredTaxpayerProfile,
+    restore: (value) => saveStoredTaxpayerProfile(value, true),
+    cloud: (value) => saveTaxpayerProfileCloud(value),
+  },
+  taxYears: {
+    read: getTaxYears,
+    restore: (value) => writeTaxYears(Array.isArray(value) ? value : []),
+    cloud: (value) => saveTaxYearsCloud({ years: value, updatedAt: Date.now() }),
+  },
+  taxMonthlyBillings: {
+    read: getStoredMonthlyBillings,
+    restore: (value) => saveStoredMonthlyBillings(value, true),
+    cloud: (value) => saveTaxMonthlyBillingsCloud(value),
+  },
+  taxAnnualReturns: {
+    read: getStoredAnnualReturns,
+    restore: (value) => saveStoredAnnualReturns(value),
+    cloud: (value) => saveTaxAnnualReturnCloud(value),
+  },
+
+  reconciliationRuns: {
+    read: getStoredReconciliationRuns,
+    restore: (value) => saveStoredReconciliationRuns(value),
+    cloud: (value) => saveReconciliationRunCloud(value),
+  },
+  financialSettings: {
+    read: getStoredFinancialSettings,
+    restore: (value) => saveStoredFinancialSettings(value),
+  },
+  activityLogs: {
+    read: getStoredActivityLogs,
+    restore: (value) => saveStoredActivityLogs(value),
+    cloud: (value) => saveActivityLogCloud(value),
+  },
+
+  landingConfig: {
+    read: getStoredLandingConfig,
+    restore: (value) => saveStoredLandingConfig(value),
+    cloud: (value) => saveLandingConfigCloud(value),
+  },
+  landingDraft: {
+    read: getStoredLandingDraft,
+    restore: (value) => saveStoredLandingDraft(value),
+    cloud: (value) => saveLandingDraftCloud(value),
+  },
+
+  customRoles: {
+    read: getStoredCustomRoles,
+    restore: (value) => saveStoredCustomRoles(value),
+    cloud: (value) => saveCustomRoleCloud(value),
+  },
+  aiSettings: {
+    read: getStoredAiSettings,
+    restore: (value) => saveStoredAiSettings(value),
+  },
+  aiChatMessages: {
+    read: getStoredAiChatMessages,
+    restore: (value) => saveStoredAiChatMessages(value),
+    cloud: (value) => saveAiChatMessageCloud(value),
+  },
+  userMentions: {
+    read: getStoredUserMentions,
+    restore: (value) => saveStoredUserMentions(value),
+    cloud: (value) => saveUserMentionCloud(value),
+  },
+};
+
+/** Nilai domain dianggap ikut dipulihkan bila bentuknya cocok dengan daftarnya. */
+function domainHasValue(domain: (typeof BACKUP_DOMAINS)[number], value: any): boolean {
+  if (value === undefined) return false;
+  if (value === null) return domain.allowsNull === true;
+  if (domain.shape === 'array') return Array.isArray(value);
+  if (domain.shape === 'object') return typeof value === 'object';
+  return value !== '';
+}
 
 export interface PosBackupPayload {
   app: string;
@@ -85,48 +339,19 @@ export interface PosBackupPayload {
   timestamp: number;
   storeName: string;
   summary: {
-    totalProducts: number;
-    totalCustomers: number;
-    totalSuppliers: number;
-    totalAgents: number;
-    totalTransactions: number;
-    totalShifts: number;
-    totalStockTransactions: number;
-    totalAssetAdjustments: number;
-    totalProductCategories: number;
-    totalCustomerCategories: number;
-    totalUsers: number;
-    totalSpkOrders?: number;
-    totalMachines?: number;
-    totalInvoices?: number;
-    totalCustomRoles?: number;
+    /** Jumlah baris/nilai di seluruh domain yang terbaca dari perangkat. */
+    totalRecords: number;
+    /** Kunci domain -> jumlah isinya. */
+    counts: Record<string, number>;
   };
-  data: {
-    storeInfo: any;
-    products: any[];
-    productCategories: any[];
-    customers: any[];
-    customerCategories: any[];
-    suppliers: any[];
-    agents: any[];
-    transactions: any[];
-    shifts: any[];
-    activeShift: any;
-    stockTransactions: any[];
-    assetAdjustments?: any[];
-    users: any[];
-    cashiers: any[];
-    activityLogs: any[];
-    defaultLogo: string | null;
-    spkOrders?: any[];
-    machines?: any[];
-    storeProfiles?: any[];
-    activeProfileId?: string;
-    customRoles?: any[];
-    printSettings?: any;
-    invoices?: any[];
-    landingConfig?: any;
-  };
+  data: Record<string, any>;
+}
+
+export interface BackupDomainCount {
+  key: string;
+  label: string;
+  group: string;
+  count: number;
 }
 
 export interface BackupCloudRestoreProgress {
@@ -142,8 +367,6 @@ export interface BackupCloudRestoreResult {
   totalRecords: number;
   syncedRecords: number;
   failedRecords: number;
-  /** Record yang memang sudah ada di cloud dan digabungkan/dilewati. */
-  skippedRecords: number;
   /** True hanya bila kegagalan berpotensi hilang saat dicoba ulang (jaringan/5xx). */
   retryable: boolean;
   errors: string[];
@@ -153,84 +376,47 @@ export interface BackupCloudRestoreResult {
  * Builds the complete offline backup payload object
  */
 export function generateBackupPayload(): PosBackupPayload {
-  const storeInfo = getStoredStoreInfo();
-  const products = getStoredProducts();
-  const productCategories = getStoredProductCategories();
-  const customers = getStoredCustomers();
-  const customerCategories = getStoredCategories();
-  const suppliers = getStoredSuppliers();
-  const agents = getStoredAgents();
-  const transactions = getStoredTransactions();
-  const shifts = getStoredShifts();
-  const activeShift = getStoredActiveShift();
-  const stockTransactions = getStoredStockTransactions();
-  const assetAdjustments = getStoredAssetAdjustments();
-  const users = getStoredUsers();
-  const cashiers = getStoredCashiers();
-  const activityLogs = getStoredActivityLogs();
-  const defaultLogo = getStoredDefaultLogo();
-  const spkOrders = getStoredSpkOrders();
-  const machines = getStoredMachines();
-  const storeProfiles = getStoredStoreProfiles();
-  const activeProfileId = getStoredActiveProfileId();
-  const customRoles = getStoredCustomRoles();
-  const printSettings = getStoredPrintSettings();
-  const invoices = getStoredInvoices();
-  const landingConfig = getStoredLandingConfig();
+  const data: Record<string, any> = {};
+  const counts: Record<string, number> = {};
+  let totalRecords = 0;
+
+  for (const domain of BACKUP_DOMAINS) {
+    const value = DOMAIN_ACCESS[domain.key]?.read();
+    data[domain.key] = value;
+    const count = countBackupDomainValue(domain.shape, value);
+    counts[domain.key] = count;
+    totalRecords += count;
+  }
 
   const now = new Date();
-  const isoString = now.toISOString();
 
   return {
     app: 'BEJO Digital Print & INVENTORY',
-    version: '2.1.0',
-    exportedAt: isoString,
+    version: '3.0.0',
+    exportedAt: now.toISOString(),
     timestamp: now.getTime(),
-    storeName: storeInfo?.storeName || 'BEJO Digital Print',
-    summary: {
-      totalProducts: products.length,
-      totalCustomers: customers.length,
-      totalSuppliers: suppliers.length,
-      totalAgents: agents.length,
-      totalTransactions: transactions.length,
-      totalShifts: shifts.length,
-      totalStockTransactions: stockTransactions.length,
-      totalAssetAdjustments: assetAdjustments.length,
-      totalProductCategories: productCategories.length,
-      totalCustomerCategories: customerCategories.length,
-      totalUsers: users.length,
-      totalSpkOrders: spkOrders.length,
-      totalMachines: machines.length,
-      totalInvoices: invoices.length,
-      totalCustomRoles: customRoles.length,
-    },
-    data: {
-      storeInfo,
-      products,
-      productCategories,
-      customers,
-      customerCategories,
-      suppliers,
-      agents,
-      transactions,
-      shifts,
-      activeShift,
-      stockTransactions,
-      assetAdjustments,
-      users,
-      cashiers,
-      activityLogs,
-      defaultLogo,
-      spkOrders,
-      machines,
-      storeProfiles,
-      activeProfileId,
-      customRoles,
-      printSettings,
-      invoices,
-      landingConfig,
-    },
+    storeName: data.storeInfo?.storeName || 'BEJO Digital Print',
+    summary: { totalRecords, counts },
+    data,
   };
+}
+
+/**
+ * Jumlah isi per domain untuk pratinjau pemulihan. Berkas lama belum menyimpan
+ * ringkasan ini, jadi angkanya dihitung dari isinya.
+ */
+export function payloadDomainCounts(payload: PosBackupPayload | null): BackupDomainCount[] {
+  if (!payload || !payload.data) return [];
+  const savedCounts = payload.summary?.counts;
+  return BACKUP_DOMAINS.map((domain) => ({
+    key: domain.key,
+    label: domain.label,
+    group: domain.group,
+    count:
+      savedCounts && typeof savedCounts[domain.key] === 'number'
+        ? savedCounts[domain.key]
+        : countBackupDomainValue(domain.shape, payload.data[domain.key]),
+  }));
 }
 
 /**
@@ -240,7 +426,7 @@ export function downloadBackupJSON(customStoreName?: string): { fileName: string
   const payload = generateBackupPayload();
   const jsonString = JSON.stringify(payload, null, 2);
 
-  const cleanStoreName = (customStoreName || payload.storeName || 'bejostiker')
+  const cleanStoreName = (customStoreName || payload.storeName || 'BEJO Digital Print')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '_')
     .replace(/_+/g, '_');
@@ -289,7 +475,13 @@ export function validateBackupPayload(parsed: any): { isValid: boolean; error?: 
     return { isValid: false, error: 'File tidak memuat data produk, pelanggan, atau transaksi yang valid.' };
   }
 
-  return { isValid: true, payload: parsed as PosBackupPayload };
+  // Berkas lama masih memuat daftar akun login. Isinya dibuang di sini supaya
+  // pemulihan tidak pernah menimpa akun yang berlaku di perangkat ini.
+  const cleanData = { ...data };
+  delete cleanData.users;
+  delete cleanData.authUser;
+
+  return { isValid: true, payload: { ...parsed, data: cleanData } as PosBackupPayload };
 }
 
 /**
@@ -299,22 +491,18 @@ export function restoreBackupToStorage(payload: PosBackupPayload): boolean {
   try {
     const { data } = payload;
     const productsBeforeRestore = getStoredProducts();
-    if (data.storeInfo) saveStoredStoreInfo(data.storeInfo);
-    if (Array.isArray(data.products)) saveStoredProducts(data.products);
-    if (Array.isArray(data.productCategories)) saveStoredProductCategories(data.productCategories);
-    if (Array.isArray(data.customers)) saveStoredCustomers(data.customers);
-    if (Array.isArray(data.customerCategories)) saveStoredCategories(data.customerCategories);
-    if (Array.isArray(data.suppliers)) saveStoredSuppliers(data.suppliers);
-    if (Array.isArray(data.agents)) saveStoredAgents(data.agents);
-    if (Array.isArray(data.transactions)) saveStoredTransactions(data.transactions);
-    if (Array.isArray(data.shifts)) saveStoredShifts(data.shifts);
-    if (data.activeShift !== undefined) saveStoredActiveShift(data.activeShift);
-    if (Array.isArray(data.stockTransactions)) saveStoredStockTransactions(data.stockTransactions);
-    if (Array.isArray(data.assetAdjustments)) {
-      saveStoredAssetAdjustments(data.assetAdjustments);
-    } else if (Array.isArray(data.products)) {
-      // Cadangan lama tidak punya buku penyesuaian. Lonjakan nilai aset dari
-      // pemulihan dicatat satu baris agregat supaya garis tidak melompat diam-diam.
+
+    for (const domain of BACKUP_DOMAINS) {
+      const access = DOMAIN_ACCESS[domain.key];
+      if (!access) continue;
+      const value = data[domain.key];
+      if (!domainHasValue(domain, value)) continue;
+      access.restore(value);
+    }
+
+    // Cadangan lama tidak punya buku penyesuaian aset. Lonjakan nilai akibat
+    // pemulihan dicatat satu baris rekap supaya garis tren tidak melompat diam-diam.
+    if (!Array.isArray(data.assetAdjustments) && Array.isArray(data.products)) {
       const row = aggregateAdjustment(
         currentStoreAssetValue(productsBeforeRestore),
         currentStoreAssetValue(data.products),
@@ -324,26 +512,6 @@ export function restoreBackupToStorage(payload: PosBackupPayload): boolean {
         saveStoredAssetAdjustments([row, ...getStoredAssetAdjustments()]);
         saveAssetAdjustmentCloud(row).catch(console.error);
       }
-    }
-    if (Array.isArray(data.users)) saveStoredUsers(data.users);
-    if (Array.isArray(data.cashiers)) saveStoredCashiers(data.cashiers);
-    if (Array.isArray(data.activityLogs)) saveStoredActivityLogs(data.activityLogs);
-    if (data.defaultLogo) saveStoredDefaultLogo(data.defaultLogo);
-    if (Array.isArray(data.spkOrders)) saveStoredSpkOrders(data.spkOrders);
-    if (Array.isArray(data.machines)) saveStoredMachines(data.machines);
-    if (Array.isArray(data.storeProfiles) && data.storeProfiles.length > 0) {
-      saveStoredStoreProfiles(data.storeProfiles);
-    }
-    if (typeof data.activeProfileId === 'string' && data.activeProfileId) {
-      saveStoredActiveProfileId(data.activeProfileId);
-    }
-    if (Array.isArray(data.customRoles)) saveStoredCustomRoles(data.customRoles);
-    if (data.printSettings && typeof data.printSettings === 'object') {
-      saveStoredPrintSettings(data.printSettings);
-    }
-    if (Array.isArray(data.invoices)) saveStoredInvoices(data.invoices);
-    if (data.landingConfig && typeof data.landingConfig === 'object') {
-      saveStoredLandingConfig(data.landingConfig);
     }
 
     return true;
@@ -360,7 +528,7 @@ interface CloudRestoreTask {
 }
 
 /**
- * Penolakan data oleh PocketBase/server tidak akan berubah bila diulang, jadi
+ * Penolakan data oleh server tidak akan berubah bila diulang, jadi
  * jangan sarankan "Coba Lagi". Hanya gangguan jaringan atau server sibuk yang
  * layak dicoba ulang.
  */
@@ -368,7 +536,7 @@ function isRetryableRestoreFailure(reason: any): boolean {
   const status = Number(reason?.status || 0);
   if (status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
   const message = String(reason?.message || '');
-  return !/pocketbase menolak|sudah dipakai|tidak valid|wajib diisi|minimal \d+ karakter/i.test(
+  return !/server menolak|sudah dipakai|tidak valid|wajib diisi|minimal \d+ karakter/i.test(
     message
   );
 }
@@ -376,6 +544,7 @@ function isRetryableRestoreFailure(reason: any): boolean {
 /**
  * Pushes restored backup data to PocketBase so it survives the realtime
  * subscription reload that would otherwise overwrite local-only changes.
+ * Domain tanpa jalur tulis ke server berhenti di perangkat ini saja.
  */
 export async function restoreBackupToCloud(
   payload: PosBackupPayload,
@@ -388,7 +557,6 @@ export async function restoreBackupToCloud(
       totalRecords: 0,
       syncedRecords: 0,
       failedRecords: 0,
-      skippedRecords: 0,
       retryable: false,
       errors: ['Berkas cadangan tidak memuat bagian data utama.'],
     };
@@ -401,101 +569,32 @@ export async function restoreBackupToCloud(
       totalRecords: 0,
       syncedRecords: 0,
       failedRecords: 0,
-      skippedRecords: 0,
       retryable: true,
       errors: ['Tidak dapat terhubung ke server. Periksa koneksi internet lalu coba lagi.'],
     };
   }
 
   const tasks: CloudRestoreTask[] = [];
-  const addArray = (label: string, records: any, save: (record: any) => Promise<void>) => {
-    if (Array.isArray(records) && records.length > 0) {
-      tasks.push({ label, records, save });
-    }
-  };
-  const addSingle = (label: string, record: any, save: (record: any) => Promise<void>) => {
-    if (record !== undefined && record !== null) {
-      tasks.push({ label, records: [record], save });
-    }
-  };
 
-  addSingle('Info Toko', data.storeInfo, saveStoreInfoCloud);
-  addArray('Profil Toko', data.storeProfiles, saveStoreProfileCloud);
-  if (typeof data.activeProfileId === 'string' && data.activeProfileId) {
-    tasks.push({
-      label: 'Profil Toko Aktif',
-      records: [{ activeId: data.activeProfileId }],
-      save: (record) => saveActiveStoreProfileIdCloud(record.activeId),
-    });
+  for (const domain of BACKUP_DOMAINS) {
+    if (domain.cloudWrite === 'none') continue;
+    const access = DOMAIN_ACCESS[domain.key];
+    if (!access?.cloud) continue;
+    const value = data[domain.key];
+    if (!domainHasValue(domain, value)) continue;
+
+    if (domain.cloudWrite === 'record') {
+      if (Array.isArray(value) && value.length > 0) {
+        tasks.push({ label: domain.label, records: value, save: access.cloud });
+      }
+    } else {
+      tasks.push({ label: domain.label, records: [value], save: access.cloud });
+    }
   }
-  addArray('Kategori Produk', data.productCategories, saveProductCategoryCloud);
-  addArray('Produk', data.products, saveProductCloud);
-  addArray('Kategori Pelanggan', data.customerCategories, saveCustomerCategoryCloud);
-  addArray('Pelanggan', data.customers, saveCustomerCloud);
-  addArray('Supplier', data.suppliers, saveSupplierCloud);
-  addArray('Agen', data.agents, saveAgentCloud);
-  addArray('Transaksi', data.transactions, saveTransactionCloud);
-  addArray('Shift', data.shifts, saveShiftCloud);
-  if (data.activeShift !== undefined) {
-    tasks.push({
-      label: 'Shift Aktif',
-      records: [data.activeShift],
-      save: (record) => saveActiveShiftCloud(record || null),
-    });
-  }
-  addArray('Mutasi Stok', data.stockTransactions, saveStockTransactionCloud);
-  addArray('Penyesuaian Aset', data.assetAdjustments, saveAssetAdjustmentCloud);
-  addArray('Kasir', data.cashiers, saveCashierCloud);
-  if (Array.isArray(data.users) && data.users.length > 0) {
-    tasks.push({
-      label: 'Pengguna',
-      records: data.users.map((u: any) => {
-        const sanitized: any = { ...u };
-        // Pastikan username valid
-        if (typeof sanitized.username === 'string') {
-          sanitized.username = sanitized.username.trim().toLowerCase();
-        }
-        // Pastikan password minimal 8 karakter jika ada
-        if (typeof sanitized.password === 'string') {
-          if (sanitized.password.length < 8) {
-            // Jangan kirim password kosong/tidak valid, biarkan server handle
-            // atau ganti dengan placeholder - tapi lebih baik hapus agar server minta password
-            delete sanitized.password;
-            delete sanitized.appPassword;
-          } else if (/^\u2022+$/.test(sanitized.password)) {
-            // Mask password, hapus agar tidak mengubah
-            delete sanitized.password;
-            delete sanitized.appPassword;
-          }
-        } else {
-          delete sanitized.password;
-          delete sanitized.appPassword;
-        }
-        // Pastikan role valid
-        if (typeof sanitized.role === 'string') {
-          sanitized.role = sanitized.role.trim().toUpperCase();
-          if (sanitized.role === 'DEVELOPER') sanitized.role = 'ADMIN';
-        }
-        // Pastikan name ada
-        if (!sanitized.name || String(sanitized.name).trim().length < 3) {
-          sanitized.name = sanitized.username || sanitized.id || 'User';
-        }
-        return sanitized;
-      }),
-      save: saveUserCloud,
-    });
-  }
-  addArray('Log Aktivitas', data.activityLogs, saveActivityLogCloud);
-  addArray('SPK', data.spkOrders, saveSpkOrderCloud);
-  addArray('Mesin', data.machines, saveMachineCloud);
-  addArray('Hak Akses', data.customRoles, saveCustomRoleCloud);
-  addArray('Invoice', data.invoices, saveInvoiceCloud);
-  addSingle('Landing Page', data.landingConfig, saveLandingConfigCloud);
 
   const overallTotal = tasks.reduce((sum, task) => sum + task.records.length, 0);
   let syncedRecords = 0;
   let failedRecords = 0;
-  let skippedRecords = 0;
   let retryable = false;
   let overallProcessed = 0;
   const errors: string[] = [];
@@ -513,29 +612,6 @@ export async function restoreBackupToCloud(
         }
         const recordId = batch[offset]?.id ?? index + offset + 1;
         const message = String(result.reason?.message || result.reason || '');
-        const lowerMsg = message.toLowerCase();
-        // Akun sistem (developer/sinkronisasi) memang tidak boleh ditulis dari
-        // restore; bukan kegagalan data user.
-        const systemCode = String(result.reason?.code || '');
-        if (task.label === 'Pengguna' && (systemCode === 'ACCOUNT_RESERVED' || systemCode === 'USERNAME_RESERVED')) {
-          skippedRecords += 1;
-          if (errors.length < 10) {
-            errors.push(`${task.label} #${recordId}: ${message} (dilewati: akun sistem)`);
-          }
-          return;
-        }
-        // Username sudah dipakai atau duplikasi diizinkan - jangan anggap gagal total
-        if (
-          task.label === 'Pengguna' &&
-          (lowerMsg.includes('username') && (lowerMsg.includes('sudah dipakai') || lowerMsg.includes('taken') || lowerMsg.includes('duplicate'))) ||
-          (lowerMsg.includes('already exists') || lowerMsg.includes('unique constraint'))
-        ) {
-          skippedRecords += 1;
-          if (errors.length < 10) {
-            errors.push(`${task.label} #${recordId}: ${message} (dilewati)`);
-          }
-          return;
-        }
         failedRecords += 1;
         if (isRetryableRestoreFailure(result.reason)) retryable = true;
         if (errors.length < 10) {
@@ -557,7 +633,7 @@ export async function restoreBackupToCloud(
   if (overallTotal > 0) {
     const stillConnected = await testPocketBaseConnection();
     if (!stillConnected) {
-      errors.push('Koneksi ke database cloud terputus saat proses restore.');
+      errors.push('Koneksi ke server terputus saat proses pemulihan.');
       failedRecords = Math.max(failedRecords, 1);
       retryable = true;
     }
@@ -568,7 +644,6 @@ export async function restoreBackupToCloud(
     totalRecords: overallTotal,
     syncedRecords,
     failedRecords,
-    skippedRecords,
     retryable,
     errors,
   };

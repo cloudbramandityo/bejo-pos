@@ -3,7 +3,7 @@
  * Submenu 4: Data Penghasilan (Pekerjaan & Usaha / Pekerjaan Bebas)
  */
 import React from 'react';
-import { TaxAnnualReturn1770, AccountingMethod } from '../../types/tax';
+import { TaxAnnualReturn1770, AccountingMethod, TAX_CONFIG_2025 } from '../../types/tax';
 import { formatRupiah } from '../../utils/formatters';
 import { Briefcase, Building, Calculator, CheckCircle2, TrendingUp, Sparkles, BookOpen } from 'lucide-react';
 
@@ -43,7 +43,8 @@ export const TaxIncomeView: React.FC<TaxIncomeViewProps> = ({
   };
 
   const umkmGross = currentReturn.businessActivity?.grossRevenue || 0;
-  const umkmThreshold = currentReturn.businessActivity?.umkmTaxExemptThreshold || 500000000;
+  const umkmThreshold = currentReturn.businessActivity?.umkmTaxExemptThreshold
+    ?? TAX_CONFIG_2025.umkmExemptThresholdOp;
   const umkmTaxable = Math.max(0, umkmGross - umkmThreshold);
   const umkmTaxAmount = Math.round(umkmTaxable * 0.005);
 
@@ -184,7 +185,7 @@ export const TaxIncomeView: React.FC<TaxIncomeViewProps> = ({
                       <span>PPh Final UMKM PP 55/2022 (0.5%)</span>
                     </span>
                     <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
-                      Fasilitas pembebasan pajak omzet s.d <strong>Rp 500 Juta</strong> bagi Wajib Pajak Orang Pribadi.
+                      PPh Final 0,5% dari dasar DPP yang dipilih di Riwayat Pelaporan.
                     </span>
                   </div>
                 </label>
@@ -232,11 +233,16 @@ export const TaxIncomeView: React.FC<TaxIncomeViewProps> = ({
 
                   <div>
                     <label className="block font-semibold text-slate-800 mb-1">
-                      Batas Batasan Peredaran Bruto Tidak Kena Pajak (PP 55)
+                      Batas Peredaran Bruto Tidak Kena Pajak
                     </label>
                     <div className="px-3 py-2 rounded-lg bg-amber-100/70 border border-amber-200 font-mono font-bold text-slate-800">
-                      Rp 500.000.000
+                      {formatRupiah(umkmThreshold)}
                     </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {umkmThreshold === 0
+                        ? 'Dasar DPP tahun ini seluruh peredaran bruto.'
+                        : 'Fasilitas PP 55/2022: omzet sampai batas ini belum kena PPh Final.'}
+                    </p>
                   </div>
                 </div>
 

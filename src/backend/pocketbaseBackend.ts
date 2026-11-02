@@ -46,7 +46,8 @@ import {
 import {
   TaxAnnualReturn1770,
   TaxpayerProfile,
-  MonthlyBillingsByYear
+  MonthlyBillingsByYear,
+  TaxYearsConfig
 } from '../types/tax';
 import type { ReconciliationRun } from '../types/reconciliation';
 import {
@@ -2142,6 +2143,28 @@ export async function saveTaxMonthlyBillingsCloud(
       updatedAt: Date.now(),
     });
   }, OperationType.WRITE, 'tax_monthly_billings/all_years');
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Daftar tahun pajak (collection: settings, record "tax_years")              */
+/* -------------------------------------------------------------------------- */
+/**
+ * Tahun mana saja yang boleh diisi di tab Pajak disetel satu kali dan berlaku
+ * di semua perangkat, jadi disimpan sebagai satu catatan bersama.
+ */
+export function subscribeTaxYears(onData: (cfg: TaxYearsConfig | null) => void): () => void {
+  return createSafeSubscription('settings/tax_years', OperationType.GET, (onError) =>
+    subscribeRecord('settings', 'tax_years', (item) => {
+      const years = (item as any)?.years;
+      onData(Array.isArray(years) ? { years, updatedAt: Number((item as any)?.updatedAt) || 0 } : null);
+    }, onError)
+  );
+}
+
+export async function saveTaxYearsCloud(cfg: TaxYearsConfig): Promise<void> {
+  return safeCloudWrite(async () => {
+    await upsertRecord('settings', 'tax_years', cfg as any);
+  }, OperationType.WRITE, 'settings/tax_years');
 }
 
 /* -------------------------------------------------------------------------- */

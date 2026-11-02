@@ -18,6 +18,7 @@ import {
   type PublishedLandingIdentity,
 } from "./server/landingApi";
 import { registerBrandingRoutes } from "./server/brandingApi";
+import { registerBlueprintRoutes } from "./server/blueprintApi";
 import { APP_NAME, APP_VERSION } from "./src/config/brand";
 
 dotenv.config();
@@ -181,6 +182,7 @@ const PRIVATE_API_PREFIXES = [
   '/api/marketing',
   '/api/pocketbase/session',
   '/api/users',
+  '/api/blueprint',
 ];
 
 function isPrivateApiPath(pathname: string): boolean {
@@ -2105,5 +2107,6 @@ registerUserAdminRoutes(app);
 registerMarketingRoutes(app);
 registerLandingRoutes(app);
 registerBrandingRoutes(app);
+registerBlueprintRoutes(app);
 
 setupVite();

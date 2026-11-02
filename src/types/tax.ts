@@ -305,3 +305,12 @@ export interface MonthlyTaxBilling {
 }
 
 export type MonthlyBillingsByYear = Record<number, MonthlyTaxBilling[]>;
+
+/**
+ * Daftar tahun pajak yang aktif di seluruh tab Pajak, seperti yang dikirim ke
+ * server (record `settings/tax_years`).
+ */
+export interface TaxYearsConfig {
+  years: number[];
+  updatedAt: number;
+}

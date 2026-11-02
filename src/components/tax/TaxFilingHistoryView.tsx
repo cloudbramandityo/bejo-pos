@@ -1,6 +1,6 @@
 /**
  * Coded by Langgo Bramandityo.
- * Submenu 12: Riwayat Pelaporan, Billing Pajak Bulanan (2023-2025 & 2026),
+ * Submenu 12: Riwayat Pelaporan, Billing Pajak Bulanan per tahun pajak aktif,
  * Analisa Line Chart PPh Tiap Bulan, dan Audit Trail SPT Tahunan.
  * Sesuai UU HPP No 7/2021 & PP 55/2022.
  */
@@ -16,6 +16,8 @@ import {
   importBillingsFromPosTransactions,
   MONTH_NAMES
 } from '../../utils/taxStorage';
+import { useTaxYears } from '../../hooks/useTaxYears';
+import { defaultTaxYear, getTaxYearRangeLabel } from '../../utils/taxYears';
 import { formatRupiah } from '../../utils/formatters';
 import {
   History,
@@ -55,6 +57,18 @@ interface TaxFilingHistoryViewProps {
 type HistoryTab = 'billing' | 'chart' | 'returns';
 type ChartMetric = 'pph' | 'gross' | 'cumulative';
 
+/** Warna garis grafik; palet berputar bila tahun aktif lebih banyak daripada warna. */
+const SERIES_PALETTE = [
+  '#64748b',
+  '#3b82f6',
+  '#10b981',
+  '#f59e0b',
+  '#8b5cf6',
+  '#06b6d4',
+  '#ec4899',
+  '#84cc16',
+];
+
 export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
   allReturns,
   currentReturn,
@@ -64,7 +78,15 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
   actorLabel = 'Pengguna',
 }) => {
   const [activeTab, setActiveTab] = useState<HistoryTab>('billing');
-  const [selectedBillingYear, setSelectedBillingYear] = useState<number>(2025);
+
+  // Tahun pajak yang boleh diisi diatur bersama di menu 13. Pengaturan Pajak.
+  const taxYears = useTaxYears();
+  const yearsAscending = taxYears;
+  const yearsDescending = useMemo(() => taxYears.slice().reverse(), [taxYears]);
+  const rangeLabel = useMemo(() => getTaxYearRangeLabel(), [taxYears]);
+  const newestTaxYear = yearsAscending[yearsAscending.length - 1];
+
+  const [selectedBillingYear, setSelectedBillingYear] = useState<number>(() => defaultTaxYear());
   const [billingsData, setBillingsData] = useState<MonthlyBillingsByYear>(() => getStoredMonthlyBillings());
   const [isSavedAlert, setIsSavedAlert] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
@@ -72,6 +94,19 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
     return new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
   });
   const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  // Tahun terpilih wajib ada di daftar aktif
+  useEffect(() => {
+    if (yearsAscending.length > 0 && !yearsAscending.includes(selectedBillingYear)) {
+      setSelectedBillingYear(defaultTaxYear());
+    }
+  }, [yearsAscending, selectedBillingYear]);
+
+  // Tahun yang baru diaktifkan langsung punya daftar 12 bulan di layar ini
+  useEffect(() => {
+    if (hasUnsavedChanges) return;
+    setBillingsData(getStoredMonthlyBillings());
+  }, [taxYears, hasUnsavedChanges]);
 
   // Tagihan bulanan disimpan sebagai satu catatan bersama, jadi layar yang sedang
   // terbuka harus ikut berubah ketika perangkat lain memperbaruinya. Isian yang
@@ -90,7 +125,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
   const [chartMetric, setChartMetric] = useState<ChartMetric>('pph');
   const [chartMode, setChartMode] = useState<'single' | 'compare'>('single');
   const [activePointIndex, setActivePointIndex] = useState<number | null>(null);
-  const [activePointYear, setActivePointYear] = useState<number>(2025);
+  const [activePointYear, setActivePointYear] = useState<number>(() => defaultTaxYear());
 
   // Current year's monthly list
   const currentYearBillings = useMemo(() => {
@@ -140,7 +175,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
       saveStoredMonthlyBillings(cleanData);
       setBillingsData(cleanData);
 
-      // Synchronize ALL annual returns so all years (2023, 2024, 2025, 2026) are 100% in sync
+      // Selarangkan seluruh draf SPT dengan billing tahun berjalan
       const syncedReturns = syncAllReturnsWithMonthlyBillings(allReturns, cleanData);
       if (onUpdateAllReturns) {
         onUpdateAllReturns(syncedReturns);
@@ -161,7 +196,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
     }
   };
 
-  // Synchronize ALL data across all years (2023 - 2026) with Riwayat Pelaporan
+  // Selarangkan seluruh draf SPT dengan Riwayat Pelaporan untuk semua tahun aktif
   const handleSyncAllToSpt = () => {
     setIsSaving(true);
     try {
@@ -185,7 +220,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
       setHasUnsavedChanges(false);
       const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
       setLastSavedTime(nowStr);
-      showAlert(`✓ SELURUH DATA BERHASIL DISELARASKAN! Formulir SPT 1770 (2023 - 2026), Dashboard Pajak, Data Penghasilan, dan Lampiran sudah sama dengan Riwayat Pelaporan.`);
+      showAlert(`✓ SELURUH DATA DISELARASKAN! SPT 1770 tahun ${rangeLabel}, Dashboard, dan Lampiran sudah sama dengan Riwayat Pelaporan.`);
     } catch (err) {
       console.error('Failed to sync all returns', err);
       showAlert('Gagal menyelaraskan seluruh data.');
@@ -384,7 +419,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Rekap_Billing_Pajak_${selectedBillingYear}_BejoStiker.csv`);
+    link.setAttribute('download', `Rekap_Billing_Pajak_${selectedBillingYear}_BejoDigitalPrint.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -408,8 +443,61 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
   const plotWidth = chartWidth - paddingLeft - paddingRight;
   const plotHeight = chartHeight - paddingTop - paddingBottom;
 
+  // Daftar SPT yang tampil = hanya tahun pajak yang aktif
+  const visibleReturns = useMemo(
+    () => allReturns.filter(r => yearsAscending.includes(r.taxYear)),
+    [allReturns, yearsAscending]
+  );
+
+  // Keselarasan dibaca dari data tersimpan, bukan ditulis sebagai teks tetap
+  const alignment = useMemo(() => {
+    const mismatched: number[] = [];
+    let checked = 0;
+    for (const ret of visibleReturns) {
+      const list = billingsData[ret.taxYear] || [];
+      if (list.length === 0) continue;
+      checked += 1;
+      const grossFromBillings = list.reduce((s, b) => s + (b.grossRevenue || 0), 0);
+      const pphFromBillings = list.reduce((s, b) => s + (b.pphFinalPaid || 0), 0);
+      const grossInReturn = ret.businessActivity?.grossRevenue || 0;
+      const pphInReturn = ret.businessActivity?.umkmTaxAmount || 0;
+      if (grossFromBillings !== grossInReturn || pphFromBillings !== pphInReturn) {
+        mismatched.push(ret.taxYear);
+      }
+    }
+    return { checked, mismatched };
+  }, [visibleReturns, billingsData]);
+
+  // Pertumbuhan omzet antar tahun berurutan, dihitung dari billing tersimpan
+  const yoyGrowth = useMemo(() => {
+    const rows: { from: number; to: number; percent: number }[] = [];
+    for (let i = 1; i < yearsAscending.length; i++) {
+      const from = yearsAscending[i - 1];
+      const to = yearsAscending[i];
+      const grossFrom = (billingsData[from] || []).reduce((s, b) => s + (b.grossRevenue || 0), 0);
+      const grossTo = (billingsData[to] || []).reduce((s, b) => s + (b.grossRevenue || 0), 0);
+      if (grossFrom <= 0 || grossTo <= 0) continue;
+      rows.push({ from, to, percent: ((grossTo - grossFrom) / grossFrom) * 100 });
+    }
+    return rows.slice(-3);
+  }, [yearsAscending, billingsData]);
+
+  // Bulan dengan omzet terbesar pada tahun billing yang dipilih
+  const peakRevenueMonth = useMemo(() => {
+    let best: MonthlyTaxBilling | null = null;
+    for (const item of currentYearBillings) {
+      if ((item.grossRevenue || 0) > 0 && (!best || (item.grossRevenue || 0) > (best.grossRevenue || 0))) {
+        best = item;
+      }
+    }
+    return best;
+  }, [currentYearBillings]);
+
   // Extract series based on chart metric and comparison mode
-  const yearsToDraw = chartMode === 'compare' ? [2023, 2024, 2025, 2026] : [selectedBillingYear];
+  const yearsToDraw = useMemo(
+    () => (chartMode === 'compare' ? yearsAscending : [selectedBillingYear]),
+    [chartMode, yearsAscending, selectedBillingYear]
+  );
 
   const getMetricValue = (item: MonthlyTaxBilling) => {
     if (chartMetric === 'pph') return item.pphFinalPaid || 0;
@@ -430,13 +518,17 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
     return max > 0 ? max * 1.15 : 1000000;
   }, [yearsToDraw, chartMetric, billingsData]);
 
-  // Color schemes for years
-  const yearColors: Record<number, { stroke: string; fill: string; dot: string; label: string }> = {
-    2023: { stroke: '#64748b', fill: 'rgba(100, 116, 139, 0.12)', dot: '#475569', label: 'Tahun 2023' },
-    2024: { stroke: '#3b82f6', fill: 'rgba(59, 130, 246, 0.12)', dot: '#2563eb', label: 'Tahun 2024' },
-    2025: { stroke: '#10b981', fill: 'rgba(16, 185, 129, 0.15)', dot: '#059669', label: 'Tahun 2025' },
-    2026: { stroke: '#f59e0b', fill: 'rgba(245, 158, 11, 0.15)', dot: '#d97706', label: 'Tahun 2026' },
-  };
+  // Warna garis tiap tahun: palet berputar supaya daftar tahun berapa pun tetap terbedakan
+  const yearColors = useMemo(() => {
+    const map: Record<number, { stroke: string; label: string }> = {};
+    yearsAscending.forEach((yr, idx) => {
+      map[yr] = {
+        stroke: SERIES_PALETTE[idx % SERIES_PALETTE.length],
+        label: `Tahun ${yr}`,
+      };
+    });
+    return map;
+  }, [yearsAscending]);
 
   // Coordinates helper
   const getCoordinates = (monthIdx: number, val: number) => {
@@ -484,7 +576,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
                 Riwayat Pelaporan & Billing Pajak Bulanan
               </h2>
               <p className="text-xs text-slate-500">
-                Pencatatan Billing PPh Final Disetor (PP 55/2022 & PP 23/2018), kalkulasi otomatis Omzet, dan analisa visual line chart.
+                Pencatatan PPh Final yang disetor tiap bulan (PP 55/2022 & PP 23/2018). Omzet dijumlah otomatis dan tampil di grafik.
               </p>
             </div>
           </div>
@@ -549,7 +641,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
           }`}
         >
           <Receipt className="w-4 h-4" />
-          <span>Input Billing PPh Final (2023 - 2026)</span>
+          <span>Input Billing PPh Final ({rangeLabel})</span>
         </button>
 
         <button
@@ -580,7 +672,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
       </div>
 
       {/* -------------------------------------------------------- */}
-      {/* TAB 1: INPUT BILLING BULANAN & REKAP (2023 - 2026) */}
+      {/* TAB 1: INPUT BILLING BULANAN & REKAP per tahun aktif */}
       {/* -------------------------------------------------------- */}
       {activeTab === 'billing' && (
         <div className="space-y-6">
@@ -588,7 +680,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-bold text-slate-700">Pilih Tahun Billing:</span>
-              {[2023, 2024, 2025, 2026].map(yr => (
+              {yearsDescending.map(yr => (
                 <button
                   key={yr}
                   type="button"
@@ -599,7 +691,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
                       : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
                   }`}
                 >
-                  Tahun {yr} {yr === 2026 && '(Baru)'}
+                  Tahun {yr} {yr === newestTaxYear && '(Baru)'}
                 </button>
               ))}
             </div>
@@ -626,7 +718,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
                 onClick={handleSyncAllToSpt}
                 disabled={isSaving}
                 className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
-                title="Selaraskan seluruh data SPT 1770, Dashboard, dan Lampiran untuk seluruh tahun (2023 - 2026) dengan Riwayat Pelaporan"
+                title={`Selaraskan seluruh data SPT 1770, Dashboard, dan Lampiran untuk tahun ${rangeLabel} dengan Riwayat Pelaporan`}
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSaving ? 'animate-spin' : ''}`} />
                 <span>Selaraskan Seluruh Data</span>
@@ -956,7 +1048,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
                 onClick={handleSyncAllToSpt}
                 disabled={isSaving}
                 className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs shadow-md flex items-center gap-2 transition-all cursor-pointer"
-                title="Selaraskan seluruh tahun (2023 - 2026) SPT 1770 dengan Riwayat Pelaporan"
+                title={`Selaraskan seluruh tahun ${rangeLabel} SPT 1770 dengan Riwayat Pelaporan`}
               >
                 <RefreshCw className={`w-4 h-4 ${isSaving ? 'animate-spin' : ''}`} />
                 <span>SELARASKAN SELURUH DATA</span>
@@ -1057,7 +1149,7 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  Komparasi 2023 - 2026
+                  Komparasi {rangeLabel}
                 </button>
               </div>
             </div>
@@ -1324,20 +1416,29 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
                 <span>Analisa Pertumbuhan Omzet (YoY)</span>
               </div>
               <div className="text-xs text-slate-600 space-y-1">
-                <div className="flex justify-between items-center py-1 border-b border-slate-200/60 font-mono">
-                  <span>2023 ➔ 2024:</span>
-                  <span className="font-bold text-emerald-700 flex items-center gap-0.5">
-                    <ArrowUpRight className="w-3.5 h-3.5" /> +21.4%
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-1 border-b border-slate-200/60 font-mono">
-                  <span>2024 ➔ 2025:</span>
-                  <span className="font-bold text-emerald-700 flex items-center gap-0.5">
-                    <ArrowUpRight className="w-3.5 h-3.5" /> +18.2%
-                  </span>
-                </div>
+                {yoyGrowth.length === 0 ? (
+                  <p className="text-[11px] text-slate-500 pt-1">
+                    Perlu catatan omzet pada dua tahun berurutan sebelum pertumbuhan bisa dihitung.
+                  </p>
+                ) : (
+                  yoyGrowth.map((row) => {
+                    const rising = row.percent >= 0;
+                    return (
+                      <div
+                        key={`${row.from}-${row.to}`}
+                        className="flex justify-between items-center py-1 border-b border-slate-200/60 font-mono"
+                      >
+                        <span>{row.from} ke {row.to}:</span>
+                        <span className={`font-bold flex items-center gap-0.5 ${rising ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          {rising ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+                          {`${rising ? '+' : ''}${row.percent.toFixed(1)}%`}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
                 <p className="text-[11px] text-slate-500 pt-1">
-                  Kinerja usaha BEJO Digital Print menunjukkan tren kenaikan stabil konsisten di atas 15% per tahun.
+                  Angka dihitung dari omzet di daftar billing tiap tahun.
                 </p>
               </div>
             </div>
@@ -1349,10 +1450,12 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
                 <span>Pola Musiman Omzet Bulanan</span>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Omzet dan setoran PPh biasanya tertinggi di kuartal IV (Oktober - Desember) karena pesanan kalender, merchandise, dan stiker akhir tahun memuncak.
+                Musiman berarti omzet naik turun ikut pesanan. Bandingkan bulan satu dengan bulan lain di grafik.
               </p>
               <div className="text-[11px] font-bold text-blue-700 bg-blue-100/60 px-2.5 py-1 rounded-lg">
-                Puncak Tertinggi: Bulan Desember
+                {peakRevenueMonth
+                  ? `Omzet terbesar ${selectedBillingYear}: ${peakRevenueMonth.monthName} (${formatRupiah(peakRevenueMonth.grossRevenue || 0)})`
+                  : `Belum ada omzet tercatat di tahun ${selectedBillingYear}.`}
               </div>
             </div>
 
@@ -1382,10 +1485,14 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
             <div className="space-y-0.5">
               <div className="flex items-center gap-2">
                 <CheckCheck className="w-4 h-4 text-emerald-600" />
-                <span className="font-bold text-xs text-blue-950">Status Keselarasan Data Seluruh SPT (2023 - 2026)</span>
+                <span className="font-bold text-xs text-blue-950">Status Keselarasan Data Seluruh SPT ({rangeLabel})</span>
               </div>
               <p className="text-[11px] text-slate-600">
-                Omzet dan PPh Final UMKM di semua formulir SPT Tahunan 1770 sudah cocok dengan billing bulanan yang tersimpan.
+                {alignment.checked === 0
+                  ? 'Belum ada tahun dengan catatan billing yang bisa dibandingkan.'
+                  : alignment.mismatched.length === 0
+                    ? `Omzet dan PPh Final UMKM di ${alignment.checked} formulir SPT sudah cocok dengan billing bulanan tersimpan.`
+                    : `Tahun ${alignment.mismatched.join(', ')} masih beda dengan billing bulanan. Klik Selaraskan Seluruh SPT.`}
               </p>
             </div>
             <button
@@ -1401,10 +1508,10 @@ export const TaxFilingHistoryView: React.FC<TaxFilingHistoryViewProps> = ({
 
           <div className="space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Daftar Formulir SPT Tahunan 1770 Terdaftar & Selaras
+              Daftar Formulir SPT Tahunan 1770 per Tahun Aktif
             </h3>
 
-            {allReturns.map(ret => (
+            {visibleReturns.map(ret => (
               <div
                 key={ret.id}
                 onClick={() => onSelectReturn(ret)}

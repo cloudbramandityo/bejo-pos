@@ -18,8 +18,16 @@ import { convertDdMmYyToYyyyMmDd } from './formatters';
 import {
   saveTaxpayerProfileCloud,
   saveAllTaxAnnualReturnsCloud,
-  saveTaxMonthlyBillingsCloud
+  saveTaxMonthlyBillingsCloud,
+  saveTaxYearsCloud
 } from '../backend/pocketbaseBackend';
+import {
+  defaultTaxYearsList,
+  getTaxYears,
+  withAddedTaxYear,
+  withRemovedTaxYear,
+  writeTaxYears
+} from './taxYears';
 
 const STORAGE_KEY_TAXPAYER = 'bejo_taxpayer_profile';
 const STORAGE_KEY_ANNUAL_RETURNS = 'bejo_annual_tax_returns';
@@ -394,8 +402,8 @@ export const recomputeMonthlyBillingYear = (items: MonthlyTaxBilling[]): Monthly
 };
 
 /**
- * Generate clean default template for monthly billing 2023, 2024, 2025, 2026
- * Entirely clean without any dummy data or pre-filled seed amounts
+ * Daftar billing 12 bulan kosong (Rp 0) untuk setiap tahun pajak yang aktif.
+ * Daftarnya dibaca dari pengaturan tahun, bukan ditulis tetap di kode.
  */
 export const generateDefaultMonthlyBillings = (): MonthlyBillingsByYear => {
   const createEmptyYearList = (year: number) => {
@@ -423,12 +431,11 @@ export const generateDefaultMonthlyBillings = (): MonthlyBillingsByYear => {
     return recomputeMonthlyBillingYear(rawList);
   };
 
-  return {
-    2023: createEmptyYearList(2023),
-    2024: createEmptyYearList(2024),
-    2025: createEmptyYearList(2025),
-    2026: createEmptyYearList(2026),
-  };
+  const result: MonthlyBillingsByYear = {};
+  for (const year of getTaxYears()) {
+    result[year] = createEmptyYearList(year);
+  }
+  return result;
 };
 
 export const getStoredMonthlyBillings = (): MonthlyBillingsByYear => {
@@ -463,13 +470,17 @@ export const getStoredMonthlyBillings = (): MonthlyBillingsByYear => {
           });
           result[y] = recomputeMonthlyBillingYear(cleanedList);
         }
-        // Ensure 2023, 2024, 2025, and 2026 exist
+        // Setiap tahun pajak aktif wajib punya daftar 12 bulan. Tahun yang tidak
+        // aktif tetap dibiarkan di dalam penyimpanan supaya isinya tidak hilang.
         const defaults = generateDefaultMonthlyBillings();
-        for (const yr of [2023, 2024, 2025, 2026]) {
+        let yearAdded = false;
+        for (const yr of getTaxYears()) {
           if (!result[yr] || !Array.isArray(result[yr]) || result[yr].length === 0) {
             result[yr] = defaults[yr];
+            yearAdded = true;
           }
         }
+        if (yearAdded) saveStoredMonthlyBillings(result);
         return result;
       }
     }
@@ -578,6 +589,13 @@ export const syncAllReturnsWithMonthlyBillings = (
   return returns.map(r => syncReturnWithMonthlyBillings(r, billings));
 };
 
+/** Draf SPT 1770 kosong untuk setiap tahun pajak yang aktif (terbaru lebih dulu). */
+const createReturnsForConfiguredYears = (profile: TaxpayerProfile): TaxAnnualReturn1770[] =>
+  getTaxYears()
+    .slice()
+    .reverse()
+    .map((yr) => createInitialTaxReturn(yr, profile));
+
 export const getStoredAnnualReturns = (): TaxAnnualReturn1770[] => {
   const billings = getStoredMonthlyBillings();
   const currentProfile = getStoredTaxpayerProfile();
@@ -630,7 +648,7 @@ export const getStoredAnnualReturns = (): TaxAnnualReturn1770[] => {
           };
         });
 
-        for (const yr of [2026, 2025, 2024, 2023]) {
+        for (const yr of getTaxYears()) {
           if (!list.some(r => r.taxYear === yr)) {
             list.push(createInitialTaxReturn(yr, currentProfile));
           }
@@ -645,13 +663,11 @@ export const getStoredAnnualReturns = (): TaxAnnualReturn1770[] => {
     console.error('Failed to parse stored annual tax returns', e);
   }
 
-  // Default clean seed with 2026, 2025, 2024, and 2023 returns, fully synced with Riwayat Pelaporan
-  const defaultReturns = syncAllReturnsWithMonthlyBillings([
-    createInitialTaxReturn(2026, currentProfile),
-    createInitialTaxReturn(2025, currentProfile),
-    createInitialTaxReturn(2024, currentProfile),
-    createInitialTaxReturn(2023, currentProfile),
-  ], billings);
+  // Draf awal untuk setiap tahun pajak yang aktif, tersinkron dengan Riwayat Pelaporan
+  const defaultReturns = syncAllReturnsWithMonthlyBillings(
+    createReturnsForConfiguredYears(currentProfile),
+    billings
+  );
   saveStoredAnnualReturns(defaultReturns);
   return defaultReturns;
 };
@@ -674,16 +690,68 @@ export const clearAllDummyTaxData = (): { billings: MonthlyBillingsByYear; retur
   const cleanBillings = generateDefaultMonthlyBillings();
   saveStoredMonthlyBillings(cleanBillings);
 
-  const cleanReturns = syncAllReturnsWithMonthlyBillings([
-    createInitialTaxReturn(2026, cleanProfile),
-    createInitialTaxReturn(2025, cleanProfile),
-    createInitialTaxReturn(2024, cleanProfile),
-    createInitialTaxReturn(2023, cleanProfile),
-  ], cleanBillings);
+  const cleanReturns = syncAllReturnsWithMonthlyBillings(
+    createReturnsForConfiguredYears(cleanProfile),
+    cleanBillings
+  );
   saveStoredAnnualReturns(cleanReturns);
 
   return { billings: cleanBillings, returns: cleanReturns, taxpayer: cleanProfile };
 };
+
+/**
+ * Panggil setelah daftar tahun pajak berubah: tahun yang baru diaktifkan
+ * langsung dapat tab input (billing 12 bulan + draf SPT 1770) dan kirim ke
+ * server supaya perangkat lain melihat tahun yang sama. Tahun yang tidak aktif
+ * tidak dihapus, hanya tidak ditampilkan.
+ */
+export const ensureTaxYearsSeeded = (): void => {
+  const billings = getStoredMonthlyBillings();
+  saveStoredMonthlyBillings(billings);
+  const returns = getStoredAnnualReturns();
+  saveStoredAnnualReturns(returns);
+  saveAllTaxAnnualReturnsCloud(returns).catch((err) =>
+    console.error('[Tax Cloud] Error menyimpan draf SPT tahun pajak:', err)
+  );
+};
+
+/**
+ * Simpan daftar tahun pajak: pasang di perangkat ini, kirim ke server, lalu
+ * siapkan tab input tahun yang baru aktif. `fromCloud` menandai nilai yang baru
+ * datang dari server — nilai itu tidak ditulis balik supaya perangkat lain tidak
+ * mengulang tulis yang sama.
+ */
+export const saveTaxYearsConfig = (years: readonly unknown[], fromCloud = false): number[] => {
+  const clean = writeTaxYears(years);
+  if (!fromCloud) {
+    saveTaxYearsCloud({ years: clean, updatedAt: Date.now() }).catch((err) =>
+      console.error('[Tax Cloud] Error menyimpan tahun pajak:', err)
+    );
+  }
+  ensureTaxYearsSeeded();
+  return clean;
+};
+
+/** Tambah satu tahun pajak; duplikat, nilai tidak sah, dan daftar penuh ditolak. */
+export const addConfiguredTaxYear = (year: number): { years: number[]; added: boolean } => {
+  const next = withAddedTaxYear(getTaxYears(), year);
+  if (!next.added) return next;
+  return { years: saveTaxYearsConfig(next.years), added: true };
+};
+
+/** Kurangi satu tahun pajak; tahun terakhir tetap aktif. */
+export const removeConfiguredTaxYear = (year: number): { years: number[]; removed: boolean } => {
+  const next = withRemovedTaxYear(getTaxYears(), year);
+  if (!next.removed) return next;
+  return { years: saveTaxYearsConfig(next.years), removed: true };
+};
+
+/** Kembalikan daftar tahun pajak ke bawaan. */
+export const resetTaxYearsConfig = (): number[] => saveTaxYearsConfig(defaultTaxYearsList());
+
+/** Nilai yang datang dari server: pasang di perangkat ini, jangan dikirim balik. */
+export const applyTaxYearsFromCloud = (years: readonly unknown[]): number[] =>
+  saveTaxYearsConfig(years, true);
 
 /**
  * Helper: Import actual turnover per month directly from real store POS transactions (if available)

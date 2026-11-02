@@ -3,13 +3,14 @@
  * Submenu 3: Wizard Pengisian 12 Langkah SPT Tahunan Orang Pribadi (Formulir 1770)
  * Dengan alur pertanyaan bercabang & rekapitulasi real-time UU HPP 2025
  */
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   TaxAnnualReturn1770,
   TaxpayerProfile,
   TAX_CONFIG_2025,
 } from '../../types/tax';
 import { formatRupiah } from '../../utils/formatters';
+import { getTaxYearsDescending } from '../../utils/taxYears';
 import {
   Check,
   ChevronRight,
@@ -55,6 +56,15 @@ export const TaxFilingWizard: React.FC<TaxFilingWizardProps> = ({
   const [data, setData] = useState<TaxAnnualReturn1770>({ ...currentReturn });
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [isFiledSuccess, setIsFiledSuccess] = useState(false);
+
+  // Tahun yang bisa dipilih = daftar aktif; draf lama tetap bisa dibuka
+  const yearPicker = useMemo(() => {
+    const active = getTaxYearsDescending();
+    return {
+      options: active.includes(data.taxYear) ? active : [data.taxYear, ...active],
+      newest: active[0],
+    };
+  }, [data.taxYear]);
 
   const stepTitles = [
     'Pilih Tahun Pajak & Status SPT',
@@ -162,11 +172,15 @@ export const TaxFilingWizard: React.FC<TaxFilingWizardProps> = ({
                   onChange={e => updateData({ taxYear: Number(e.target.value) })}
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-bold text-slate-900 bg-white focus:ring-2 focus:ring-blue-500 text-sm"
                 >
-                  <option value={2026}>2026 (Tahun Pajak Terbaru)</option>
-                  <option value={2025}>2025 (Tahun Berjalan / Acuan UU HPP)</option>
-                  <option value={2024}>2024</option>
-                  <option value={2023}>2023</option>
+                  {yearPicker.options.map((yr) => (
+                    <option key={yr} value={yr}>
+                      {yr === yearPicker.newest ? `${yr} (Tahun Pajak Terbaru)` : yr}
+                    </option>
+                  ))}
                 </select>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Tahun pajak yang muncul di sini diatur di menu 13. Pengaturan Pajak.
+                </p>
               </div>
 
               <div>

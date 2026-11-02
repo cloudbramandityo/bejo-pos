@@ -61,6 +61,8 @@ import { formatRupiah } from '../utils/formatters';
 import { StoreInfo, getStoredDefaultLogo, saveStoredDefaultLogo, clearStoredDefaultLogo, isDefaultCustomerCategory, DEFAULT_MASTER_STORE_PROFILE, getStoredPrintSettings, saveStoredPrintSettings, DEFAULT_PRINT_SETTINGS } from '../utils/storage';
 import { LOGO_TARGET_CHARS, compressLogoFromDataUrl, compressLogoImage } from '../utils/storeLogoImage';
 import { downloadBackupJSON, validateBackupPayload, restoreBackupToStorage, restoreBackupToCloud, PosBackupPayload } from '../utils/backupUtils';
+import { downloadBlueprintMarkdown, downloadBlueprintPdf } from '../utils/blueprintDownload';
+import { canDownloadBlueprint } from '../utils/recordAccess';
 import { DeveloperJokerIcon } from './DeveloperJokerIcon';
 import { StoreLogo } from './StoreLogo';
 import { isReservedDeveloperUsername } from '../utils/authSecurity';
@@ -770,6 +772,22 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
   const [restoreProgress, setRestoreProgress] = useState('');
   const [restoreProgressPercent, setRestoreProgressPercent] = useState(0);
   const backupFileInputRef = useRef<HTMLInputElement>(null);
+  const [blueprintBusy, setBlueprintBusy] = useState<'md' | 'pdf' | null>(null);
+
+  const handleDownloadBlueprint = async (format: 'md' | 'pdf') => {
+    if (blueprintBusy) return;
+    setBlueprintBusy(format);
+    try {
+      const result = format === 'pdf' ? await downloadBlueprintPdf() : await downloadBlueprintMarkdown();
+      const sizeKb = Math.max(1, Math.round(result.bytes / 1024));
+      setBackupToastMsg(`Blueprint terunduh: ${result.fileName} (${sizeKb} KB).`);
+    } catch (err) {
+      setBackupToastMsg(err instanceof Error ? err.message : 'Blueprint belum terunduh. Coba lagi.');
+    } finally {
+      setBlueprintBusy(null);
+      setTimeout(() => setBackupToastMsg(null), 6000);
+    }
+  };
 
   const handleDownloadBackup = () => {
     try {
@@ -3756,6 +3774,44 @@ export const CustomerScreen: React.FC<CustomerScreenProps> = ({
               </button>
             </div>
           </div>
+
+          {canDownloadBlueprint(userRole) && (
+            <div className="border border-slate-200 rounded-xl p-5 space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-slate-900 rounded-lg">
+                  <FileText className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Master Prompt &amp; Blueprint Arsitektur Aplikasi</h3>
+                  <p className="text-[11px] text-slate-500">Unduh penjelasan lengkap cara aplikasi ini dibuat.</p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Isinya daftar modul, teknologi, dan rumus perhitungan aset, stok, pajak, rekonsiliasi, serta invoice.
+                Berkasnya dibaca ulang dari server saat tombol ditekan, jadi isinya mengikuti versi yang sedang berjalan.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleDownloadBlueprint('md')}
+                  disabled={blueprintBusy !== null}
+                  className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <Download className="w-4 h-4 text-emerald-400" />
+                  {blueprintBusy === 'md' ? 'Mengambil berkas...' : 'Unduh Berkas .md'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadBlueprint('pdf')}
+                  disabled={blueprintBusy !== null}
+                  className="px-4 py-2.5 bg-white hover:bg-emerald-50 active:bg-emerald-100 disabled:opacity-60 disabled:cursor-not-allowed text-emerald-900 border border-emerald-300 font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <Download className="w-4 h-4 text-emerald-400" />
+                  {blueprintBusy === 'pdf' ? 'Menyiapkan PDF...' : 'Unduh Berkas .pdf'}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5">
             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />

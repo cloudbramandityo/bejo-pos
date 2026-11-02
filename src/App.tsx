@@ -211,7 +211,8 @@ import {
   subscribeLandingConfig,
   subscribeLandingDraft,
   saveLandingDraftCloud,
-  saveLandingPublishedCloud
+  saveLandingPublishedCloud,
+  subscribeTaxYears
 } from './backend/pocketbaseBackend';
 import { DEFAULT_AGENTS_LIST } from './utils/agentMapping';
 import {
@@ -219,6 +220,7 @@ import {
   adjustmentsFromCostEdit,
   adjustmentsFromStockDiff
 } from './utils/assetAdjustments';
+import { applyTaxYearsFromCloud } from './utils/taxStorage';
 
 /**
  * Samakan kop faktur Invoice dengan profil toko yang aktif.
@@ -1167,6 +1169,14 @@ export default function App() {
       }
     });
 
+    // 21c. Subscribe Tahun Pajak (satu pengaturan tahun untuk semua perangkat)
+    const unsubTaxYears = subscribeTaxYears((cloudCfg) => {
+      if (cloudCfg && Array.isArray(cloudCfg.years) && cloudCfg.years.length > 0) {
+        // Jangan ditulis balik ke server; hanya cermin perangkat ini + tab tahun baru.
+        applyTaxYearsFromCloud(cloudCfg.years);
+      }
+    });
+
     // 22. Periodic Auto-Cleanup for SPK Archives (Runs daily at 19:00 WIB)
     checkAndRunSpkAutoCleanup();
     const cleanupInterval = setInterval(() => {
@@ -1201,6 +1211,7 @@ export default function App() {
       unsubInvoices();
       unsubLanding();
       unsubLandingDraft();
+      unsubTaxYears();
     };
   }, []);
 

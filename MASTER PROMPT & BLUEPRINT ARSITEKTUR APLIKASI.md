@@ -1,0 +1,349 @@
+# MASTER PROMPT & BLUEPRINT ARSITEKTUR APLIKASI — BEJO Digital Print
+
+Dokumen ini menjelaskan **seluruh cara pembuatan aplikasi**: tampilan (frontend), lapisan server, basis data, teknologi, jumlah modul, dan mesin perhitungan yang dipakai. Semua angka dan nama berkas di bawah diverifikasi dari isi repo pada versi **4.11.0** (bukan perkiraan).
+
+Cara memakai:
+- Bagian 1–15 = spesifikasi/acuan membaca dan mengubah kode.
+- Bagian 16 = blok prompt siap tempel untuk AI/developer lain yang harus membangun atau memperbaiki aplikasi ini.
+- Berkas ini diunduh dari **Pengaturan toko → Backup Data** oleh DEVELOPER dalam format `.md` atau `.pdf`.
+
+Dokumen ini **tidak memuat kredensial apa pun**. Nama variabel lingkungan disebut, nilainya tidak.
+
+<!-- ANGKA-STRUKTURAL:START -->
+## Angka struktural terukur
+
+Angka-angka di bawah dibandingkan otomatis dengan isi repo oleh `npm run check:blueprint`. Kalau ada perubahan struktur dan angka ini tidak ikut berubah, build penjaga gagal — itu penanda dokumen perlu diperbarui.
+
+- Rute API: 54
+- Berkas modul server: 11
+- Tab navigasi: 12
+- Koleksi PocketBase dari skema: 30
+- Koleksi jurnal dibuat saat boot: 2
+- Kanal langganan realtime: 36
+- Cermin localStorage seluruhnya: 39
+- Berkas penjaga di scripts: 15
+- Perintah npm: 28
+<!-- ANGKA-STRUKTURAL:END -->
+
+
+---
+
+## 1. Ringkasan produk
+
+Aplikasi toko satu pintu untuk BEJO Digital Print: kasir, stok, agen (reseller), cetak digital (SPK), invoice B2B, pajak, jurnal Google Sheet, marketing, dan situs publik toko.
+
+- Bentuk: **SPA React** + **satu server Node/Express** yang juga menjadi broker ke basis data.
+- Multi-perangkat: semua perubahan tampil di perangkat lain **langsung** (realtime) tanpa refresh.
+- Dua mode jalan: **Hybrid Server** (tersambung) dan **Mode Lokal** (tidak tersambung; data hanya di perangkat itu).
+- Bahasa antarmuka: Indonesia awam, pendek, tanpa istilah programmer.
+- Versi: `major.minor.patch`, disimpan sinkron di `package.json` dan `src/config/brand.ts` (`APP_VERSION`), diperiksa `scripts/check-version.mjs`.
+
+Ukuran kode (terukur): 155 berkas `.ts`/`.tsx` di `src/` (±96.250 baris) dan 11 berkas server (±7.730 baris).
+
+---
+
+## 2. Teknologi yang dipakai
+
+| Lapisan | Teknologi | Versi |
+|---|---|---|
+| UI | React + TypeScript | 19.0.1 / ~5.8.2 |
+| Build frontend | Vite + `@vitejs/plugin-react` | 6.2.3 |
+| Gaya | Tailwind CSS v4 lewat `@tailwindcss/vite` (tanpa PostCSS config) | 4.1.14 |
+| Ikon / animasi / grafik | `lucide-react`, `motion`, `recharts` | — |
+| Tabel spreadsheet (Jurnal) | `@fortune-sheet/core`, `@fortune-sheet/react` | — |
+| Dokumen | `jspdf`, `jspdf-autotable` (PDF), `xlsx` (Excel), `qrcode` | — |
+| Server | Express 4.21.2 dijalankan `tsx` saat dev | — |
+| Basis data + realtime | PocketBase 0.28.1 (SDK `pocketbase` di browser) | 0.28.1 |
+| AI | `@google/genai` (gambar, video, asisten) | — |
+| Bundel server produksi | esbuild → `dist/server.cjs` | 0.25.0 |
+| Reverse proxy + HTTPS | Caddy | — |
+| Layanan Windows di VPS | NSSM (BejoStikerPOS, Caddy, PocketBase) | — |
+
+Perintah penting (`package.json`, 27 skrip npm):
+- `npm run dev` → `tsx server.ts` (server + API di port 3000, Vite dilayani terpisah).
+- `npm run build` → `vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs`.
+- `npm start` → `node dist/server.cjs`.
+- `prebuild` menjalankan 5 penjaga (lihat bagian 13).
+
+---
+
+## 3. Struktur berkas
+
+```
+server.ts                 2.109 baris — Express, rute invoice/AI/diagnostik, SPA wildcard
+server/                   11 modul server (rute + kebijakan sisi server)
+src/
+  App.tsx                 2.845 baris — state utama, tab, sinkronisasi, tulis cloud
+  main.tsx, index.html    entry
+  components/             17 berkas *Screen.tsx, 19 berkas *Modal.tsx, 8 subfolder
+  backend/pocketbaseBackend.ts   2.344 baris — SATU jalur tulis/baca/langganan cloud
+  lib/                    8 berkas (pb client, branding, jurnal api, auth, blueprint)
+  hooks/                  useAuth, useCollection, useRecord
+  utils/                  46 berkas — mesin hitung, penyimpanan, kebijakan
+  types/                  tax.ts, reconciliation.ts
+  config/brand.ts         nama + APP_VERSION + identitas brand
+  data/, assets/          seed awal dan aset statis
+scripts/                  23 berkas: 14 penjaga + create-pocketbase-collections.mjs + util
+deploy/                   skrip provisioning & deploy VPS (PowerShell)
+AGENTS.md                 aturan wajib proyek
+MASTER PROMPT & BLUEPRINT ARSITEKTUR APLIKASI.md   dokumen ini (unduh lewat menu Backup)
+```
+
+Subfolder komponen: `journal`, `landing`, `marketing`, `modals`, `reconciliation`, `reports`, `spk`, `tax`.
+
+---
+
+## 4. Modul aplikasi (frontend)
+
+**12 tab navigasi** terdaftar di `src/components/Navbar.tsx:100` (`ALL_TABS`) dan di-render dari `src/App.tsx:401` (union 11 nilai tab state; `marketing` digabung di Navbar). Grup: Operasional, Produksi, Laporan & Keuangan, Pengaturan, Developer.
+
+| # | key tab | Label | Gerbang akses (`Navbar.tsx:186-212`) | Layar |
+|---|---|---|---|---|
+| 1 | `pos` | POS Kasir | DEVELOPER/OWNER/ADMIN/KASIR | `PosScreen.tsx` |
+| 2 | `inventory` | Katalog Produk | role operasional | `InventoryScreen.tsx` |
+| 3 | `stock` | Stok | catalog + toko online | `StockScreen.tsx` |
+| 4 | `agen` | Portal Agen | AGEN/DEVELOPER/OWNER/ADMIN | `AgentScreen.tsx` |
+| 5 | `shift` | Shift Kasir | selain AGEN/SPK | `ShiftScreen.tsx` |
+| 6 | `spk` | SPK Cetak Digital | SPK/DEVELOPER/OWNER/ADMIN/KASIR | `SpkScreen.tsx` (6 sub-tab) |
+| 7 | `transactions` | Laporan | DEVELOPER/OWNER/ADMIN | `TransactionHistoryScreen.tsx` + `reports/` |
+| 8 | `invoices` | Invoice B2B | DEVELOPER/OWNER/ADMIN | `InvoiceScreen.tsx` |
+| 9 | `tax` | Pajak | DEVELOPER/OWNER/ADMIN | `tax/TaxScreen.tsx` |
+| 10 | `marketing` | Marketing | DEVELOPER/OWNER/ADMIN | `MarketingScreen.tsx` |
+| 11 | `customers` | Pengaturan Toko | role pengelola toko | `CustomerScreen.tsx` |
+| 12 | `landing_editor` | Website | **DEVELOPER saja** (`App.tsx:2645`) | `LandingPageEditorScreen.tsx` |
+
+Halaman di luar tab: `LoginScreen.tsx`. Sub-tab penting: `agentScreenSubTab` (`App.tsx:462`), `spkInitialTab` 6 nilai (`App.tsx:463`), Laporan punya Laporan Penjualan / Laporan Keuangan / Rekonsiliasi / Jurnal.
+
+**6 peran** (`src/types.ts:229`): `DEVELOPER`, `OWNER`, `ADMIN`, `AGEN`, `KASIR`, `SPK` (+ string terbuka untuk peran khusus).
+
+**Dua aturan kelola yang tidak boleh disatukan** (`src/utils/recordAccess.ts`):
+- `canManageRecords(role)` :7 → DEVELOPER + ADMIN saja → dipakai **tab SPK Cetak**.
+- `canManageBusinessData(role)` :21 → DEVELOPER + ADMIN + OWNER → dipakai **Agen, Laporan, Invoice, Pajak, Marketing**.
+- OWNER sengaja **tidak** boleh hapus order/purge arsip SPK. Jurnal punya aturannya sendiri (`journalAccessPolicy.ts`: baca = DEVELOPER/OWNER/ADMIN, tulis = DEVELOPER saja).
+- Jejak audit selalu lewat `describeAuditActor(user)` (`src/utils/auditActor.ts:10`); nama orang tidak boleh ditulis tetap di komponen.
+
+---
+
+## 5. Arsitektur frontend
+
+- `App.tsx` memegang state global (produk, stok, transaksi, shift, SPK, invoice, pajak, agen, pengaturan toko, sesi), efek langganan realtime, dan semua handler tulis cloud.
+- **Semua** akses cloud lewat `src/backend/pocketbaseBackend.ts`: baca, tulis, hapus, 36 kanal langganan (`export function subscribe*`), watchdog, outbox. Aturan: jangan menulis `pb.collection(x).subscribe(...)` di komponen.
+- Kanal dibuat lewat `createSafeSubscription` → `subscribeCollection`/`subscribeRecord` dengan topik `'*'`, dipasang di efek langganan `App.tsx` (deps `[]`) sehingga hidup sepanjang sesi.
+- Cermin offline: 39 kunci localStorage `bejo_pos_*` di seluruh `src/` (27 di antaranya terdaftar di `src/utils/storage.ts`) + IndexedDB (`src/utils/localDatabase.ts`) untuk Mode Lokal.
+- Data URL avatar dibatasi `MAX_AVATAR_DATA_URL_LENGTH = 120000` (`src/utils/credentialPolicy.ts:16`).
+
+---
+
+## 6. Server (backend)
+
+**54 rute API** = 21 di `server.ts` + 33 di 9 modul, ditambah 1 wildcard SPA (`app.get('*')`) yang menyajikan `dist/index.html`.
+
+| Modul | Rute | Isi |
+|---|---|---|
+| `server.ts` | 21 | `/api/health`, diagnostik backend (`/api/backend/diagnostics`, `fix`, `clear-errors`, `simulate-error`), `/api/lan/ping-machine`, AI (`/api/generate-image`, `generate-video`, `video-status`, `ai-assistant`), 11 rute invoice B2B |
+| `server/journalApi.ts` | 7 | `/api/journal/session`, `/config`, `/sheets` (baca + tulis) |
+| `server/marketingApi.ts` | 9 | `/api/marketing/status`, `diagnostics`, `whatsapp-status-ads/*`, `tiktok-infeed-ads/*`, `shopee-discovery-ads/*` |
+| `server/userAdmin.ts` | 5 | `/api/users`, `/me`, `/:id`, `/presence`, `/sync` |
+| `server/posAuth.ts` | 4 | `/api/auth/mode`, `me`, `login`, `logout` |
+| `server/devAuth.ts` | 3 | `/api/auth/session`, `developer-login`, `logout` |
+| `server/landingApi.ts` | 2 | `/api/landing/published`, `/media/:id` |
+| `server/pbSession.ts` | 1 | `/api/pocketbase/session` (broker token PocketBase) |
+| `server/brandingApi.ts` | 1 | `/api/branding` (publik, satu-satunya jalur baca identitas sebelum login) |
+| `server/blueprintApi.ts` | 1 | `/api/blueprint` — dokumen blueprint, **hanya DEVELOPER** (401 tanpa sesi, 403 peran lain, `no-store`) |
+| `server/staffStore.ts`, `server/passwordHash.ts` | 0 | layanan internal (direktori staf, scrypt, `ensureSyncAccount`) |
+
+Kebijakan akses rute:
+- `PRIVATE_API_PREFIXES` (`server.ts:173`) menjaga rute privat dengan cookie sesi; `/api/branding` **sengaja tidak masuk** daftar itu supaya layar login bisa menampilkan nama + logo toko. Gagal baca branding = `200 {success:false}` (bukan 503) agar login tidak pernah ikut gagal. `/api/blueprint` justru **masuk** daftar itu dan ditambah penolakan peran di modulnya karena isinya dokumen proyek.
+- mode `PUBLIC_SITE` membuat aplikasi menutup jalur tulis langsung dan memakai broker sesi; kredensial Basic (`REMOTE_ACCESS_USER`/`REMOTE_ACCESS_PASS`) menjaga panel tertentu.
+- Token PocketBase tidak pernah turun ke kode browser: browser bicara ke `https://<domain>/api/pb` (Caddy), token diterbitkan `server/pbSession.ts` dari `PB_SYNC_*`.
+- Variabel lingkungan yang dibaca server (nama saja): `PORT`, `NODE_ENV`, `APP_URL`, `PUBLIC_SITE`, `POCKETBASE_URL`, `POCKETBASE_UPSTREAM`, `PB_ADMIN_EMAIL`, `PB_ADMIN_PASSWORD`, `PB_SYNC_EMAIL`, `PB_SYNC_PASSWORD`, `DEV_USERNAME`, `DEV_PASSWORD_HASH`, `APP_SESSION_SECRET`, `JOURNAL_DEV_USER`, `JOURNAL_DEV_PASSWORD`, `JOURNAL_SESSION_SECRET`, `GEMINI_API_KEY`, `META_*`, `TIKTOK_*`, `SHOPEE_*`.
+- **Larangan keras:** variabel berprefix `VITE_` ikut dibundel ke browser, jadi `VITE_PB_SYNC_EMAIL`/`VITE_PB_SYNC_PASSWORD` tidak boleh ditulis ke `.env` oleh skrip mana pun (dijaga `npm run check:users` kasus J).
+
+---
+
+## 7. Basis data (PocketBase)
+
+- **30 koleksi** dibuat `scripts/create-pocketbase-collections.mjs` (baris 79–599): `users`, `app_users`, `products`, `product_categories`, `customer_categories`, `customers`, `transactions`, `stock_transactions`, `shifts`, `cashiers`, `agents`, `suppliers`, `store_profiles`, `custom_roles`, `agent_notifications`, `activity_logs`, `asset_adjustments`, `reconciliation_runs`, `spk_orders`, `machines`, `ai_chat_messages`, `user_mentions`, `private_chat_messages`, `printing_rejects`, `invoices`, `invoice_settings`, `settings`, `taxpayer_profile`, `tax_annual_returns`, `tax_monthly_billings`.
+- **2 koleksi Jurnal** (`jurnal_config`, `jurnal_sheets`) dibuat saat boot oleh `server/journalApi.ts:366-417` dengan aturan lima API `null` (hanya superuser) — total **32 koleksi**.
+- Pola wajib di semua koleksi: `legacyId` (penanda id aplikasi lama, supaya restore backup tidak menduplikasi orang yang sama) + kolom JSON `data` (mirror 5 MB untuk field yang tidak masuk skema, mis. `avatarUrl`, `mustChangePassword`).
+- `users` dan `app_users` **terkunci superuser** (create/update/delete rule `null`) karena akun staf hanya boleh ditulis lewat server. Aturan baca/langganan koleksi bisnis berbunyi `@request.auth.id != ""`, jadi kanal realtime wajib dibuat setelah token sesi ada.
+- Akun sinkronisasi (`PB_SYNC_EMAIL`) tidak boleh punya baris `app_users`; `ensureSyncAccount` menyamakan record dengan `.env` saat boot.
+- URL PocketBase yang dibundel ke browser **wajib domain publik** (`VITE_POCKETBASE_URL = https://<domain>/api/pb`); nilai localhost membuat semua pengunjung jatuh ke Mode Lokal (dijaga `deploy-vps.ps1`).
+
+---
+
+## 8. Mesin perhitungan (isi tiap modul)
+
+### 8.1 Aset toko — `src/utils/assetTrend.ts` + `src/utils/assetAdjustments.ts`
+- Nilai kini: `currentStoreAssetValue(products)` :142 = Σ `assetUnitCost(product)` × stok; hanya produk terhitung aset (`isCountedInStoreAsset` :130).
+- Garis waktu dibuat **rekonstruksi mundur**: nilai hari H = nilai kini − seluruh kejadian setelah hari itu; `bucketKeyOf` :80 mendukung HARIAN/MINGGUAN/BULANAN, batas mundur `maxBackDays` = 1460 hari (`assetTrend.ts:228`).
+- Dua ledger wajib ada: `stock_transactions` (satuan utama × harga kulak) dan `asset_adjustments` (kejadian dalam rupiah).
+- Dekomposisi penyesuaian persis (`adjustmentsFromProductEdit` :89): efek harga `(hargaBaru − hargaLama) × stokLama` **ditambah** efek stok `hargaBaru × (stokBaru − stokLama)`; jumlah keduanya = selisih nilai aset. Baris bernilai nol tidak ditulis (`adjustmentsFromCostEdit` :173, `adjustmentsFromStockDiff` :199, `aggregateAdjustment` :230).
+
+### 8.2 Rekonsiliasi — `src/utils/reconciliationMath.ts`
+- Satu fungsi untuk tabel, riwayat, dan PDF: `analyzeReconciliation(kind, rows, columns)` :210.
+- Tiap **kolom** dinilai terpisah (`row.values` dikunci id kolom); angka antar kolom tidak boleh dijumlah.
+- Varians = **A − B**; Komparatif = **B − A**. Arah untung dari `direction` kolom (`NAIK`/`TURUN`), jika `ROW` ikut sifat baris: PENDAPATAN untung bila capaian > rencana; BIAYA untung bila capaian < rencana.
+- Sifat baris tiga: `PERBANDINGAN` (bawaan; verdict `NETRAL`, label dari tanda selisih lewat `verdictLabel` :332, tanpa warna untung/rugi), `PENDAPATAN`, `BIAYA`.
+- Identitas wajib: `goodCount + badCount + matchCount + neutralCount === countedRows` (`summaryCountsText` :364). Baris tanpa nama atau semua kolom nol tidak terhitung.
+- Persen selalu memakai Laporan A **pada kolom yang sama**; A = 0 → `percent: null` dan sel dikosongkan (`formatPercentValue` :301) — tidak pernah 0% atau ∞.
+- Format hanya lewat `formatColumnValue` :310 (UANG → rupiah, JUMLAH → angka biasa). Selisih uang negatif ditulis `-Rp 850.000`.
+
+### 8.3 Pajak — `src/utils/taxStorage.ts` + `src/types/tax.ts`
+- PPh orang pribadi/pasal 25: lapisan **UU HPP** di `types/tax.ts:233-239` — 5% s.d. 60 jt, 15% s.d. 250 jt, 25% s.d. 500 jt, 30% s.d. 5 M, 35% di atasnya; dihitung bertingkat oleh `calculateTaxPayableUuHpp` (`taxStorage.ts:58`).
+- PTKP 11 status (`types/tax.ts:219-231`): TK/0 = 54 jt, tiap tanggungan +4,5 jt, K/I menambah istri.
+- PPh Final UMKM (PP 55): tarif 0,5% dengan ambang peredaran bruto 500 jt/tahun — `max(0, totalBruto − 500.000.000) × 0,5%` (`taxStorage.ts:377`, `:556-560`); tagihan bulanan dihitung inkremental terhadap ambang yang sama.
+- NPPN dan pembukuan jadi dua jalur alternatif perhitungan tahunan; `recomputeTaxReturn` :182 menyusun kembali SPT 1770, `recomputeMonthlyBillingYear` :352 untuk 12 bulan, `syncReturnWithMonthlyBillings` :518 menjaga angka tahunan dan bulanan tetap sama.
+- **Daftar tahun pajak** (`src/utils/taxYears.ts`, aturan tunggal; tulis cloud di `taxStorage.ts`): `DEFAULT_TAX_YEARS` 2022–2028, `normalizeTaxYears` membuang nilai tidak sah/duplikat dan memotong ke 30 tahun (rentang 2000–2060), `withAddedTaxYear`/`withRemovedTaxYear` (tahun terakhir tidak boleh hilang), `writeTaxYears` menyimpan cermin `bejo_tax_years` dan menyiarkan `bejo_tax_years_updated`, `defaultTaxYear` memilih tahun aktif terbaru yang sudah berjalan. Berkas aturan ini tidak mengimpor `pocketbaseBackend` supaya `check:tax-years` dapat menjalankannya di Node.
+- Seluruh layar tahun membaca daftar itu — `useTaxYears()` di `TaxScreen.tsx`, `TaxFilingHistoryView.tsx`, `TaxSettingsView.tsx` dan `getTaxYearsDescending()` di `TaxFilingWizard.tsx`; tidak ada lagi angka tahun atau perbandingan `=== 2026` di komponen pajak. Pemilik menambah/mengurangi tahun di submenu **13. Pengaturan Pajak** bagian "5. Tahun Pajak yang Diisi"; tahun yang dikurangi hanya disembunyikan (billing + draf SPT tetap tersimpan dan muncul lagi saat tahunnya ditambah kembali).
+- Daftar tahun dikirim ke perangkat lain sebagai satu catatan `settings/tax_years` (`subscribeTaxYears`/`saveTaxYearsCloud` di `pocketbaseBackend.ts`, kanal dipasang di efek langganan `App.tsx`); nilai dari server masuk lewat `applyTaxYearsFromCloud` sehingga tidak ditulis balik, dan tahun baru langsung punya isian lewat `ensureTaxYearsSeeded()`.
+- PKP: omzet > 4,8 M wajib dikukuhkan; kelipatan faktur dibulatkan ke bawah per 1.000. PPh 25: estimasi `(utang tahunan − kredit PPh 21) / 12`.
+
+### 8.4 Stok, HPP, bahan — `src/utils/stockUtils.ts`
+- `getProductRollPakQty` :154 menurunkan isi satu roll/pak dari satuan kemasan.
+- Modal per satuan bahan: `calculateStockItemProfit` :507 = `hargaKulak ÷ qtyPerRollPak` → harga per meter/lembar.
+- `calculateSalesItemCost` :572 menghitung HPP item penjualan, termasuk konversi luas **m²** untuk bahan cetak.
+- `getMaterialStockFormula` :204 menghasilkan rumus stok bahan yang dipakai layar; `calculateBorrowReturnStock` :314 untuk pinjam/pulang agen; `calculateStockBreakdown` :367 untuk rincian.
+- Satuan meter/lembar dikenali lewat `isMeterOrLembarUnit` :9.
+
+### 8.5 Invoice B2B — `src/utils/invoiceStorage.ts` + `src/utils/formatters.ts`
+- `calculateInvoiceTotals` :62: bruto = kuantitas × harga satuan, PPN bawaan 11%, DP bawaan 50%, lalu total, dibayar, kurang bayar.
+- Nomor dokumen berjenjang: `generateNextDocumentNumber` :275 → `{INV|PI}/{pref}/{YYYY}/{MM}/{seq4}`; `generateNextCreditNoteNumber` :315 untuk nota retraksi.
+- Jadwal pembayaran: `generateDefaultPaymentSchedules` :123, `recalculatePaymentSchedules` :216, `autoBalancePaymentSchedules` :235.
+- Termin/DP efektif: `getTerminStageDisplayInfo` :764, `getProformaEffectivePaymentInfo` :873; konversi PI→INV menjadi transaksi POS lewat `convertInvoicesToTransactions` :1000.
+- Nomor struk POS: `generateUniqueInvoiceId` :120 → `BS{YYYY}/{MM}/{seq}`.
+- Rekonsiliasi uang tunai shift: `getNetCashAmount` :517 = `min(uangTunaiKasir, total − transfer − qris)`.
+
+### 8.6 Periode riwayat agen & rekap — `src/utils/agentHistoryPeriod.ts`
+- `matchesRecapPeriod` dan `buildRecapPeriodLabel` dipakai daftar, pratinjau, dan PDF sekaligus; kunci tanggal dinormalkan ke `YYYY-MM-DD` (data lama `DD/MM/YY`), rentang inklusif, input terbalik dinormalkan, baris tanpa tanggal tidak masuk periode.
+
+### 8.7 Deadline SPK — `src/utils/spkDeadlineMonitor.ts`
+- `evaluateSpkDeadlines` :51 menilai sisa waktu tiap order, `isUserEligibleForDeadlineAlert` :36 memfilter peran; bunyi lewat `notificationSound.ts` + `webNotifications.ts`.
+
+### 8.8 Kredensial — `src/utils/credentialPolicy.ts`
+- Satu aturan untuk UI **dan** server: panjang minimal 10 (`MIN_PASSWORD_LENGTH` :10), wajib huruf + angka, bukan publik/diketahui, tidak sama atau diawali username; password sementara minimal 6 (`:13`, hanya sah saat `mustChangePassword=true`); format username `^[a-z0-9][a-z0-9._-]{2,31}$` (`:18`); `generateStrongPassword` :159 memakai CSPRNG.
+
+### 8.9 Ukuran muatan cloud — `src/utils/dbSanitize.ts` + `src/utils/storeLogoImage.ts`
+- `BINARY_MAX_CHARS = 50.000` (`:9`) memotong lampiran base64; **khusus** `logoUrl` memakai `LOGO_MAX_CHARS = 400.000` (`:15`, daftar `LOGO_FIELDS` `:17`, pemilihan cap `:27`).
+- Unggahan logo selalu dikompres: tangga 256/192/128 px × kualitas 0,9→0,6, berhenti pada hasil pertama ≤ `LOGO_TARGET_CHARS = 200.000` (`storeLogoImage.ts:11`). Bila terkecil masih besar, penyimpanan **dibatalkan** dengan pesan jelas — logo yang hanya terlihat di satu perangkat dilarang.
+
+### 8.10 AI
+- Server: `@google/genai` (`server.ts:241`) untuk `/api/generate-image`, `/api/generate-video` + `/api/video-status`, `/api/ai-assistant` (penawaran desain cetak).
+- Browser: `src/utils/localBejoAiEngine.ts` menyiapkan jawaban lokal saat server tidak tersambung.
+
+---
+
+## 9. Sinkronisasi realtime & ketahanan jaringan
+
+Semua konstanta ada di `src/backend/pocketbaseBackend.ts`:
+- Watchdog koneksi: `REALTIME_WATCHDOG_MS = 15000` :527 menentukan `realtimeConnected`; SSE mati ≥ `REALTIME_REVIVE_AFTER_MS = 30000` :528 → kanal dibangun ulang.
+- Pemulihan sesi: `REAUTH_MIN_INTERVAL_MS = 30000` :229 — satu percobaan token baru per 30 detik, digabung bila banyak kanal gagal bersamaan; pemicunya `isSessionRejected()` (401/403 atau token kedaluwarsa).
+- Antrean tulis ulang: `bejo_pos_outbox_queue_v1` :382, maksimum `MAX_OUTBOX_ENTRIES = 500` :383; yang diulang adalah gagal karena jaringan/401/403/408/429/5xx, yang dibuang hanya penolakan payload (400/404).
+- Snapshot server **menggantikan** isi perangkat (termasuk saat kosong); yang belum terkirim dilindungi outbox, bukan oleh penyaringan kosong.
+- Kunci localStorage tidak boleh menulis balik ke server bila datanya baru datang dari server (helper pajak meneruskan `fromCloud = true`).
+- Caddy mengalir SSE dengan `flush_interval -1` supaya tidak ter-buffer.
+
+---
+
+## 10. Fitur lintas modul
+
+- **Folder SPK bersama**: `src/utils/sharedFolderAccess.ts` memakai File System Access API; lokasi hanya dari record `settings/spk_lan_folder`, izin per perangkat (satu kali "Hubungkan Folder di Perangkat Ini"), label status hanya dari hasil ukur.
+- **Cetak**: struk via `receiptPdf.ts` + `thermalPrinter.ts`; laporan/invoice/rekonsiliasi via `pdfExport.ts`, `invoicePdf.ts`, `reconciliationPdf.ts`; unduhan via `pdfDownload.ts`; Excel via `excelExport.ts`; QR via `qrcode`.
+- **Situs publik**: `LandingPageEditorScreen.tsx` + `landing/` (hanya DEVELOPER), diterbitkan lewat `/api/landing/published`; media disimpan di koleksi `settings`/`landing`.
+- **Marketing**: `marketingApi.ts` menyambung Meta (WhatsApp status ads), TikTok (infeed ads), Shopee (discovery ads) — kredensial lewat variabel lingkungan, tanpa nilai di repo.
+- **Jurnal Google Sheet**: `@fortune-sheet` di layar, state sheet disimpan sebagai `data_grid` JSON (maks 5 MB, `journalApi.ts:346`/`:516`), mirror localStorage, baca = DEVELOPER/OWNER/ADMIN, tulis = DEVELOPER saja; renewal cookie Jurnal 8 jam tanpa password untuk sesi dashboard DEVELOPER.
+- **Manajemen akun**: `/api/users` mencocokkan berurutan `legacyId` → username → email kredensial → email cadangan, lalu **adopsi** (id cloud, status aktif, dan password yang berlaku tidak pernah ditimpa data backup).
+- **Diagnostik DEVELOPER**: `BackendDiagnosticsModal.tsx` + `/api/backend/*`.
+
+---
+
+## 11. Keamanan
+
+- Password DEVELOPER stabil: hanya hash scrypt di `.env` (`DEV_PASSWORD_HASH`, dibuat lewat `npm run dev-password:set`); deploy tidak boleh mengubahnya kecuali `-RotateDevPassword` diminta.
+- Login staf: urutan verifikasi di `server/staffStore.ts` `verifyStaffPassword` — **hash PocketBase-native dulu**, baru salinan plaintext warisan; keberhasilan login native mengosongkan `appPassword` lama.
+- Rate limiting login (`checkLoginRate`), penolakan username `sync`/`langgo`/id `user_dev` (`ACCOUNT_RESERVED`, `USERNAME_RESERVED`, `PROFILE_DEVELOPER_LOCKED`).
+- Aturan koleksi terkunci superuser untuk `users`, `app_users`, `jurnal_config`, `jurnal_sheets`.
+- Dokumen blueprint hanya untuk DEVELOPER: ditegakkan di `server/blueprintApi.ts` (401/403) + `PRIVATE_API_PREFIXES`, bukan sekadar menyembunyikan tombol (`canDownloadBlueprint` di `src/utils/recordAccess.ts:34`).
+- Tidak ada rahasia di repo, log, chat, maupun dokumen ini.
+
+---
+
+## 12. Build & penyebaran
+
+1. `npm run build` (menjalankan 5 penjaga `prebuild`; gagal = tidak ada artefak).
+2. Deploy ke VPS hanya lewat `deploy/deploy-vps.ps1` (bukan `git pull` di `C:\bejo-pos`, bukan skrip baru). Skrip menyalin source dengan robocopy tanpa purge, memverifikasi `.env` tidak localhost, memeriksa bundel browser, probe broker sesi (401 = benar, 503 = kredensial sinkron ditolak), menolak deploy bila modul Marketing belum LIVE, lalu memverifikasi DNS/HTTPS.
+3. Layanan Windows: BejoStikerPOS (Node), Caddy, PocketBase — NSSM `AppExit` bawaan Restart **ditambah** `sc.exe failure <svc> reset= 0 actions= restart/5000`. Catatan: `nssm set <svc> AppExit Default Restart` bukan perintah pengaturan (NSSM membacanya sebagai "kembalikan ke bawaan"); verifikasi dengan `nssm get <svc> AppExit`.
+4. Pemeriksaan kondisi server hanya lewat `scripts/diagnose-live.ps1` (jalankan sebagai Administrator di VPS, tutup dengan `-RequireClean`). Skrip hanya membaca; rahasia keluar sebagai status terisi/kosong + panjang; tidak menyimpulkan isi berkas database tanpa pengukuran (`GET /api/logs/records` + retensi dari `GET /api/settings`).
+
+---
+
+## 13. Penjaga otomatis (build guard)
+
+14 berkas `scripts/check-*`; 5 berjalan otomatis di `prebuild`:
+
+| Perintah | Berkas | Menjaga |
+|---|---|---|
+| `check:brand` | `check-brand.mjs` | nama aplikasi lama tidak kembali ke source, dokumen, atau skrip |
+| `check:version` | `check-version.mjs` | versi `package.json` = `APP_VERSION` |
+| `check:paths` | `check-path-fabrication.mjs` | lokasi folder toko tidak muncul sebagai konstanta di `src/` |
+| `check:copy` / `check:copy:strict` | `check-ui-language.mjs` | istilah programmer, kalimat > 130 karakter, klaim status teks tetap |
+| `check:ps1` | `check-powershell-syntax.mjs` | tiap `.ps1` di `deploy/` + `scripts/` bisa dimuat parser |
+
+Penjaga regresi non-prebuild: `check:users` (`check-staff-credential.mts` kasus G/H/I/J + `check-credential-policy.mts`), `check:trend` (kasus 9–17 dekomposisi aset), `check:agent-period`, `check:reconciliation`, `check:tax-years` (daftar tahun pajak: bawaan 2022–2028, aturan tambah/kurang, cermin + event, kanal `settings/tax_years`, `fromCloud`, dan layar tahun wajib membaca daftar bukan angka tetap), `check:journal`, `check:access`, `check:branding`, `check:blueprint` (dokumen blueprint: keberadaan, gerbang DEVELOPER di UI & server, tidak ada rahasia di isi, dan sembilan angka struktural harus sama dengan hasil ukur repo — penjaga ini yang menegur kalau dokumennya tertinggal).
+
+Kebijakan proyek: kesalahan yang berulang diubah menjadi penjaga + aturan di `AGENTS.md`, bukan perbaikan satu kali. Setiap penambahan aturan hitung → tambahkan kasusnya di berkas `check-*` yang bersangkutan, jangan menguji manual saja.
+
+---
+
+## 14. Aturan wajib saat mengubah aplikasi
+
+- Satu update = satu kenaikan versi (`npm run version:bump`; `version:minor` untuk fitur/modul baru; `version:major` hanya setelah rekomendasi disetujui).
+- Tambah koleksi → perbarui `scripts/create-pocketbase-collections.mjs`, daftar koleksi di `scripts/diagnose-live.ps1` seksi F, dan `deploy/finish-deploy.ps1`. Tanpa itu tulis cloud gagal diam-diam.
+- Tambah kanal realtime → pasang di efek langganan `App.tsx`, jangan di layar.
+- Aturan hitung hanya satu tempat; layar, riwayat, dan PDF memanggil fungsi yang sama.
+- Teks operator: Indonesia awam, pendek, fakta tidak dibuang, tidak mengarang status/kecepatan/lokasi/nama author.
+- Berkas `.ps1` tidak diperiksa `tsc`/Vite; kode Node di dalam here-string `@' ... '@` wajib diperiksa terpisah dengan `node --check`.
+- Perubahan struktural (rute/modul/tab/koleksi/kanal realtime/penjaga/perintah npm baru) → dokumen blueprint wajib ditinjau dan angkanya diperbarui; `npm run check:blueprint` akan gagal kalau tidak.
+
+---
+
+## 15. Dokumen blueprint & unduhannya
+
+Berkas yang sedang Anda baca ini adalah bagian dari sistem, bukan catatan sampingan.
+
+- Isi dokumen dibaca dari disk server lewat `server/blueprintApi.ts` (`readBlueprintDocument()`, path dari `process.cwd()` + konstanta `BLUEPRINT_FILE_NAME`, bukan dari permintaan). Browser mengambilnya di `src/lib/blueprint.ts` (`fetchBlueprintDocument()`), lalu `src/utils/blueprintDownload.ts` menghasilkan `.md` (Blob isi persis) atau `.pdf` (jsPDF A4, teks kaki berisi judul + versi + nomor halaman per lembar). Susunan halamannya dihitung lebih dulu di `src/utils/blueprintPdfPlan.ts` (`planBlueprintPdf()` — berkas murni, tanpa jsPDF dan tanpa browser, supaya hasilnya bisa diperiksa penjaga): penanda Markdown dibuang, baris tabel diratakan, judul jadi teks tebal, blok angka struktural yang ditandai komentar HTML tidak dicetak ulang, dan tanda yang tidak punya hurufnya di Helvetica (→ − Σ ≤ ≥ ∞) diganti padanan ASCII.
+- Gerbang ada di dua tempat dan keduanya wajib: `canDownloadBlueprint(role)` di `src/utils/recordAccess.ts:34` (DEVELOPER saja) untuk UI, dan pemeriksaan `session.role` di modul server untuk tegakan sebenarnya. Rutenya ikut masuk `PRIVATE_API_PREFIXES` (`server.ts:173`) sehingga tanpa sesi dashboard jawabannya 401.
+- Tempat unduh: Pengaturan toko → **Backup Data** → kartu "Master Prompt & Blueprint Arsitektur Aplikasi", dua tombol (`.md` dan `.pdf`). Tab ini memang hanya tampil untuk DEVELOPER.
+- Alur penjaga: `npm run check:blueprint` mengukur rute API, modul server, tab, koleksi, kanal realtime, cermin localStorage, berkas penjaga, dan perintah npm dari repo, lalu membandingkannya dengan blok angka struktural di awal dokumen (blok yang ditandai komentar HTML khusus, sehingga tidak tercetak di PDF). Beda angka = penjaga gagal = dokumen perlu disamakan.
+
+---
+
+## 16. PROMPT SIAP PAKAI
+
+MULAI PROMPT
+
+Bangun aplikasi **BEJO Digital Print** (versi acuan 4.11.0): POS toko cetak digital satu pintu, React 19 + TypeScript + Vite 6 + Tailwind v4 di browser, Express 4 di server, PocketBase 0.28.1 sebagai basis data dan kanal realtime, Caddy reverse proxy + HTTPS, NSSM di Windows Server. Semua bahasa antarmuka Indonesia awam, pendek, tanpa istilah programmer, dan tanpa klaim status yang dikarang.
+
+Struktur wajib:
+- 1 modul frontend = 1 tab dari 12 tab (`pos`, `inventory`, `stock`, `agen`, `shift`, `spk`, `transactions`, `invoices`, `tax`, `marketing`, `customers`, `landing_editor`); tab dirender dari `src/App.tsx` dan difilter oleh fungsi `allowed(id)` di `src/components/Navbar.tsx`. Peran: DEVELOPER, OWNER, ADMIN, AGEN, KASIR, SPK.
+- Server: `server.ts` (21 rute + wildcard SPA) + 9 modul rute (`journalApi`, `marketingApi`, `userAdmin`, `posAuth`, `devAuth`, `landingApi`, `pbSession`, `brandingApi`, `blueprintApi`) + 2 modul layanan (`staffStore`, `passwordHash`) = 54 rute API.
+- Data: 30 koleksi dari `scripts/create-pocketbase-collections.mjs` + 2 koleksi Jurnal yang dibuat saat boot (total 32). Setiap koleksi membawa `legacyId` dan kolom JSON `data`; `users`, `app_users`, `jurnal_config`, `jurnal_sheets` ber-aturan superuser.
+- Cloud client: **satu** berkas (`src/backend/pocketbaseBackend.ts`) memuat 36 kanal langganan, watchdog 15 detik, revive SSE 30 detik, reauth minimal 30 detik, outbox `bejo_pos_outbox_queue_v1` maksimum 500 entri, cermin 39 kunci localStorage `bejo_pos_*` di seluruh `src/`, dan Mode Lokal dengan IndexedDB. Komponen tidak boleh memanggil SDK PocketBase langsung dan tidak boleh membuat langganan sendiri.
+
+Mesin perhitungan (satu aturan, dipakai UI dan ekspor bersama):
+- Aset: `assetTrend.ts` (nilai kini = Σ modal × stok, garis tren rekonstruksi mundur maks 1460 hari, bucket HARIAN/MINGGUAN/BULANAN) dan `assetAdjustments.ts` (dua ledger; efek harga `(cBaru−cLama)×stokLama` + efek stok `cBaru×(stokBaru−stokLama)`; baris nol tidak ditulis).
+- Rekonsiliasi: `reconciliationMath.ts` (varians A−B, komparatif B−A, tiap kolom dinilai terpisah, persen berbasis A dan null bila A=0, sifat baris PENDAPATAN/BIAYA/PERBANDINGAN, identitas `good+bad+match+neutral = countedRows`).
+- Pajak: `taxStorage.ts` + `types/tax.ts` (lapisan UU HPP 5/15/25/30/35%, PTKP 11 status mulai TK/0 = 54 juta, PPh Final UMKM 0,5% dengan ambang 500 juta/tahun, NPPN, pembukuan, PPh 25 = (utang − kredit PPh 21)/12, PKP).
+- Stok/HPP: `stockUtils.ts` (`hargaKulak ÷ qtyPerRollPak`, HPP penjualan termasuk m², rumus stok bahan, pinjam/pulang agen).
+- Invoice: `invoiceStorage.ts` (bruto = kuantitas × harga, PPN 11%, DP 50%, nomor `{INV|PI}/{pref}/{YYYY}/{MM}/{seq4}`) dan `formatters.ts` (`BS{YYYY}/{MM}/{seq}`, uang tunai efektif = `min(tunai, total − transfer − qris)`).
+- Periode rekap: `agentHistoryPeriod.ts` (kunci `YYYY-MM-DD`, rentang inklusif, hanya satu predikat untuk daftar/pratinjau/PDF).
+- Kredensial: `credentialPolicy.ts` (minimal 10 karakter, huruf + angka, bukan password publik, bukan awalan username; sementara minimal 6; CSPRNG generator).
+- Muatan cloud: `dbSanitize.ts` (`BINARY_MAX_CHARS` 50.000; `LOGO_MAX_CHARS` 400.000 khusus `logoUrl`) + `storeLogoImage.ts` (tangga 256/192/128 px × 0,9→0,6, target ≤ 200.000 karakter, simpan dibatalkan bila masih besar).
+
+Keamanan: hash scrypt untuk password DEVELOPER (tidak pernah plaintext, tidak dirotasi saat deploy), sesi cookie di server, broker token PocketBase di `server/pbSession.ts` dengan `PB_SYNC_*` (variabel berprefix `VITE_` tidak pernah dipakai untuk kredensial), pencocokan akun staf berurutan `legacyId` → username → email kredensial → email cadangan dengan adopsi (password cloud lama tidak pernah ditimpa), rate limit login, `/api/branding` sebagai satu-satunya rute publik pra-login (gagal = `200 {success:false}`), dan dokumen blueprint di `/api/blueprint` yang hanya dilayani untuk sesi DEVELOPER.
+
+Penjaga: 14 `scripts/check-*`; yang wajib lulus saat build = brand, versi, lokasi folder fabrikasi, bahasa UI `--strict`, sintaks PowerShell. `check:blueprint` membandingkan angka struktural di dokumen dengan hasil ukur repo — perubahan struktur apa pun mewajibkan dokumen ini diperbarui. Tambah aturan baru = tambah kasus di berkas check terkait + tulis aturannya di `AGENTS.md`.
+
+Ritme kerja: naikkan versi sekali per update lewat `npm run version:bump|minor|major`, jangan mengedit versi manual; build hanya jika `npm run build` lulus; deploy hanya lewat `deploy/deploy-vps.ps1` di VPS; pemeriksaan hanya lewat `scripts/diagnose-live.ps1` (tanpa skrip deploy/diagnostik baru, tanpa `git pull` di folder VPS).
+
+SELESAI PROMPT

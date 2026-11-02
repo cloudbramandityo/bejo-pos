@@ -1,15 +1,17 @@
 /**
  * Coded by Langgo Bramandityo.
  * Modul Utama Pengisian Pajak Indonesia (dipakai akun DEVELOPER, ADMIN, OWNER)
- * Mendukung SPT Tahunan Orang Pribadi 2025 & Placeholder SPT Tahunan PPh Badan
+ * Tahun pajak yang ditampilkan mengikuti daftar yang diaktifkan di Pengaturan Pajak.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { AppUser } from '../../types';
 import {
   TaxAnnualReturn1770,
   TaxpayerProfile,
 } from '../../types/tax';
 import { describeAuditActor } from '../../utils/auditActor';
+import { useTaxYears } from '../../hooks/useTaxYears';
+import { defaultTaxYear, latestTaxYear } from '../../utils/taxYears';
 import {
   getStoredTaxpayerProfile,
   saveStoredTaxpayerProfile,
@@ -31,6 +33,9 @@ import {
   saveAllTaxAnnualReturnsCloud,
   subscribeTaxMonthlyBillings,
   saveTaxMonthlyBillingsCloud,
+  getSyncStatus,
+  onSyncStatusChange,
+  type SyncStatus,
 } from '../../backend/pocketbaseBackend';
 
 // Subcomponents
@@ -101,6 +106,18 @@ interface TaxScreenProps {
 
 export const TaxScreen: React.FC<TaxScreenProps> = ({ currentUser }) => {
   const auditActor = describeAuditActor(currentUser);
+
+  // Status pengiriman ke server dibaca dari ukuran asli, bukan tulisan tetap.
+  const [sync, setSync] = useState<SyncStatus>(() => getSyncStatus());
+  useEffect(() => onSyncStatusChange(setSync), []);
+  const syncBadge =
+    sync.state === 'connected'
+      ? { label: 'Terkirim ke server', tone: 'text-emerald-800 bg-emerald-50 border-emerald-200', icon: 'text-emerald-600' }
+      : sync.state === 'connecting'
+        ? { label: 'Menyambungkan ke server...', tone: 'text-slate-700 bg-slate-50 border-slate-200', icon: 'text-slate-500' }
+        : sync.state === 'reconnecting'
+          ? { label: 'Belum terkirim, dicoba lagi', tone: 'text-amber-800 bg-amber-50 border-amber-200', icon: 'text-amber-600' }
+          : { label: 'Hanya di perangkat ini', tone: 'text-slate-700 bg-slate-50 border-slate-200', icon: 'text-slate-500' };
   const [mainModule, setMainModule] = useState<TaxMainModule>('ORANG_PRIBADI');
   const [activeSubmenu, setActiveSubmenu] = useState<TaxSubmenuKey>('dashboard');
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -109,7 +126,24 @@ export const TaxScreen: React.FC<TaxScreenProps> = ({ currentUser }) => {
   // Stored state
   const [taxpayer, setTaxpayer] = useState<TaxpayerProfile>(() => getStoredTaxpayerProfile());
   const [allReturns, setAllReturns] = useState<TaxAnnualReturn1770[]>(() => getStoredAnnualReturns());
-  const [selectedYear, setSelectedYear] = useState<number>(2026);
+  const [selectedYear, setSelectedYear] = useState<number>(() => defaultTaxYear());
+
+  // Daftar tahun pajak dikontrol dari Pengaturan Pajak dan berlaku di semua layar.
+  const taxYears = useTaxYears();
+  const yearsDescending = useMemo(() => taxYears.slice().reverse(), [taxYears]);
+  const newestTaxYear = latestTaxYear();
+
+  // Tahun terpilih wajib ada di daftar aktif
+  useEffect(() => {
+    if (taxYears.length > 0 && !taxYears.includes(selectedYear)) {
+      setSelectedYear(defaultTaxYear());
+    }
+  }, [taxYears, selectedYear]);
+
+  // Tahun yang baru diaktifkan langsung punya draf SPT di layar ini
+  useEffect(() => {
+    setAllReturns(getStoredAnnualReturns());
+  }, [taxYears]);
 
   // Keep all returns in lockstep with Riwayat Pelaporan
   useEffect(() => {
@@ -290,7 +324,7 @@ export const TaxScreen: React.FC<TaxScreenProps> = ({ currentUser }) => {
                 <Calendar className="w-4 h-4 text-blue-400" />
                 <span>Pilih Tahun SPT:</span>
               </div>
-              {[2026, 2025, 2024, 2023].map((yr) => (
+              {yearsDescending.map((yr) => (
                 <button
                   key={yr}
                   type="button"
@@ -301,7 +335,7 @@ export const TaxScreen: React.FC<TaxScreenProps> = ({ currentUser }) => {
                       : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700'
                   }`}
                 >
-                  Tahun {yr} {yr === 2026 && '(Form 2026)'}
+                  Tahun {yr} {yr === newestTaxYear && `(Form ${yr})`}
                 </button>
               ))}
             </div>
@@ -344,43 +378,47 @@ export const TaxScreen: React.FC<TaxScreenProps> = ({ currentUser }) => {
                         onChange={e => handleSelectYear(Number(e.target.value))}
                         className="text-xs font-bold text-slate-900 bg-transparent focus:outline-none cursor-pointer"
                       >
-                        <option value={2026}>2026 (Terbaru)</option>
-                        <option value={2025}>2025</option>
-                        <option value={2024}>2024</option>
-                        <option value={2023}>2023</option>
+                        {yearsDescending.map((yr) => (
+                          <option key={yr} value={yr}>
+                            {yr === newestTaxYear ? `${yr} (Terbaru)` : yr}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
 
                   {/* Quick Year Pill selector inside Navigasi Submenu */}
-                  <div className="flex items-center gap-1 pt-1.5 border-t border-slate-100">
+                  <div className="flex items-center gap-1 flex-wrap pt-1.5 border-t border-slate-100">
                     <span className="text-[10px] font-bold text-slate-400 mr-0.5">Tahun:</span>
-                    {[2026, 2025, 2024, 2023].map((yr) => (
+                    {yearsDescending.map((yr) => (
                       <button
                         key={yr}
                         type="button"
                         onClick={() => handleSelectYear(yr)}
-                        className={`flex-1 py-1 rounded-md text-[11px] font-mono font-bold transition-all text-center cursor-pointer ${
+                        className={`px-1.5 py-1 rounded-md text-[11px] font-mono font-bold transition-all text-center cursor-pointer ${
                           selectedYear === yr
                             ? 'bg-blue-600 text-white shadow-xs ring-1 ring-blue-500'
                             : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                         }`}
                       >
                         {yr}
-                        {yr === 2026 && (
+                        {yr === newestTaxYear && (
                           <span className="block text-[8px] leading-tight text-amber-500 font-sans font-black">
                             BARU
                           </span>
                         )}
                       </button>
                     ))}
+                    <p className="w-full text-[9px] leading-tight text-slate-400">
+                      Tahun pajak atur di menu 13. Pengaturan Pajak.
+                    </p>
                   </div>
 
                   {/* Status Sinkronisasi Riwayat Pelaporan */}
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-emerald-800 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                      <span>Data Selaras Billing</span>
+                    <span className={`text-[10px] font-bold flex items-center gap-1 px-2 py-0.5 rounded-md border ${syncBadge.tone}`}>
+                      <CheckCircle2 className={`w-3 h-3 ${syncBadge.icon}`} />
+                      <span>{syncBadge.label}</span>
                     </span>
                     <button
                       type="button"

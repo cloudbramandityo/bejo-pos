@@ -23,6 +23,18 @@ export function canManageBusinessData(role?: UserRole | string | null): boolean 
   return normalized === 'DEVELOPER' || normalized === 'ADMIN' || normalized === 'OWNER';
 }
 
+/**
+ * Wewenang mengunduh "Master Prompt & Blueprint Arsitektur Aplikasi" dari menu
+ * Backup Data. Hanya DEVELOPER.
+ *
+ * Aturan ini dipakai UI dan ikut diperiksa penjaga; server menegakkan hal yang
+ * sama di `server/blueprintApi.ts`, jadi menyembunyikan tombolnya saja tidak
+ * cukup dan tidak boleh dianggap sebagai pengamanan.
+ */
+export function canDownloadBlueprint(role?: UserRole | string | null): boolean {
+  return normalizeRole(role) === 'DEVELOPER';
+}
+
 function normalizeRole(role?: UserRole | string | null): string {
   return String(role ?? '').trim().toUpperCase();
 }

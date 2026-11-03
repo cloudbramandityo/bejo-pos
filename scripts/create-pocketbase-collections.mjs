@@ -406,6 +406,27 @@ const COLLECTIONS = [
     ],
   },
   {
+    // Jurnal berpasangan per entitas (Laporan Keuangan): saldo awal hasil
+    // penutupan buku, rekap bulanan, isian manual, dan jurnal pembaliknya.
+    // Seluruh laporan keuangan dibaca dari daftar ini, jadi tiap baris wajib
+    // balance dan tidak boleh kembar.
+    name: 'ledger_entries',
+    type: 'base',
+    fields: [
+      T('entityId', true),
+      T('date', true),
+      T('ref'),
+      T('description', false, 500),
+      SEL('source', ['SALDO_AWAL', 'AGREGAT_BULANAN', 'MANUAL', 'PENYESUAIAN', 'BALIK'], true),
+      SEL('status', ['DRAF', 'POSTED', 'BATAL'], true),
+      J('lines'),
+      T('createdBy'),
+      T('reversalOf', false, 80),
+      N('createdAt'),
+      N('updatedAt'),
+    ],
+  },
+  {
     name: 'spk_orders',
     type: 'base',
     fields: [

@@ -212,7 +212,10 @@ import {
   subscribeLandingDraft,
   saveLandingDraftCloud,
   saveLandingPublishedCloud,
-  subscribeTaxYears
+  subscribeTaxYears,
+  subscribeEntityRegistry,
+  subscribeAccountChart,
+  subscribeLedgerEntries
 } from './backend/pocketbaseBackend';
 import { DEFAULT_AGENTS_LIST } from './utils/agentMapping';
 import { canViewCatalog, canViewSalesReport } from './utils/recordAccess';
@@ -222,6 +225,8 @@ import {
   adjustmentsFromStockDiff
 } from './utils/assetAdjustments';
 import { applyTaxYearsFromCloud } from './utils/taxStorage';
+import { applyAccountChartFromCloud, applyEntityRegistryFromCloud } from './utils/entityStorage';
+import { applyLedgerEntriesFromCloud } from './utils/ledgerStorage';
 
 /**
  * Samakan kop faktur Invoice dengan profil toko yang aktif.
@@ -1184,6 +1189,21 @@ export default function App() {
       }
     });
 
+    // 21d. Subscribe Profil Entitas Usaha (Perorangan -> PT, satu susunan untuk semua perangkat)
+    const unsubEntityRegistry = subscribeEntityRegistry((cloudRegistry) => {
+      if (cloudRegistry) applyEntityRegistryFromCloud(cloudRegistry);
+    });
+
+    // 21e. Subscribe Bagan Akun per Entitas (arsip rekening lama & akun modal PT)
+    const unsubAccountChart = subscribeAccountChart((cloudChart) => {
+      if (cloudChart) applyAccountChartFromCloud(cloudChart);
+    });
+
+    // 21f. Subscribe Jurnal Pembukuan (satu buku untuk semua perangkat, snapshot mengganti cermin)
+    const unsubLedgerEntries = subscribeLedgerEntries((cloudEntries) => {
+      applyLedgerEntriesFromCloud(cloudEntries || []);
+    });
+
     // 22. Periodic Auto-Cleanup for SPK Archives (Runs daily at 19:00 WIB)
     checkAndRunSpkAutoCleanup();
     const cleanupInterval = setInterval(() => {
@@ -1219,6 +1239,9 @@ export default function App() {
       unsubLanding();
       unsubLandingDraft();
       unsubTaxYears();
+      unsubEntityRegistry();
+      unsubAccountChart();
+      unsubLedgerEntries();
     };
   }, []);
 

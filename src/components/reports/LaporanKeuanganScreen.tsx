@@ -21,6 +21,7 @@ import { Transaction, StockTransaction, Shift } from '../../types';
 import { getStoredInvoices, convertInvoicesToTransactions } from '../../utils/invoiceStorage';
 import { FinancialSettings, DEFAULT_FINANCIAL_SETTINGS } from '../../utils/financialStorage';
 import { formatRupiah, convertDdMmYyToYyyyMmDd } from '../../utils/formatters';
+import type { SaleRow, ShiftRow, StockRow } from '../../utils/ledgerAggregates';
 import {
   Landmark,
   TrendingUp,
@@ -39,7 +40,22 @@ import {
   ReceiptText,
   RotateCcw,
   Save,
+  Building2,
+  ListTree,
+  ClipboardCheck,
+  BookMarked,
+  ScrollText,
+  Combine,
+  FileBadge,
 } from 'lucide-react';
+import { useEntityRegistry } from '../../hooks/useEntityRegistry';
+import { entityForDateKey } from '../../utils/entityRegistry';
+
+const EntitySettingsView = React.lazy(() => import('./EntitySettingsView'));
+const AccountChartView = React.lazy(() => import('./AccountChartView'));
+const TransitionWizardView = React.lazy(() => import('./TransitionWizardView'));
+const LedgerBooksView = React.lazy(() => import('./LedgerBooksView'));
+const LedgerReportsView = React.lazy(() => import('./LedgerReportsView'));
 
 interface LaporanKeuanganScreenProps {
   transactions: Transaction[];
@@ -48,6 +64,8 @@ interface LaporanKeuanganScreenProps {
   storeName?: string;
   settings: FinancialSettings;
   onSaveSettings: (s: FinancialSettings) => void;
+  /** Nama akun yang sedang login, untuk jejak perubahan pengaturan entitas. */
+  actorLabel?: string;
 }
 
 type ReportKey =
@@ -56,6 +74,13 @@ type ReportKey =
   | 'neraca'
   | 'arus_kas'
   | 'neraca_saldo'
+  | 'buku_besar'
+  | 'jurnal'
+  | 'gabungan'
+  | 'resmi'
+  | 'entitas'
+  | 'akun'
+  | 'transisi'
   | 'data'
   | 'panduan';
 
@@ -124,19 +149,38 @@ export const LaporanKeuanganScreen: React.FC<LaporanKeuanganScreenProps> = ({
   storeName,
   settings,
   onSaveSettings,
+  actorLabel = '',
 }) => {
+  const registry = useEntityRegistry();
   const [activeReport, setActiveReport] = useState<ReportKey>('laba_rugi');
   const [draft, setDraft] = useState<FinancialSettings>(settings);
   const [fromDate, setFromDate] = useState<string>(() => prevMonthRange().from);
   const [toDate, setToDate] = useState<string>(() => prevMonthRange().to);
 
-  const entityName = settings.entityName || storeName || 'BEJO Digital Print';
+  // Kop laporan memakai nama entitas yang memegang periode yang sedang dibuka.
+  const periodEntity = entityForDateKey(registry, toDate) || entityForDateKey(registry, fromDate);
+  const entityName = periodEntity?.legalName || settings.entityName || storeName || 'BEJO Digital Print';
 
   // ==== Simpan otomatis (auto-save) setiap kali draft berubah ====
   useEffect(() => {
     onSaveSettings(draft);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft]);
+
+  // ==== Isi laporan keuangan: penjualan gabungan invoice, stok, dan shift ====
+  const wizardSource = useMemo(() => {
+    const invoiceTransactions = convertInvoicesToTransactions(getStoredInvoices());
+    const merged: Transaction[] = Array.from(
+      new Map([...transactions, ...invoiceTransactions].map((item) => [item.id, item])).values()
+    );
+    return {
+      sales: merged as SaleRow[],
+      stock: stockTransactions as StockRow[],
+      shifts: shifts.map(
+        (shift): ShiftRow => ({ date: getShiftDateKey(shift), operationalExpenses: shift.operationalExpenses })
+      ),
+    };
+  }, [transactions, stockTransactions, shifts]);
 
   // ==== Perhitungan otomatis dari data aplikasi (sistem akrual) ====
   const calc = useMemo(() => {
@@ -290,6 +334,13 @@ export const LaporanKeuanganScreen: React.FC<LaporanKeuanganScreenProps> = ({
     { key: 'neraca', label: 'Neraca', icon: Scale },
     { key: 'arus_kas', label: 'Arus Kas', icon: Banknote },
     { key: 'neraca_saldo', label: 'Neraca Saldo', icon: BookOpen },
+    { key: 'buku_besar', label: 'Buku Besar', icon: BookMarked },
+    { key: 'jurnal', label: 'Jurnal Umum', icon: ScrollText },
+    { key: 'gabungan', label: 'Gabungan Internal', icon: Combine },
+    { key: 'resmi', label: 'Laporan Resmi PT', icon: FileBadge },
+    { key: 'entitas', label: 'Pengaturan Entitas', icon: Building2 },
+    { key: 'akun', label: 'Bagan Akun', icon: ListTree },
+    { key: 'transisi', label: 'Penutupan & Transisi', icon: ClipboardCheck },
     { key: 'data', label: 'Input Data', icon: Settings2 },
     { key: 'panduan', label: 'Panduan', icon: Info },
   ];
@@ -510,57 +561,63 @@ export const LaporanKeuanganScreen: React.FC<LaporanKeuanganScreenProps> = ({
               <Row label="Kas Masuk — Penjualan Tunai/Transfer/QRIS" value={calc.operatingCashIn} />
               <Row label="Kas Keluar — Pembelian Bahan & Beban" value={calc.operatingCashOut} negative />
               <Row label="Arus Kas Operasional Bersih" value={calc.netOperatingCash} strong />
+              <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
+                Hitungan ini hanya kas dari data toko. Pembelian mesin, setoran modal, dan utang dipisah
+                berdasarkan jurnal di menu <strong>Laporan Resmi PT</strong>.
+              </p>
             </div>
             <div className="rounded-2xl border border-slate-200 p-4 bg-slate-50/60">
               <div className="flex items-center gap-2 mb-1 pb-2 border-b border-slate-200">
                 <div className="p-1.5 rounded-lg bg-indigo-100 text-indigo-700">
                   <Banknote className="w-4 h-4" />
                 </div>
-                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                  Investasi, Pendanaan & Posisi Kas
-                </h4>
+                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Posisi Kas</h4>
               </div>
-              <Row label="Arus Kas Investasi (Pembelian Aset Tetap)" value={0} />
-              <Row label="Arus Kas Pendanaan (Modal / Utang)" value={0} />
               <Row label="Kenaikan (Penurunan) Kas Bersih" value={calc.netCashFlow} />
               <Row label="Saldo Kas Awal" value={settings.openingCash} />
               <Row label="Saldo Kas Akhir" value={calc.computedCash} strong />
+              <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
+                Kas keluar-masuk untuk beli mesin, setoran modal, dan utang belum terukur di hitungan toko ini.
+                Angka itu dibaca dari jurnal pada menu <strong>Laporan Resmi PT</strong>.
+              </p>
             </div>
           </div>
         )}
 
-        {activeReport === 'neraca_saldo' && (
-          <div>
-            <KopLaporan title="Neraca Saldo (Ringkas)" />
-            <p className="text-[11px] text-slate-500 mb-3">
-              Daftar saldo debit & kredit dari buku jurnal, dikelompokkan ke aset dan kewajiban —
-              bahan untuk menyusun laporan keuangan.
-            </p>
-            <div className="overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-slate-100 text-slate-700 border-b-2 border-slate-300">
-                    <th className="text-left px-4 py-2.5 font-bold">Nama Akun</th>
-                    <th className="text-right px-4 py-2.5 font-bold w-44">Debit</th>
-                    <th className="text-right px-4 py-2.5 font-bold w-44">Kredit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <NeracaSaldoRow name="Kas & Bank" debit={calc.computedCash} />
-                  <NeracaSaldoRow name="Piutang Usaha" debit={settings.accountsReceivable} />
-                  <NeracaSaldoRow name="Persediaan Barang" debit={settings.closingInventory} />
-                  <NeracaSaldoRow name="Aset Tetap" debit={settings.fixedAssets} />
-                  <NeracaSaldoRow name="Utang Usaha" credit={settings.accountsPayable} />
-                  <NeracaSaldoRow name="Utang Lain-lain" credit={settings.otherLiabilities} />
-                  <NeracaSaldoRow name="Modal Usaha" credit={settings.openingCapital} />
-                  <NeracaSaldoRow name="Pendapatan Penjualan" credit={calc.revenue} />
-                  <NeracaSaldoRow name="Harga Pokok Penjualan" debit={calc.hpp} />
-                  <NeracaSaldoRow name="Beban Operasional" debit={calc.totalExpenses} />
-                  <NeracaSaldoRow name="Prive Pemilik" debit={settings.ownerDrawings} />
-                </tbody>
-              </table>
-            </div>
-          </div>
+        {(activeReport === 'neraca_saldo' ||
+          activeReport === 'buku_besar' ||
+          activeReport === 'jurnal' ||
+          activeReport === 'gabungan' ||
+          activeReport === 'resmi' ||
+          activeReport === 'entitas' ||
+          activeReport === 'akun' ||
+          activeReport === 'transisi') && (
+          <React.Suspense fallback={<div className="text-xs text-slate-500 py-6">Menyiapkan layar...</div>}>
+            {activeReport === 'entitas' && <EntitySettingsView actorLabel={actorLabel} />}
+            {activeReport === 'akun' && <AccountChartView actorLabel={actorLabel} />}
+            {(activeReport === 'neraca_saldo' || activeReport === 'buku_besar' || activeReport === 'jurnal') && (
+              <LedgerBooksView
+                section={activeReport === 'neraca_saldo' ? 'neraca_saldo' : activeReport === 'buku_besar' ? 'buku_besar' : 'jurnal'}
+                period={{ from: fromDate, to: toDate }}
+                actorLabel={actorLabel}
+              />
+            )}
+            {(activeReport === 'gabungan' || activeReport === 'resmi') && (
+              <LedgerReportsView
+                section={activeReport === 'gabungan' ? 'gabungan' : 'resmi'}
+                period={{ from: fromDate, to: toDate }}
+              />
+            )}
+            {activeReport === 'transisi' && (
+              <TransitionWizardView
+                sales={wizardSource.sales}
+                stock={wizardSource.stock}
+                shifts={wizardSource.shifts}
+                settings={draft}
+                actorLabel={actorLabel}
+              />
+            )}
+          </React.Suspense>
         )}
 
         {activeReport === 'data' && (
@@ -793,20 +850,6 @@ const MiniStat: React.FC<{ label: string; value: string; tone: 'emerald' | 'indi
     </div>
   );
 };
-
-// ===================== Neraca Saldo =====================
-
-const NeracaSaldoRow: React.FC<{ name: string; debit?: number; credit?: number }> = ({
-  name,
-  debit = 0,
-  credit = 0,
-}) => (
-  <tr className="border-b border-slate-100 last:border-0 odd:bg-slate-50/50 hover:bg-emerald-50/40 transition-colors">
-    <td className="px-4 py-2.5 text-slate-700 font-medium">{name}</td>
-    <td className="px-4 py-2.5 text-right font-mono tabular-nums text-slate-800">{debit ? formatRupiah(debit) : '—'}</td>
-    <td className="px-4 py-2.5 text-right font-mono tabular-nums text-slate-800">{credit ? formatRupiah(credit) : '—'}</td>
-  </tr>
-);
 
 // ===================== Panduan =====================
 

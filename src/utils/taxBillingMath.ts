@@ -11,8 +11,12 @@ import {
   DppBasisMode,
   normalizeDppBasisMode,
   dppBasisModeOfYear,
-  exemptThresholdForMode
+  exemptThresholdForMode,
+  TAX_CONFIG_2025
 } from '../types/tax';
+
+/** Tarif PPh Final bawaan aplikasi, dalam persen — dibaca dari konfigurasi pajak. */
+export const DEFAULT_TARIFF_PERCENT = TAX_CONFIG_2025.umkmPp55Rate * 100;
 
 /**
  * Hitung ulang billing satu tahun:
@@ -22,13 +26,20 @@ import {
  *   BRUTO_PENUH     -> DPP = Peredaran Bruto, PPh = Bruto x (Tarif / 100)
  *   AMBANG_500_JUTA -> PP 55/2022: hanya omzet kumulatif di atas ambang Rp 500 juta
  * - Kumulatif Omzet selalu dihitung berjalan dari Januari.
+ *
+ * Baris yang tidak membawa tarif memakai `fallbackTariffPercent`. Pemanggil yang
+ * tahu bulan itu milik entitas yang tidak memakai PPh Final mengirim `null`:
+ * pajaknya tetap nol, bukan dihitung dengan tarif entitas lain.
  */
-export const recomputeMonthlyBillingYear = (items: MonthlyTaxBilling[]): MonthlyTaxBilling[] => {
+export const recomputeMonthlyBillingYear = (
+  items: MonthlyTaxBilling[],
+  fallbackTariffPercent: number | null = DEFAULT_TARIFF_PERCENT
+): MonthlyTaxBilling[] => {
   let runningCumulative = 0;
   return items.map((item) => {
     const tariff = typeof item.tariffRatePercent === 'number' && item.tariffRatePercent > 0
       ? item.tariffRatePercent
-      : 0.5;
+      : (fallbackTariffPercent ?? 0);
     const mode = normalizeDppBasisMode(item.dppBasisMode);
 
     let pph = Number(item.pphFinalPaid) || 0;

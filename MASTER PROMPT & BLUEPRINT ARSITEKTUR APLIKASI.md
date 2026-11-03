@@ -17,12 +17,12 @@ Angka-angka di bawah dibandingkan otomatis dengan isi repo oleh `npm run check:b
 - Rute API: 54
 - Berkas modul server: 11
 - Tab navigasi: 12
-- Koleksi PocketBase dari skema: 30
+- Koleksi PocketBase dari skema: 31
 - Koleksi jurnal dibuat saat boot: 2
-- Kanal langganan realtime: 36
+- Kanal langganan realtime: 39
 - Cermin localStorage seluruhnya: 42
-- Berkas penjaga di scripts: 16
-- Perintah npm: 29
+- Berkas penjaga di scripts: 17
+- Perintah npm: 30
 <!-- ANGKA-STRUKTURAL:END -->
 
 
@@ -30,7 +30,7 @@ Angka-angka di bawah dibandingkan otomatis dengan isi repo oleh `npm run check:b
 
 ## 1. Ringkasan produk
 
-Aplikasi toko satu pintu untuk BEJO Digital Print: kasir, stok, agen (reseller), cetak digital (SPK), invoice B2B, pajak, jurnal Google Sheet, marketing, dan situs publik toko.
+Aplikasi toko satu pintu untuk BEJO Digital Print: kasir, stok, agen (reseller), cetak digital (SPK), invoice B2B, pajak, jurnal Google Sheet, pembukuan dua entitas (Dagang Perorangan → PT), marketing, dan situs publik toko.
 
 - Bentuk: **SPA React** + **satu server Node/Express** yang juga menjadi broker ke basis data.
 - Multi-perangkat: semua perubahan tampil di perangkat lain **langsung** (realtime) tanpa refresh.
@@ -38,7 +38,7 @@ Aplikasi toko satu pintu untuk BEJO Digital Print: kasir, stok, agen (reseller),
 - Bahasa antarmuka: Indonesia awam, pendek, tanpa istilah programmer.
 - Versi: `major.minor.patch`, disimpan sinkron di `package.json` dan `src/config/brand.ts` (`APP_VERSION`), diperiksa `scripts/check-version.mjs`.
 
-Ukuran kode (terukur): 161 berkas `.ts`/`.tsx` di `src/` (±97.510 baris) dan 11 berkas server (±5.710 baris).
+Ukuran kode (terukur): 183 berkas `.ts`/`.tsx` di `src/` (±105.908 baris) dan 11 berkas server (±5.708 baris).
 
 ---
 
@@ -73,17 +73,17 @@ Perintah penting (`package.json`, 27 skrip npm):
 server.ts                 2.112 baris — Express, rute invoice/AI/diagnostik, SPA wildcard
 server/                   11 modul server (rute + kebijakan sisi server)
 src/
-  App.tsx                 2.863 baris — state utama, tab, sinkronisasi, tulis cloud
+  App.tsx                 2.886 baris — state utama, tab, sinkronisasi, tulis cloud
   main.tsx, index.html    entry
   components/             17 berkas *Screen.tsx, 19 berkas *Modal.tsx, 8 subfolder
-  backend/pocketbaseBackend.ts   2.357 baris — SATU jalur tulis/baca/langganan cloud
+  backend/pocketbaseBackend.ts   2.450 baris — SATU jalur tulis/baca/langganan cloud
   lib/                    8 berkas (pb client, branding, jurnal api, auth, blueprint)
-  hooks/                  useAuth, useCollection, useRecord
-  utils/                  49 berkas — mesin hitung, penyimpanan, kebijakan
+  hooks/                  useAuth, useCollection, useRecord, useTaxYears, useEntityRegistry, useAccountChart, useLedgerEntries
+  utils/                  61 berkas — mesin hitung, penyimpanan, kebijakan
   types/                  tax.ts, reconciliation.ts
   config/brand.ts         nama + APP_VERSION + identitas brand
   data/, assets/          seed awal dan aset statis
-scripts/                  24 berkas: 15 penjaga + create-pocketbase-collections.mjs + util
+scripts/                  26 berkas: 17 penjaga + create-pocketbase-collections.mjs + util
 deploy/                   skrip provisioning & deploy VPS (PowerShell)
 AGENTS.md                 aturan wajib proyek
 USER-ROLE.md              daftar wewenang role → tab & aksi (tabelnya dibandingkan penjaga dengan kode)
@@ -115,6 +115,8 @@ Subfolder komponen: `journal`, `landing`, `marketing`, `modals`, `reconciliation
 
 Halaman di luar tab: `LoginScreen.tsx`. Sub-tab penting: `agentScreenSubTab` (`App.tsx:465`), `spkInitialTab` 6 nilai (`App.tsx:466`), Laporan punya Laporan Penjualan / Laporan Keuangan / Rekonsiliasi / Jurnal — dua menu tengah hanya dipasang bila `canViewAllReportMenus(role)`, dan konten dibaca dari `visibleSubTab` supaya sub-tab yang tidak diizinkan tidak pernah ter-render (`reports/LaporanScreen.tsx:77` dan `:112`).
 
+**Laporan Keuangan** (`reports/LaporanKeuanganScreen.tsx`) punya **14 menu** (`:332-345`): Laba Rugi, Perubahan Modal, Neraca, Arus Kas, Neraca Saldo, Buku Besar, Jurnal Umum, Gabungan Internal, Laporan Resmi PT, Pengaturan Entitas, Bagan Akun, Penutupan & Transisi, Input Data, Panduan. Lima layarnya dimuat `React.lazy` (`:54-58`): `EntitySettingsView`, `AccountChartView`, `TransitionWizardView`, `LedgerBooksView` (neraca saldo + buku besar + jurnal, dengan `LedgerBookSection`), `LedgerReportsView` (empat laporan + gabungan internal + laporan resmi PT). Semua angkanya dibaca dari jurnal entitas terpilih — tidak ada layar yang menjumlah tabel penjualan sendiri.
+
 **6 peran** (`src/types.ts:229`): `DEVELOPER`, `OWNER`, `ADMIN`, `AGEN`, `KASIR`, `SPK` (+ string terbuka untuk peran khusus).
 
 **Delapan aturan wewenang yang tidak boleh disatukan** (`src/utils/recordAccess.ts`, didaftar di `USER-ROLE.md`):
@@ -134,9 +136,10 @@ Halaman di luar tab: `LoginScreen.tsx`. Sub-tab penting: `agentScreenSubTab` (`A
 ## 5. Arsitektur frontend
 
 - `App.tsx` memegang state global (produk, stok, transaksi, shift, SPK, invoice, pajak, agen, pengaturan toko, sesi), efek langganan realtime, dan semua handler tulis cloud.
-- **Semua** akses cloud lewat `src/backend/pocketbaseBackend.ts`: baca, tulis, hapus, 36 kanal langganan (`export function subscribe*`), watchdog, outbox. Aturan: jangan menulis `pb.collection(x).subscribe(...)` di komponen.
+- **Semua** akses cloud lewat `src/backend/pocketbaseBackend.ts`: baca, tulis, hapus, 39 kanal langganan (`export function subscribe*`), watchdog, outbox. Aturan: jangan menulis `pb.collection(x).subscribe(...)` di komponen.
+- Pembukuan dua entitas ikut jalur yang sama tanpa menambah kanal baru yang tersebar: `subscribeEntityRegistry` (`:2224`) / `saveEntityRegistryCloud` (`:2234`) untuk record `settings/entity_registry`, `subscribeAccountChart` (`:2244`) / `saveAccountChartCloud` (`:2254`) untuk `settings/account_chart`, dan `subscribeLedgerEntries` (`:1745`) untuk koleksi `ledger_entries` — tulisannya lewat `saveLedgerEntryCloud` (`:1753`) dan `saveAllLedgerEntriesCloud` (`:1759`) (`src/backend/pocketbaseBackend.ts`). Ketiganya dipasang di efek langganan `App.tsx` (`:1193`, `:1198`, `:1203`) dan dibersihkan bersama saat unmount (`:1242-1244`); nilai dari server masuk lewat `applyEntityRegistryFromCloud`/`applyAccountChartFromCloud`/`applyLedgerEntriesFromCloud` (`fromCloud = true`) sehingga tidak ditulis balik.
 - Kanal dibuat lewat `createSafeSubscription` → `subscribeCollection`/`subscribeRecord` dengan topik `'*'`, dipasang di efek langganan `App.tsx` (deps `[]`) sehingga hidup sepanjang sesi.
-- Cermin offline: 39 kunci localStorage `bejo_pos_*` di seluruh `src/` (27 di antaranya terdaftar di `src/utils/storage.ts`) + IndexedDB (`src/utils/localDatabase.ts`) untuk Mode Lokal.
+- Cermin offline: 42 kunci localStorage `bejo_pos_*` di seluruh `src/` (27 di antaranya terdaftar di `src/utils/storage.ts`) + IndexedDB (`src/utils/localDatabase.ts`) untuk Mode Lokal.
 - Data URL avatar dibatasi `MAX_AVATAR_DATA_URL_LENGTH = 120000` (`src/utils/credentialPolicy.ts:16`).
 
 ---
@@ -170,8 +173,8 @@ Kebijakan akses rute:
 
 ## 7. Basis data (PocketBase)
 
-- **30 koleksi** dibuat `scripts/create-pocketbase-collections.mjs` (baris 79–599): `users`, `app_users`, `products`, `product_categories`, `customer_categories`, `customers`, `transactions`, `stock_transactions`, `shifts`, `cashiers`, `agents`, `suppliers`, `store_profiles`, `custom_roles`, `agent_notifications`, `activity_logs`, `asset_adjustments`, `reconciliation_runs`, `spk_orders`, `machines`, `ai_chat_messages`, `user_mentions`, `private_chat_messages`, `printing_rejects`, `invoices`, `invoice_settings`, `settings`, `taxpayer_profile`, `tax_annual_returns`, `tax_monthly_billings`.
-- **2 koleksi Jurnal** (`jurnal_config`, `jurnal_sheets`) dibuat saat boot oleh `server/journalApi.ts:366-417` dengan aturan lima API `null` (hanya superuser) — total **32 koleksi**.
+- **31 koleksi** dibuat `scripts/create-pocketbase-collections.mjs` (baris 79–620): `users`, `app_users`, `products`, `product_categories`, `customer_categories`, `customers`, `transactions`, `stock_transactions`, `shifts`, `cashiers`, `agents`, `suppliers`, `store_profiles`, `custom_roles`, `agent_notifications`, `activity_logs`, `asset_adjustments`, `reconciliation_runs`, `ledger_entries`, `spk_orders`, `machines`, `ai_chat_messages`, `user_mentions`, `private_chat_messages`, `printing_rejects`, `invoices`, `invoice_settings`, `settings`, `taxpayer_profile`, `tax_annual_returns`, `tax_monthly_billings`.
+- **2 koleksi Jurnal** (`jurnal_config`, `jurnal_sheets`) dibuat saat boot oleh `server/journalApi.ts:366-417` dengan aturan lima API `null` (hanya superuser) — total **33 koleksi**.
 - Pola wajib di semua koleksi: `legacyId` (penanda id aplikasi lama, supaya restore backup tidak menduplikasi orang yang sama) + kolom JSON `data` (mirror 5 MB untuk field yang tidak masuk skema, mis. `avatarUrl`, `mustChangePassword`).
 - `users` dan `app_users` **terkunci superuser** (create/update/delete rule `null`) karena akun staf hanya boleh ditulis lewat server. Aturan baca/langganan koleksi bisnis berbunyi `@request.auth.id != ""`, jadi kanal realtime wajib dibuat setelah token sesi ada.
 - Akun sinkronisasi (`PB_SYNC_EMAIL`) tidak boleh punya baris `app_users`; `ensureSyncAccount` menyamakan record dengan `.env` saat boot.
@@ -241,13 +244,28 @@ Kebijakan akses rute:
 - Browser: `src/utils/localBejoAiEngine.ts` menyiapkan jawaban lokal saat server tidak tersambung.
 
 ### 8.11 Berkas cadangan — `src/utils/backupDomains.ts` + `src/utils/backupUtils.ts`
-- Registry **36 domain** dalam **11 kelompok** (`BACKUP_DOMAINS` :81) menjadi satu-satunya sumber untuk payload, pratinjau, pemulihan ke perangkat, dan antrean kirim ke server. Satu domain = `key`, `label`, `group`, `shape` (`array`/`object`/`scalar` :19), `storageKeys`, `cloudChannel`, `cloudWrite` (`record`/`payload`/`none` :22).
+- Registry **39 domain** dalam **11 kelompok** (`BACKUP_DOMAINS` :81) menjadi satu-satunya sumber untuk payload, pratinjau, pemulihan ke perangkat, dan antrean kirim ke server. Satu domain = `key`, `label`, `group`, `shape` (`array`/`object`/`scalar` :19), `storageKeys`, `cloudChannel`, `cloudWrite` (`record`/`payload`/`none` :22).
 - Modul registry **murni**: tidak mengimpor `pocketbaseBackend` supaya penjaga dapat menjalankannya di Node. Akses nyata per domain ada di `DOMAIN_ACCESS` (`backupUtils.ts:138`) sebagai `read`/`restore`/`cloud`, dan `generateBackupPayload` :378, `payloadDomainCounts` :408, `restoreBackupToStorage` :490, `restoreBackupToCloud` :549 semuanya berputar mengikuti registry — tidak ada field atau ringkasan yang ditulis tangan per domain.
 - **Akun login staf tidak ikut berkas** (`CREDENTIAL_EXCLUSION_NOTE` :500; `LOGIN_CREDENTIAL_FIELDS` :489 = `password`, `appPassword`, `mustChangePassword`, `authId`; `REMOVED_BACKUP_KEYS` :497). `validateBackupPayload` :459 menghapus `data.users`/`data.authUser` dari berkas lama, dan tidak ada task 'Pengguna' di pemulihan cloud — kode ini yang dulu menghasilkan `USERNAME_TAKEN`/`ACCOUNT_RESERVED` saat restore lintas perangkat.
 - Bentuk berkas `version: '3.0.0'` :395 dengan `data` berisi kunci domain dan `summary: { totalRecords, counts }`; berkas lama tetap terukur (`payloadDomainCounts` menghitung ulang dari isi).
 - 9 kunci sengaja dikeluarkan dengan alasan tertulis (`EXCLUDED_STORAGE_KEYS` :433): cermin akun login, siapa yang sedang masuk di perangkat ini, mode tema, folder cetak/izin LAN per peramban, konfigurasi basis data lokal, antrean kirim ulang, tanggal bersihin arsip SPK, dan alamat lembar Google Sheet toko. Domain tanpa jalur tulis server (`deviceOnlyDomainLabels` :523, 5 domain) tampil apa adanya di layar cadangan sebagai "hanya tersimpan di perangkat ini".
 - Urutan registry dipakai restore: tagihan PPh bulanan sebelum SPT tahunan; `activeShift` satu-satunya domain `allowsNull` (hapus shift aktif = kirim `null`). Berkas pra-3.0 tanpa `assetAdjustments` mendapat satu baris `aggregateAdjustment(... 'RESTORE')` supaya garis nilai aset tidak melompat diam-diam.
 - Uji regresi: `npm run check:backup` — A konsistensi registry, B pengecualian akun, C pemindaian seluruh pemakaian `localStorage` di `src/`, D jalur tulis per domain, E aturan registry-driven, F berkas lama, G perhitungan jumlah isi.
+
+### 8.12 Pembukuan dua entitas (Dagang Perorangan → PT) — `src/utils/entityRegistry.ts` + `accountChart.ts` + `ledgerMath.ts` + `ledgerAggregates.ts` + `transitionMath.ts` + `ledgerReports.ts`
+
+Bentuk usaha toko berganti menjadi **Perseroan Terbatas per 1 Juli 2026** (penetapan pemilik 2026-11-03). Histori 2022 ke atas tidak dipindahkan — entitas lama dibekukan sebagai saldo awal, buku PT dibangun dari jurnal.
+
+- **Registry entitas** (`entityRegistry.ts`, 569 baris, murni): tiap entitas punya `kind` (`PERORANGAN`/`PT`), `startDate`, `endDate`, identitas hukum (NPWP, alamat, nomor akta) dan isian pajaknya sendiri. `entityForDateKey` :378 dan `entityForMonthKey` :398 menentukan pemilik satu tanggal tanpa menebak; `eraForDateKey` :389/`eraLabel` :395 memberi cap "Pra-PT"/"Pasca-PT"; `lastDayBefore` :188 menurunkan tanggal penutupan buku dari tanggal transisi, bukan dari angka tulis; `isDateLocked` :484 mengunci tanggal sampai `closedThroughDate`; `DEFAULT_TRANSITION_DATE` `:97` = `2026-07-01` dan `EARLIEST_BOOK_DATE` `:100` = `2022-01-01` adalah **satu-satunya** tempat kedua tanggal itu ditulis (penjaga memindai seluruh `src/`).
+- **Bagan akun per entitas** (`accountChart.ts`, 394 baris): `LEGACY_ACCOUNT_CODES` :58 mempertahankan kode lama (1100 Kas Toko, 1110 Bank Pribadi, 3100 Modal, 3200 Prive, 1590 Akumulasi Penyusutan), `PT_ACCOUNT_CODES` :77 menambah akun PT (1101 Kas, 1102 Bank PT, 2300 Utang Pemegang Saham, 3150 Tambahan Modal Disetor, 3300 Saldo Laba, 3400 Dividen, 6200 Gaji Direksi, 8100 Beban Pajak). `applyTransitionRules` :277 = `archivePersonalBankAccounts` :257 + `disablePriveForPt` :266 (mengarsipkan, tidak menghapus), `ensureStandardAccounts` :288 melengkapi akun standar, `canDeleteAccount` :306 menolak hapus akun yang sudah dipakai baris jurnal terukur, dan `accountUsability` :329 adalah gerbang butir 12 — rekening pribadi dan prive ditolak untuk tanggal/entitas PT lengkap dengan alasannya.
+- **Jurnal** (`ledgerMath.ts`, 458 baris): `entryProblems` :144 + `canPostEntry` :196 menampung semua penolakan (tidak seimbang, dua entitas dalam satu jurnal, tanggal di luar periode entitas, periode terkunci, nomor bukti kembar); `buildAggregateEntry` :382 memakai id `agg_<entity>_<YYYY-MM>` dan `buildOpeningEntry` :425 memakai `opn_<entity>_<date>` sehingga satu bulan hanya punya satu baris rekap dan satu jurnal saldo awal; `reverseLedgerEntry` (`ledgerStorage.ts:131`) mencatat jurnal pembalik, bukan menghapus aslinya. Pembacaan saldo hanya lewat `postedEntries` :137, `balanceOf` :257, `buildLedger` :325.
+- **Rekap bulanan** (`ledgerAggregates.ts`, 358 baris): `aggregateMonth` :204 menyusun satu jurnal dari transaksi POS, mutasi stok, shift, dan invoice pada bulan itu — penjualan periodik maupun perpetual, dan nilai yang sudah tercatat di jalur lain tidak ditulis dua kali; bulan di luar periode entitas tidak menghasilkan jurnal apa pun.
+- **Transisi** (`transitionMath.ts`, 462 baris): `measureThroughDate` :64 menentukan sampai tanggal mana angka benar-benar terukur, `closingFigures` :105 menghitung aset bersih per hari terakhir entitas lama, `buildTransitionPlan` :302 memindahkan **hanya** saldo yang memang dialihkan dan menolak dua keadaan (modal saham > aset bersih; saldo rekening pribadi ikut sebagai modal). `SIMULATION_FIGURES` :441 memegang angka uji pemilik (kas 50 jt, persediaan 40 jt, peralatan 20 jt, akum. penyusutan 5 jt, utang usaha 15 jt → modal 90 jt) sebagai fixture, bukan sebagai bawaan produksi. `transitionActions.ts` menyusun pratinjau (`openingDraft` :129, `monthPreview` :211) dan baru menulis setelah pemilik konfirmasi (`postOpeningJournal` :150, `postMonthJournals` :267).
+- **Laporan dibaca dari jurnal** (`ledgerReports.ts`, 721 baris): `buildIncomeStatement` :274, `buildBalanceSheet` :324, `buildEquityStatement` :384, `buildCashFlow` :475, `buildPeriodTrialBalance` :191, `buildAccountLedger` :576, `buildCombinedStatement` :623 (kolom Pra-PT / Pasca-PT / Total Gabungan Internal, dengan `GABUNGAN_WARNING` :602 sebagai satu-satunya sumber teks peringatan), `ptReportScope` :679 (laporan resmi PT hanya sah mulai tanggal transisi), `buildPeriodIndicators` :704. Baris laporan bertanda terhadap arah normal seksinya supaya akun kontra negatif dan persamaan neraca tetap pas; kolom debit/kredit hanya lewat `debitColumn` :179 / `creditColumn` :183.
+- **Pajak per entitas** (`entityTaxConfig.ts`, 172 baris, murni): `taxPeriodsForYear` :81 membelah tahun transisi jadi dua segmen, `billingTariffForMonth` :131 memberi tarif + alasan (0 disertai keterangan bila tarif entitas belum diisi), `taxSeparationNotes` :147 menghasilkan kalimat pemisahan untuk layar dan cetak. Tarif berlaku dari `appliedTaxRatePercent` (`entityRegistry.ts:159`): `PP55_OP` memakai tarif final isian pemilik, `BADAN` memakai tarif badan isian pemilik, `BELUM_DISETTEL` = `null`. Tidak ada angka tarif yang ditulis di layar billing; `syncReturnWithMonthlyBillings` (`taxStorage.ts:500`) membaca tarif dari baris billing tahun itu, dengan jatuhnya ke `billingTariffForMonth`.
+- **Berkas unduhan** (`ledgerReportDocument.ts` 358 baris murni + `ledgerReportExport.ts` 213 baris): satu objek `LedgerReportDocument` (`officialReportDocument` :225, `combinedReportDocument` :261, `trialBalanceDocument` :304, `journalDocument` :320, `accountLedgerDocument` :342) dipakai PDF :73, Excel :155, dan CSV :181 sehingga angka berkas sama dengan angka layar; `entityIdentityLines` :67 menulis "NPWP belum diisi" bila kosong dan `status` laporan resmi ikut turun menjadi "belum sah" beserta alasannya di `notes`. Hanya modul ekspor ini yang boleh memuat jsPDF/autoTable/XLSX.
+- **Layarnya** (subfolder `src/components/reports/`, dipasang sebagai menu **Laporan Keuangan**, `LaporanKeuanganScreen.tsx:332-345`): Laba Rugi, Perubahan Modal, Neraca, Arus Kas, Neraca Saldo, Buku Besar, Jurnal Umum, Gabungan Internal, Laporan Resmi PT, Pengaturan Entitas (`EntitySettingsView.tsx`), Bagan Akun (`AccountChartView.tsx`), Penutupan & Transisi (`TransitionWizardView.tsx`), Input Data, Panduan; `ReportExportBar.tsx` memasang lima tombol unduh — tiga di `LedgerBooksView` (neraca saldo, buku besar, jurnal) dan dua di `LedgerReportsView` (laporan resmi PT, gabungan internal).
+- Uji regresi: `npm run check:entity` — 14 seksi, 86 kasus (A–P): kepemilikan tanggal, pindah transisi berjejak, bagan akun per entitas, gerbang akun, gerbang jurnal, pembalikan, neraca awal dari angka simulasi, penolakan plan, saldo awal beku, rekap bulanan tanpa nilai dua kali, bulan di luar periode, laporan dari jurnal, kemurnian modul di Node, pemasangan layar, pajak per entitas, dan berkas unduhan.
 
 
 ---
@@ -284,6 +302,7 @@ Semua konstanta ada di `src/backend/pocketbaseBackend.ts`:
 - Aturan koleksi terkunci superuser untuk `users`, `app_users`, `jurnal_config`, `jurnal_sheets`.
 - Dokumen blueprint hanya untuk DEVELOPER: ditegakkan di `server/blueprintApi.ts` (401/403) + `PRIVATE_API_PREFIXES`, bukan sekadar menyembunyinya di menu (`canDownloadBlueprint` di `src/utils/recordAccess.ts:75`).
 - Wewenang per peran didaftar di `USER-ROLE.md` dan dijaga `npm run check:access` (seksi H) — dokumen itu tidak boleh lebih cantik daripada kode.
+- Kunci buku ada di jurnal, bukan di layar: periode yang sudah ditutup ditolak `isDateLocked` (`entityRegistry.ts:484`, dipegang `entryProblems` `ledgerMath.ts:178`), satu jurnal tidak boleh mencampur dua entitas, dan jurnal yang sudah tercatat dibalik dengan **jurnal pembalik** (`reverseLedgerEntry`, `ledgerStorage.ts:131`) — baris asli tidak pernah dihapus. Rekap bulanan dan saldo awal memakai id tetap (`agg_<entity>_<YYYY-MM>`, `opn_<entity>_<date>`) sehingga bulan yang sama tidak bisa dibuat dua kali.
 - Tidak ada rahasia di repo, log, chat, maupun dokumen ini.
 
 ---
@@ -299,7 +318,7 @@ Semua konstanta ada di `src/backend/pocketbaseBackend.ts`:
 
 ## 13. Penjaga otomatis (build guard)
 
-16 berkas `scripts/check-*`; 5 berjalan otomatis di `prebuild`:
+17 berkas `scripts/check-*`; 5 berjalan otomatis di `prebuild`:
 
 | Perintah | Berkas | Menjaga |
 |---|---|---|
@@ -309,7 +328,7 @@ Semua konstanta ada di `src/backend/pocketbaseBackend.ts`:
 | `check:copy` / `check:copy:strict` | `check-ui-language.mjs` | istilah programmer, kalimat > 130 karakter, klaim status teks tetap |
 | `check:ps1` | `check-powershell-syntax.mjs` | tiap `.ps1` di `deploy/` + `scripts/` bisa dimuat parser |
 
-Penjaga regresi non-prebuild: `check:users` (`check-staff-credential.mts` kasus G/H/I/J + `check-credential-policy.mts`), `check:trend` (kasus 9–17 dekomposisi aset), `check:agent-period`, `check:reconciliation`, `check:tax-years` (daftar tahun pajak: bawaan 2022–2028, aturan tambah/kurang, cermin + event, kanal `settings/tax_years`, `fromCloud`, dan layar tahun wajib membaca daftar bukan angka tetap), `check:backup` (cakupan berkas cadangan: registry 36 domain, semua cermin localStorage di `src/` tergolong, akun login keluar, jalur tulis server per domain nyata, dan isi layar berasal dari registry), `check:journal`, `check:access` (seksi A–G mengunci delapan aturan wewenang + gerbang tiap layar + label yang menyesatkan; seksi H membandingkan setiap sel tabel `USER-ROLE.md` dengan hasil fungsi aslinya, `allowed()` Navbar yang dievaluasi dari sumbernya, dan gerbang pasang layar `App.tsx`), `check:branding`, `check:blueprint` (dokumen blueprint: keberadaan, gerbang DEVELOPER di UI & server, tidak ada rahasia di isi, dan sembilan angka struktural harus sama dengan hasil ukur repo — penjaga ini yang menegur kalau dokumennya tertinggal).
+Penjaga regresi non-prebuild: `check:users` (`check-staff-credential.mts` kasus G/H/I/J + `check-credential-policy.mts`), `check:trend` (kasus 9–17 dekomposisi aset), `check:agent-period`, `check:reconciliation`, `check:tax-years` (daftar tahun pajak: bawaan 2022–2028, aturan tambah/kurang, cermin + event, kanal `settings/tax_years`, `fromCloud`, dan layar tahun wajib membaca daftar bukan angka tetap), `check:backup` (cakupan berkas cadangan: registry 39 domain, semua cermin localStorage di `src/` tergolong, akun login keluar, jalur tulis server per domain nyata, dan isi layar berasal dari registry), `check:journal`, `check:entity` (14 seksi, 86 kasus: kepemilikan tanggal, bagan akun per entitas, gerbang akun & jurnal, neraca awal dari angka simulasi pemilik, penolakan plan, saldo awal dan rekap bulanan tidak dihitung dua kali, laporan dibaca dari jurnal, kemurnian modul di Node, pemasangan layar, pajak per entitas tanpa tarif karangan, berkas unduhan sama dengan layar), `check:access` (seksi A–G mengunci delapan aturan wewenang + gerbang tiap layar + label yang menyesatkan; seksi H membandingkan setiap sel tabel `USER-ROLE.md` dengan hasil fungsi aslinya, `allowed()` Navbar yang dievaluasi dari sumbernya, dan gerbang pasang layar `App.tsx`), `check:branding`, `check:blueprint` (dokumen blueprint: keberadaan, gerbang DEVELOPER di UI & server, tidak ada rahasia di isi, dan sembilan angka struktural harus sama dengan hasil ukur repo — penjaga ini yang menegur kalau dokumennya tertinggal).
 
 Kebijakan proyek: kesalahan yang berulang diubah menjadi penjaga + aturan di `AGENTS.md`, bukan perbaikan satu kali. Setiap penambahan aturan hitung → tambahkan kasusnya di berkas `check-*` yang bersangkutan, jangan menguji manual saja.
 
@@ -343,14 +362,14 @@ Berkas yang sedang Anda baca ini adalah bagian dari sistem, bukan catatan sampin
 
 MULAI PROMPT
 
-Bangun aplikasi **BEJO Digital Print** (versi acuan 4.13.0): POS toko cetak digital satu pintu, React 19 + TypeScript + Vite 6 + Tailwind v4 di browser, Express 4 di server, PocketBase 0.28.1 sebagai basis data dan kanal realtime, Caddy reverse proxy + HTTPS, NSSM di Windows Server. Semua bahasa antarmuka Indonesia awam, pendek, tanpa istilah programmer, dan tanpa klaim status yang dikarang.
+Bangun aplikasi **BEJO Digital Print** (versi acuan 4.14.0): POS toko cetak digital satu pintu, React 19 + TypeScript + Vite 6 + Tailwind v4 di browser, Express 4 di server, PocketBase 0.28.1 sebagai basis data dan kanal realtime, Caddy reverse proxy + HTTPS, NSSM di Windows Server. Semua bahasa antarmuka Indonesia awam, pendek, tanpa istilah programmer, dan tanpa klaim status yang dikarang.
 
 Struktur wajib:
 - 1 modul frontend = 1 tab dari 12 tab (`pos`, `inventory`, `stock`, `agen`, `shift`, `spk`, `transactions`, `invoices`, `tax`, `marketing`, `customers`, `landing_editor`); tab dirender dari `src/App.tsx` dan difilter oleh fungsi `allowed(id)` di `src/components/Navbar.tsx`. Peran: DEVELOPER, OWNER, ADMIN, AGEN, KASIR, SPK. Wewenang per peran hidup di fungsi tunggal `src/utils/recordAccess.ts` + `src/utils/journalAccessPolicy.ts`, didaftar di `USER-ROLE.md`, dan tiap sel tabelnya dibandingkan penjaga `check:access` dengan kode (termasuk SPK: Katalog hanya melihat + Laporan hanya menu Laporan Penjualan, dengan seluruh format laporan tetap terbuka).
 - Server: `server.ts` (21 rute + wildcard SPA) + 9 modul rute (`journalApi`, `marketingApi`, `userAdmin`, `posAuth`, `devAuth`, `landingApi`, `pbSession`, `brandingApi`, `blueprintApi`) + 2 modul layanan (`staffStore`, `passwordHash`) = 54 rute API.
-- Data: 30 koleksi dari `scripts/create-pocketbase-collections.mjs` + 2 koleksi Jurnal yang dibuat saat boot (total 32). Setiap koleksi membawa `legacyId` dan kolom JSON `data`; `users`, `app_users`, `jurnal_config`, `jurnal_sheets` ber-aturan superuser.
-- Cloud client: **satu** berkas (`src/backend/pocketbaseBackend.ts`) memuat 36 kanal langganan, watchdog 15 detik, revive SSE 30 detik, reauth minimal 30 detik, outbox `bejo_pos_outbox_queue_v1` maksimum 500 entri, cermin 42 kunci localStorage `bejo_pos_*` di seluruh `src/`, dan Mode Lokal dengan IndexedDB. Komponen tidak boleh memanggil SDK PocketBase langsung dan tidak boleh membuat langganan sendiri.
-- Cadangan: registry 36 domain (`src/utils/backupDomains.ts:81`) — payload, pratinjau, pemulihan perangkat, dan kirim ke server semuanya berputar dari daftar itu; akun login staf (nama masuk + kata sandi) tidak pernah ikut.
+- Data: 31 koleksi dari `scripts/create-pocketbase-collections.mjs` + 2 koleksi Jurnal yang dibuat saat boot (total 33). Setiap koleksi membawa `legacyId` dan kolom JSON `data`; `users`, `app_users`, `jurnal_config`, `jurnal_sheets` ber-aturan superuser.
+- Cloud client: **satu** berkas (`src/backend/pocketbaseBackend.ts`) memuat 39 kanal langganan, watchdog 15 detik, revive SSE 30 detik, reauth minimal 30 detik, outbox `bejo_pos_outbox_queue_v1` maksimum 500 entri, cermin 42 kunci localStorage `bejo_pos_*` di seluruh `src/`, dan Mode Lokal dengan IndexedDB. Komponen tidak boleh memanggil SDK PocketBase langsung dan tidak boleh membuat langganan sendiri.
+- Cadangan: registry 39 domain (`src/utils/backupDomains.ts:81`) — payload, pratinjau, pemulihan perangkat, dan kirim ke server semuanya berputar dari daftar itu; akun login staf (nama masuk + kata sandi) tidak pernah ikut.
 
 Mesin perhitungan (satu aturan, dipakai UI dan ekspor bersama):
 - Aset: `assetTrend.ts` (nilai kini = Σ modal × stok, garis tren rekonstruksi mundur maks 1460 hari, bucket HARIAN/MINGGUAN/BULANAN) dan `assetAdjustments.ts` (dua ledger; efek harga `(cBaru−cLama)×stokLama` + efek stok `cBaru×(stokBaru−stokLama)`; baris nol tidak ditulis).
@@ -361,10 +380,11 @@ Mesin perhitungan (satu aturan, dipakai UI dan ekspor bersama):
 - Periode rekap: `agentHistoryPeriod.ts` (kunci `YYYY-MM-DD`, rentang inklusif, hanya satu predikat untuk daftar/pratinjau/PDF).
 - Kredensial: `credentialPolicy.ts` (minimal 10 karakter, huruf + angka, bukan password publik, bukan awalan username; sementara minimal 6; CSPRNG generator).
 - Muatan cloud: `dbSanitize.ts` (`BINARY_MAX_CHARS` 50.000; `LOGO_MAX_CHARS` 400.000 khusus `logoUrl`) + `storeLogoImage.ts` (tangga 256/192/128 px × 0,9→0,6, target ≤ 200.000 karakter, simpan dibatalkan bila masih besar).
+- Pembukuan dua entitas: `entityRegistry.ts` (tanggal milik entitas mana, era Pra-PT/Pasca-PT, kunci periode; `2026-07-01` dan `2022-01-01` hanya hidup di berkas ini) + `accountChart.ts` (kode lama dipertahankan, akun standar PT ditambahkan, rekening pribadi diarsipkan dan prive dimatikan untuk tanggal PT lewat `accountUsability`) + `ledgerMath.ts`/`ledgerAggregates.ts` (jurnal berpasangan; rekap bulanan `agg_<entity>_<YYYY-MM>` dan saldo awal `opn_<entity>_<date>` idempoten) + `transitionMath.ts` (aset bersih hari terakhir entitas lama, hanya saldo yang benar-benar dialihkan, modal saham tidak boleh melebihi aset bersih) + `ledgerReports.ts` (seluruh laporan dibaca dari jurnal; baris bertanda terhadap arah normal seksinya) + `entityTaxConfig.ts` (tahun transisi terbelah dua, tarif dari isian pemilik, tidak ada angka tarif di layar) + `ledgerReportDocument.ts`/`ledgerReportExport.ts` (satu objek dokumen dipakai PDF, Excel, dan CSV).
 
 Keamanan: hash scrypt untuk password DEVELOPER (tidak pernah plaintext, tidak dirotasi saat deploy), sesi cookie di server, broker token PocketBase di `server/pbSession.ts` dengan `PB_SYNC_*` (variabel berprefix `VITE_` tidak pernah dipakai untuk kredensial), pencocokan akun staf berurutan `legacyId` → username → email kredensial → email cadangan dengan adopsi (password cloud lama tidak pernah ditimpa), rate limit login, `/api/branding` sebagai satu-satunya rute publik pra-login (gagal = `200 {success:false}`), dan dokumen blueprint di `/api/blueprint` yang hanya dilayani untuk sesi DEVELOPER.
 
-Penjaga: 16 `scripts/check-*`; yang wajib lulus saat build = brand, versi, lokasi folder fabrikasi, bahasa UI `--strict`, sintaks PowerShell. `check:blueprint` membandingkan angka struktural di dokumen dengan hasil ukur repo — perubahan struktur apa pun mewajibkan dokumen ini diperbarui. Tambah aturan baru = tambah kasus di berkas check terkait + tulis aturannya di `AGENTS.md`.
+Penjaga: 17 `scripts/check-*`; yang wajib lulus saat build = brand, versi, lokasi folder fabrikasi, bahasa UI `--strict`, sintaks PowerShell. `check:blueprint` membandingkan angka struktural di dokumen dengan hasil ukur repo — perubahan struktur apa pun mewajibkan dokumen ini diperbarui. Tambah aturan baru = tambah kasus di berkas check terkait + tulis aturannya di `AGENTS.md`.
 
 Ritme kerja: naikkan versi sekali per update lewat `npm run version:bump|minor|major`, jangan mengedit versi manual; build hanya jika `npm run build` lulus; deploy hanya lewat `deploy/deploy-vps.ps1` di VPS; pemeriksaan hanya lewat `scripts/diagnose-live.ps1` (tanpa skrip deploy/diagnostik baru, tanpa `git pull` di folder VPS).
 

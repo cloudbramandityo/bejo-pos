@@ -27,6 +27,7 @@ import {
 import { FinancialSettings } from '../../utils/financialStorage';
 import { getJournalAccess } from '../../utils/journalAccessPolicy';
 import { canViewAllReportMenus } from '../../utils/recordAccess';
+import { describeAuditActor } from '../../utils/auditActor';
 
 const LaporanJurnalScreen = React.lazy(() =>
   import('../journal/LaporanJurnalScreen').then((module) => ({
@@ -210,6 +211,7 @@ export const LaporanScreen: React.FC<LaporanScreenProps> = (props) => {
           storeName={props.storeName}
           settings={props.financialSettings}
           onSaveSettings={props.onSaveFinancialSettings}
+          actorLabel={describeAuditActor({ name: props.currentUserName, role: props.userRole })}
         />
       )}
     </div>

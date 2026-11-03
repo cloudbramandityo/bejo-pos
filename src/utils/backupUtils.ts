@@ -86,6 +86,9 @@ import {
   saveStoredAnnualReturns
 } from './taxStorage';
 import { getTaxYears, writeTaxYears } from './taxYears';
+import { getEntityRegistry, writeEntityRegistry } from './entityRegistry';
+import { getAccountChart, writeAccountChart } from './accountChart';
+import { getLedgerEntries, writeLedgerEntries } from './ledgerStorage';
 import {
   testPocketBaseConnection,
   saveProductCloud,
@@ -118,7 +121,10 @@ import {
   saveTaxpayerProfileCloud,
   saveTaxAnnualReturnCloud,
   saveTaxMonthlyBillingsCloud,
-  saveTaxYearsCloud
+  saveTaxYearsCloud,
+  saveEntityRegistryCloud,
+  saveAccountChartCloud,
+  saveLedgerEntryCloud
 } from '../backend/pocketbaseBackend';
 import { BACKUP_DOMAINS, countBackupDomainValue } from './backupDomains';
 import { aggregateAdjustment } from './assetAdjustments';
@@ -280,6 +286,21 @@ const DOMAIN_ACCESS: Record<string, DomainAccess> = {
     read: getStoredReconciliationRuns,
     restore: (value) => saveStoredReconciliationRuns(value),
     cloud: (value) => saveReconciliationRunCloud(value),
+  },
+  entityRegistry: {
+    read: getEntityRegistry,
+    restore: (value) => writeEntityRegistry(value),
+    cloud: (value) => saveEntityRegistryCloud(value),
+  },
+  accountChart: {
+    read: getAccountChart,
+    restore: (value) => writeAccountChart(value),
+    cloud: (value) => saveAccountChartCloud(value),
+  },
+  ledgerEntries: {
+    read: getLedgerEntries,
+    restore: (value) => writeLedgerEntries(Array.isArray(value) ? value : []),
+    cloud: (value) => saveLedgerEntryCloud(value),
   },
   financialSettings: {
     read: getStoredFinancialSettings,

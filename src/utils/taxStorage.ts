@@ -32,10 +32,15 @@ import {
   withRemovedTaxYear,
   writeTaxYears
 } from './taxYears';
+import { getEntityRegistry } from './entityRegistry';
+import { billingTariffForMonth } from './entityTaxConfig';
 
 const STORAGE_KEY_TAXPAYER = 'bejo_taxpayer_profile';
 const STORAGE_KEY_ANNUAL_RETURNS = 'bejo_annual_tax_returns';
 const STORAGE_KEY_MONTHLY_BILLINGS = 'bejo_tax_monthly_billings';
+
+/** Kunci bulan 'YYYY-MM' untuk membaca tarif dari profil entitas pemilik bulan. */
+const padMonth = (monthNum: number): string => String(monthNum).padStart(2, '0');
 
 // Helper: Detect whether a taxpayer profile is the legacy dummy/example profile
 export const isDummyTaxpayerProfile = (p?: Partial<TaxpayerProfile> | null): boolean => {
@@ -368,15 +373,17 @@ export { recomputeMonthlyBillingYear, getYearDppBasisMode, setYearDppBasisMode }
  */
 export const generateDefaultMonthlyBillings = (): MonthlyBillingsByYear => {
   const createEmptyYearList = (year: number) => {
+    const registry = getEntityRegistry();
     const rawList: MonthlyTaxBilling[] = MONTH_NAMES.map((monthName, idx) => {
       const monthNum = idx + 1;
+      const tariff = billingTariffForMonth(registry, `${year}-${padMonth(monthNum)}`);
       return {
         id: `billing-${year}-${monthNum}`,
         year,
         month: monthNum,
         monthName,
         pphFinalPaid: 0,
-        tariffRatePercent: 0.5,
+        tariffRatePercent: tariff.percent,
         taxableBaseDpp: 0,
         grossRevenue: 0,
         cumulativeRevenue: 0,
@@ -385,12 +392,12 @@ export const generateDefaultMonthlyBillings = (): MonthlyBillingsByYear => {
         paymentDate: '',
         paymentBank: '',
         isPaid: false,
-        notes: '',
+        notes: tariff.note,
         dppBasisMode: DEFAULT_DPP_BASIS_MODE,
       };
     });
 
-    return recomputeMonthlyBillingYear(rawList);
+    return recomputeMonthlyBillingYear(rawList, null);
   };
 
   const result: MonthlyBillingsByYear = {};
@@ -501,6 +508,10 @@ export const syncReturnWithMonthlyBillings = (
   const totalPphPaid = yearBillings.reduce((sum, item) => sum + (item.pphFinalPaid || 0), 0);
   const totalDpp = yearBillings.reduce((sum, item) => sum + (item.taxableBaseDpp || 0), 0);
   const exemptAmount = Math.max(0, totalGross - totalDpp);
+  // Tarif dibaca dari baris billing tahun itu; kalau belum ada, dari tarif entitas pemilik Januari.
+  const tariffPercent =
+    yearBillings.find((item) => (item.tariffRatePercent ?? 0) > 0)?.tariffRatePercent ??
+    billingTariffForMonth(getEntityRegistry(), `${ret.taxYear}-01`).percent;
 
   const updatedFinalIncomes = [...(ret.finalIncomes || [])];
   const pp55Idx = updatedFinalIncomes.findIndex(f => f.categoryCode === 'UMKM_PP55');
@@ -509,15 +520,15 @@ export const syncReturnWithMonthlyBillings = (
       ...updatedFinalIncomes[pp55Idx],
       grossAmount: totalGross,
       finalTaxAmount: totalPphPaid,
-      taxRatePercent: 0.5,
+      taxRatePercent: tariffPercent,
     };
   } else {
     updatedFinalIncomes.push({
       id: `fin-umkm-${ret.taxYear}`,
       categoryCode: 'UMKM_PP55',
-      description: 'Peredaran Usaha Percetakan UMKM (PP 55/2022 tarif 0.5%)',
+      description: `Peredaran Usaha Percetakan UMKM (PP 55/2022 tarif ${tariffPercent}%)`,
       grossAmount: totalGross,
-      taxRatePercent: 0.5,
+      taxRatePercent: tariffPercent,
       finalTaxAmount: totalPphPaid,
     });
   }
@@ -744,16 +755,19 @@ export const importBillingsFromPosTransactions = (year: number): MonthlyTaxBilli
 
   // Mengimpor omzet tidak boleh diam-diam mengubah dasar DPP yang sudah disetel tahun ini.
   const previousMode = dppBasisModeOfYear(getStoredMonthlyBillings()[year]);
+  const registry = getEntityRegistry();
 
   const rawList: MonthlyTaxBilling[] = MONTH_NAMES.map((monthName, idx) => {
     const monthNum = idx + 1;
-    const monthStr = monthNum < 10 ? `0${monthNum}` : `${monthNum}`;
+    const monthStr = padMonth(monthNum);
     const monthTransactions = yearTx.filter(t => toDateKey(t.date).slice(5, 7) === monthStr);
     // Omzet untuk PPh Final tidak termasuk PPN yang dipungut
     const monthGross = monthTransactions.reduce(
       (sum, t) => sum + Math.max(0, (Number(t.total) || 0) - (Number(t.tax) || 0)),
       0
     );
+    // Tarif bulan dibaca dari entitas pemilik bulan itu, bukan ditulis di kode
+    const tariff = billingTariffForMonth(registry, `${year}-${monthStr}`);
 
     return {
       id: `billing-${year}-${monthNum}`,
@@ -761,7 +775,7 @@ export const importBillingsFromPosTransactions = (year: number): MonthlyTaxBilli
       month: monthNum,
       monthName,
       pphFinalPaid: 0,
-      tariffRatePercent: 0.5,
+      tariffRatePercent: tariff.percent,
       taxableBaseDpp: 0,
       grossRevenue: monthGross,
       cumulativeRevenue: 0,
@@ -770,11 +784,16 @@ export const importBillingsFromPosTransactions = (year: number): MonthlyTaxBilli
       paymentDate: '',
       paymentBank: '',
       isPaid: false,
-      notes: monthGross > 0 ? `Sinkronisasi omzet riil dari ${monthTransactions.length} transaksi penjualan Toko Bejo` : '',
+      notes: [
+        monthGross > 0 ? `Omzet bulan ini dari ${monthTransactions.length} transaksi penjualan toko` : '',
+        tariff.note,
+      ]
+        .filter(Boolean)
+        .join('. '),
       dppBasisMode: previousMode,
     };
   });
 
-  return recomputeMonthlyBillingYear(rawList);
+  return recomputeMonthlyBillingYear(rawList, null);
 };
 

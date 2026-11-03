@@ -25,6 +25,8 @@ import {
   onSyncStatusChange,
   type SyncStatus
 } from '../../backend/pocketbaseBackend';
+import { useEntityRegistry } from '../../hooks/useEntityRegistry';
+import { taxPeriodsForYear, taxSeparationNotes } from '../../utils/entityTaxConfig';
 import {
   Settings,
   ShieldCheck,
@@ -62,6 +64,8 @@ export const TaxSettingsView: React.FC<TaxSettingsViewProps> = ({ onClearDummyDa
 
   // Daftar tahun pajak: satu pengaturan untuk seluruh menu di tab Pajak
   const taxYears = useTaxYears();
+  // Profil entitas pemilik pajak per periode, dibaca apa adanya dari Pengaturan Entitas
+  const entityRegistry = useEntityRegistry();
   const [sync, setSync] = React.useState<SyncStatus>(() => getSyncStatus());
   const [yearDraft, setYearDraft] = React.useState('');
   const [yearNotice, setYearNotice] = React.useState<string | null>(null);
@@ -342,6 +346,61 @@ export const TaxSettingsView: React.FC<TaxSettingsViewProps> = ({ onClearDummyDa
             <span>{yearNotice}</span>
           </div>
         )}
+      </div>
+
+      {/* 6. Pajak Tiap Entitas Usaha */}
+      <div className="p-5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-4 text-xs">
+        <div className="space-y-1">
+          <h4 className="font-bold text-slate-900 flex items-center gap-2 text-sm">
+            <Scale className="w-4 h-4 text-indigo-600" />
+            <span>6. Pajak Tiap Entitas Usaha</span>
+          </h4>
+          <p className="text-slate-500 leading-relaxed max-w-xl">
+            Setelah toko berubah jadi PT, pajak dihitung terpisah per entitas. Tarif dan cara
+            penghitungannya diisi di Laporan Keuangan, menu Pengaturan Entitas.
+          </p>
+        </div>
+
+        {taxYears
+          .slice()
+          .reverse()
+          .map((year) => {
+            const periods = taxPeriodsForYear(entityRegistry, year);
+            const notes = taxSeparationNotes(entityRegistry, year);
+            return (
+              <div key={year} className="space-y-2">
+                <p className="font-bold text-slate-900">Tahun {year}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {periods.map((period) => (
+                    <div
+                      key={`${period.entityId}-${period.from}`}
+                      className="p-3 rounded-xl bg-white border border-slate-200 space-y-1"
+                    >
+                      <p className="font-bold text-slate-900">{period.entityLabel}</p>
+                      <p className="text-slate-500">
+                        {period.from} s.d. {period.to} · {period.regimeLabel}
+                      </p>
+                      <p className="text-slate-700 font-semibold">
+                        {period.finalRatePercent !== null
+                          ? `Tarif PPh Final ${period.finalRatePercent}% · omzet bebas ${formatRupiah(
+                              period.exemptThreshold
+                            )}`
+                          : period.corporateRatePercent !== null
+                            ? `Tarif PPh Badan ${period.corporateRatePercent}%`
+                            : 'Tarif pajaknya belum diisi, jadi tidak dihitung.'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                {notes.map((note) => (
+                  <p key={note} className="text-slate-500 leading-relaxed flex items-start gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                    <span>{note}</span>
+                  </p>
+                ))}
+              </div>
+            );
+          })}
       </div>
     </div>
   );

@@ -50,6 +50,9 @@ import {
   TaxYearsConfig
 } from '../types/tax';
 import type { ReconciliationRun } from '../types/reconciliation';
+import type { EntityRegistry } from '../utils/entityRegistry';
+import type { AccountChart } from '../utils/accountChart';
+import { normalizeJournalEntries, type JournalEntry } from '../utils/ledgerMath';
 import {
   StoreInfo,
   DEFAULT_STORE_INFO,
@@ -83,6 +86,7 @@ export const PB_COLLECTIONS = {
   stock_transactions: 'stock_transactions',
   asset_adjustments: 'asset_adjustments',
   reconciliation_runs: 'reconciliation_runs',
+  ledger_entries: 'ledger_entries',
   shifts: 'shifts',
   cashiers: 'cashiers',
   users: 'users',
@@ -1732,6 +1736,48 @@ export async function deleteReconciliationRunCloud(runId: string): Promise<void>
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Jurnal per entitas (collection: ledger_entries)                             */
+/* -------------------------------------------------------------------------- */
+/**
+ * Semua laporan keuangan dibaca dari daftar jurnal ini, jadi isinya harus sama
+ * di setiap perangkat: satu snapshot pengganti, termasuk saat server kosong.
+ */
+export function subscribeLedgerEntries(onData: (items: JournalEntry[]) => void): () => void {
+  return createSafeSubscription('ledger_entries', OperationType.LIST, (onError) =>
+    subscribeCollection('ledger_entries', (items) => {
+      onData(normalizeJournalEntries(items));
+    }, onError)
+  );
+}
+
+export async function saveLedgerEntryCloud(entry: JournalEntry): Promise<void> {
+  return safeCloudWrite(async () => {
+    await upsertRecord('ledger_entries', entry.id, { ...entry, updatedAt: Date.now() } as any);
+  }, OperationType.WRITE, `ledger_entries/${entry.id}`);
+}
+
+export async function saveAllLedgerEntriesCloud(entries: JournalEntry[]): Promise<void> {
+  if (!entries || entries.length === 0) return;
+  return safeCloudWrite(async () => {
+    let firstError: any = null;
+    for (const entry of entries) {
+      try {
+        await upsertRecord('ledger_entries', entry.id, { ...entry, updatedAt: Date.now() } as any);
+      } catch (err) {
+        if (!firstError) firstError = err;
+      }
+    }
+    if (firstError) throw firstError;
+  }, OperationType.WRITE, 'ledger_entries');
+}
+
+export async function deleteLedgerEntryCloud(entryId: string): Promise<void> {
+  return safeCloudWrite(async () => {
+    await removeRecord('ledger_entries', entryId);
+  }, OperationType.DELETE, `ledger_entries/${entryId}`);
+}
+
+/* -------------------------------------------------------------------------- */
 /*  11. Suppliers                                                              */
 /* -------------------------------------------------------------------------- */
 export function subscribeSuppliers(onData: (suppliers: Supplier[]) => void): () => void {
@@ -2165,6 +2211,53 @@ export async function saveTaxYearsCloud(cfg: TaxYearsConfig): Promise<void> {
   return safeCloudWrite(async () => {
     await upsertRecord('settings', 'tax_years', cfg as any);
   }, OperationType.WRITE, 'settings/tax_years');
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Entitas usaha & bagan akun (collection: settings)                          */
+/* -------------------------------------------------------------------------- */
+/**
+ * Profil entitas (Perorangan -> PT) dan bagan akun dipakai bersama supaya
+ * laporan di setiap perangkat berbasis sama. Keduanya satu catatan, bukan
+ * daftar baris: nilainya kecil dan selalu dibaca utuh.
+ */
+export function subscribeEntityRegistry(
+  onData: (registry: EntityRegistry | null) => void
+): () => void {
+  return createSafeSubscription('settings/entity_registry', OperationType.GET, (onError) =>
+    subscribeRecord('settings', 'entity_registry', (item) => {
+      onData((item as any)?.registry ? ((item as any).registry as EntityRegistry) : null);
+    }, onError)
+  );
+}
+
+export async function saveEntityRegistryCloud(registry: EntityRegistry): Promise<void> {
+  return safeCloudWrite(async () => {
+    await upsertRecord('settings', 'entity_registry', {
+      registry,
+      transitionDate: registry.transitionDate,
+      updatedAt: Date.now(),
+    } as any);
+  }, OperationType.WRITE, 'settings/entity_registry');
+}
+
+export function subscribeAccountChart(
+  onData: (chart: AccountChart | null) => void
+): () => void {
+  return createSafeSubscription('settings/account_chart', OperationType.GET, (onError) =>
+    subscribeRecord('settings', 'account_chart', (item) => {
+      onData((item as any)?.chart ? ((item as any).chart as AccountChart) : null);
+    }, onError)
+  );
+}
+
+export async function saveAccountChartCloud(chart: AccountChart): Promise<void> {
+  return safeCloudWrite(async () => {
+    await upsertRecord('settings', 'account_chart', {
+      chart,
+      updatedAt: Date.now(),
+    } as any);
+  }, OperationType.WRITE, 'settings/account_chart');
 }
 
 /* -------------------------------------------------------------------------- */

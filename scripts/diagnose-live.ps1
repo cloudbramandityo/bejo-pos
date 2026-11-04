@@ -22,6 +22,10 @@
     - Tidak menulis/mengubah data PocketBase, .env, atau file aplikasi.
     - Kredensial hanya ditampilkan status TERISI/KOSONG + panjang; nilainya
       tidak pernah dicetak, termasuk di laporan.
+    - Satu-satunya permintaan yang mengubah keadaan server adalah login pada
+      -ProbeSession (memakai kredensial yang diketik operator saat itu juga,
+      input tersembunyi); ia memakan satu jatah percobaan login dan tidak
+      menyentuh data toko.
 
   Seksi:
     A. Host, runtime, dan freshness deploy
@@ -34,7 +38,8 @@
     H. Log terbaru (dipindai, rahasia disamarkan)
     I. Provisioning: software, folder, service & firewall
     J. Caddyfile, DNS, dan isi bundel browser
-    K. Ringkasan
+    K. Sesi dashboard & rute private (pengukur penyebab 401)
+    L. Ringkasan
 
   Opsi:
     -AppDir C:\bejo-pos          Folder aplikasi di VPS
@@ -48,7 +53,12 @@
     -SkipAccounts                Lewati seksi F (pemeriksaan akun, paling lambat)
     -SkipProvisioning            Lewati seksi I dan J (provisioning/Caddy/bundel)
     -RequireClean                Exit code 2 bila masih ada WARN (untuk CI/cron)
-    -SelfTest                    Uji logika penilaian port dengan contoh aturan
+    -ProbeSession                Seksi K ditambah uji login DEVELOPER (input
+                                 tersembunyi, nilai tidak pernah dicetak) untuk
+                                 membuktikan cookie sesi diterima rute private.
+                                 Memakan 1 jatah percobaan login di server.
+    -SelfTest                    Uji logika penilaian port, aksi pemulihan
+                                 service, dan gerbang sesi private dengan contoh
                                  nyata, tanpa membaca sistem (untuk workstation)
 
   Exit code:
@@ -73,6 +83,7 @@ param(
   [switch]$SkipAccounts,
   [switch]$SkipProvisioning,
   [switch]$RequireClean,
+  [switch]$ProbeSession,
   [switch]$SelfTest
 )
 
@@ -141,15 +152,20 @@ import dotenv from 'dotenv';
 const [envPath] = process.argv.slice(2);
 const env = dotenv.config({ path: envPath, override: true, quiet: true }).parsed || {};
 const plain = ['APP_URL', 'POCKETBASE_UPSTREAM', 'VITE_POCKETBASE_URL', 'PUBLIC_SITE', 'ALLOW_DEFAULT_STAFF_PASSWORDS', 'DEV_USERNAME'];
-const secret = ['PB_SYNC_EMAIL', 'PB_SYNC_PASSWORD', 'PB_ADMIN_EMAIL', 'PB_ADMIN_PASSWORD', 'DEV_PASSWORD_HASH', 'APP_SESSION_SECRET', 'GEMINI_API_KEY', 'REMOTE_ACCESS_PASS'];
+const secret = ['PB_SYNC_EMAIL', 'PB_SYNC_PASSWORD', 'PB_ADMIN_EMAIL', 'PB_ADMIN_PASSWORD', 'DEV_PASSWORD_HASH', 'APP_SESSION_SECRET', 'GEMINI_API_KEY', 'REMOTE_ACCESS_PASS', 'JOURNAL_SESSION_SECRET'];
 const legacy = ['VITE_PB_SYNC_EMAIL', 'VITE_PB_SYNC_PASSWORD'];
 const out = {};
 for (const key of [...plain, ...secret, ...legacy]) {
   const present = Object.prototype.hasOwnProperty.call(env, key);
+  const raw = String(env[key] ?? '');
   out[key] = {
     present,
-    length: String(env[key] ?? '').length,
-    value: plain.includes(key) ? String(env[key] ?? '') : null,
+    length: raw.length,
+    // Panjang nilai, termasuk setelah spasi dibuang. Yang terakhir ini persis
+    // ukuran yang dipakai getSessionSecret() (String(process.env.X || '').trim())
+    // untuk menilai kunci terisi atau tidak. Nilainya sendiri tidak pernah keluar.
+    trimmed: raw.trim().length,
+    value: plain.includes(key) ? raw : null,
   };
 }
 console.log(JSON.stringify(out));
@@ -189,10 +205,16 @@ function Get-Endpoint([string]$url, [int]$timeoutSec = 20) {
     $body = $null
     try {
       if ($_.Exception.Response) {
-        $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
-        $body = $reader.ReadToEnd()
+        $stream = $_.Exception.Response.GetResponseStream()
+        if ($stream.CanSeek) { [void]$stream.Seek(0, [System.IO.SeekOrigin]::Begin) }
+        $reader = New-Object System.IO.StreamReader($stream)
+        $body = [string]$reader.ReadToEnd()
       }
-    } catch { }
+    } catch { $body = '' }
+    # ErrorDetails didahulukan: di PowerShell 5.1 stream respons error sudah
+    # dihabiskan Invoke-WebRequest, jadi body 401/403/404 terbaca kosong dan
+    # skrip menyangka jawabannya bukan dari aplikasi.
+    $body = Resolve-ResponseErrorBody ([string]$_.ErrorDetails.Message) ([string]$body)
     return [pscustomobject]@{ Url = $url; Ok = $false; Status = $status; Ms = $sw.ElapsedMilliseconds; Body = $body; Error = $_.Exception.Message }
   }
 }
@@ -493,10 +515,104 @@ function Invoke-FirewallSelfTest {
     else { Write-Host "  FAIL $($c.n) (dapat=$got harus=$($c.harus))" -ForegroundColor Red; $failed++ }
   }
 
+  # Sumber secret sesi: urutan prioritas dan keadaan "semua kosong" harus
+  # dinilai sama seperti server/devAuth.ts, karena di situlah gejala 401
+  # massal setelah restart lahir. Peta yang masuk adalah hasil pembacaan .env
+  # (present + panjang setelah spasi dibuang), BUKAN nilai aslinya - nilai
+  # rahasia tidak pernah keluar dari skrip ini.
+  function SecretInfo([bool]$present, [int]$rawLength, [int]$trimmedLength) {
+    return @{ present = $present; length = $rawLength; trimmed = $trimmedLength }
+  }
+  $secretCases = @(
+    @{ n = 'APP_SESSION_SECRET menang atas fallback'; m = @{ APP_SESSION_SECRET = SecretInfo $true 15 15; JOURNAL_SESSION_SECRET = SecretInfo $false 0 0; PB_ADMIN_PASSWORD = SecretInfo $true 1 1; REMOTE_ACCESS_PASS = SecretInfo $true 1 1 }; harus = 'APP_SESSION_SECRET' },
+    @{ n = 'tanpa APP_SESSION_SECRET memakai PB_ADMIN_PASSWORD'; m = @{ APP_SESSION_SECRET = SecretInfo $false 0 0; JOURNAL_SESSION_SECRET = SecretInfo $false 0 0; PB_ADMIN_PASSWORD = SecretInfo $true 1 1; REMOTE_ACCESS_PASS = SecretInfo $true 1 1 }; harus = 'PB_ADMIN_PASSWORD' },
+    @{ n = 'hanya REMOTE_ACCESS_PASS pun dipakai'; m = @{ APP_SESSION_SECRET = SecretInfo $false 0 0; JOURNAL_SESSION_SECRET = SecretInfo $false 0 0; PB_ADMIN_PASSWORD = SecretInfo $false 0 0; REMOTE_ACCESS_PASS = SecretInfo $true 1 1 }; harus = 'REMOTE_ACCESS_PASS' },
+    @{ n = 'baris ada tapi isinya hanya spasi = kosong (server melakukan trim)'; m = @{ APP_SESSION_SECRET = SecretInfo $true 3 0; JOURNAL_SESSION_SECRET = SecretInfo $false 0 0; PB_ADMIN_PASSWORD = SecretInfo $true 8 8; REMOTE_ACCESS_PASS = SecretInfo $false 0 0 }; harus = 'PB_ADMIN_PASSWORD' },
+    @{ n = 'baris kosong tanpa nilai = kosong'; m = @{ APP_SESSION_SECRET = SecretInfo $true 0 0; JOURNAL_SESSION_SECRET = SecretInfo $true 0 0; PB_ADMIN_PASSWORD = SecretInfo $true 0 0; REMOTE_ACCESS_PASS = SecretInfo $true 0 0 }; harus = '' },
+    @{ n = 'kunci absen sama sekali = kosong'; m = @{ PB_ADMIN_PASSWORD = SecretInfo $false 0 0 }; harus = '' },
+    @{ n = 'JOURNAL_SESSION_SECRET sebelum PB_ADMIN_PASSWORD'; m = @{ APP_SESSION_SECRET = SecretInfo $false 0 0; JOURNAL_SESSION_SECRET = SecretInfo $true 1 1; PB_ADMIN_PASSWORD = SecretInfo $true 1 1; REMOTE_ACCESS_PASS = SecretInfo $true 1 1 }; harus = 'JOURNAL_SESSION_SECRET' },
+    @{ n = 'peta dari ConvertFrom-Json (objek properti) juga dinilai'; m = [pscustomobject]@{ APP_SESSION_SECRET = [pscustomobject]@{ present = $true; length = 44; trimmed = 44 }; JOURNAL_SESSION_SECRET = [pscustomobject]@{ present = $false; length = 0; trimmed = 0 }; PB_ADMIN_PASSWORD = [pscustomobject]@{ present = $true; length = 8; trimmed = 8 }; REMOTE_ACCESS_PASS = [pscustomobject]@{ present = $false; length = 0; trimmed = 0 } }; harus = 'APP_SESSION_SECRET' }
+  )
+  foreach ($c in $secretCases) {
+    $got = (Get-SessionSecretSource $c.m).Key
+    if ([string]$got -eq [string]$c.harus) { Write-Host "  OK   $($c.n)" -ForegroundColor Green }
+    else { Write-Host "  FAIL $($c.n) (dapat='$got' harus='$($c.harus)')" -ForegroundColor Red; $failed++ }
+  }
+
+  # Penilaian probe rute private: yang diuji adalah PEMISAHAN antara gerbang
+  # yang bekerja, rute yang hilang, rute yang bocor, dan lapisan di depan
+  # Express. Tanpa ini, 401 di panel diagnostik selalu dibaca "server rusak".
+  $probeCases = @(
+    @{ n = '401 AUTH_REQUIRED tanpa cookie = gerbang benar'; s = 401; c = 'AUTH_REQUIRED'; w = $false; j = $true; harus = 'gerbang-sesi-benar' },
+    @{ n = '401 AUTH_REQUIRED dengan cookie baru = cookie ditolak'; s = 401; c = 'AUTH_REQUIRED'; w = $true; j = $true; harus = 'cookie-ditolak' },
+    @{ n = '401 tanpa body JSON = ditahan sebelum Express'; s = 401; c = ''; w = $false; j = $false; harus = 'ditahan-sebelum-express' },
+    @{ n = '404 = rute tidak ada di build yang jalan'; s = 404; c = ''; w = $false; j = $false; harus = 'rute-tidak-ada' },
+    @{ n = '200 ber-body JSON tanpa cookie = rute bocor'; s = 200; c = ''; w = $false; j = $true; harus = 'rute-terbuka-tanpa-sesi' },
+    @{ n = '200 tanpa body JSON = bukan jawaban Express, rute tidak dinilai'; s = 200; c = ''; w = $false; j = $false; harus = 'bukan-jawaban-api' },
+    @{ n = '200 dengan cookie = rantai sesi utuh'; s = 200; c = ''; w = $true; j = $true; harus = 'rute-terbuka-dengan-sesi' },
+    @{ n = '403 FORBIDDEN dengan cookie = sesi terbaca'; s = 403; c = 'FORBIDDEN'; w = $true; j = $true; harus = 'sesi-terbaca' },
+    @{ n = '403 INVALID_ORIGIN dinilai terpisah'; s = 403; c = 'INVALID_ORIGIN'; w = $true; j = $true; harus = 'origin-ditolak' },
+    @{ n = '429 = kuota login habis, rute tidak dinilai'; s = 429; c = 'RATE_LIMITED'; w = $true; j = $true; harus = 'kuota-login-habis' },
+    @{ n = '500 = galat aplikasi, bukan gerbang sesi'; s = 500; c = ''; w = $false; j = $true; harus = 'server-galat' },
+    @{ n = 'tanpa jawaban jangan disebut 401'; s = 0; c = ''; w = $false; j = $false; harus = 'tidak-merespons' }
+  )
+  foreach ($c in $probeCases) {
+    $got = (Get-PrivateProbeVerdict -Status $c.s -Code $c.c -WithCookie $c.w -JsonBody $c.j).State
+    if ([string]$got -eq [string]$c.harus) { Write-Host "  OK   $($c.n)" -ForegroundColor Green }
+    else { Write-Host "  FAIL $($c.n) (dapat='$got' harus='$($c.harus)')" -ForegroundColor Red; $failed++ }
+  }
+  # Kode dibaca dari body JSON, dan body non-JSON (halaman Caddy) tidak boleh
+  # menghasilkan kode palsu.
+  $codeCases = @(
+    @{ n = 'code AUTH_REQUIRED terbaca dari body aplikasi'; b = '{"success":false,"code":"AUTH_REQUIRED","error":"x"}'; harus = 'AUTH_REQUIRED' },
+    @{ n = 'html halaman Caddy tidak menghasilkan code'; b = '<html><body>401 Unauthorized</body></html>'; harus = '' },
+    @{ n = 'code FORBIDDEN terbaca'; b = '{"code":"FORBIDDEN"}'; harus = 'FORBIDDEN' }
+  )
+  foreach ($c in $codeCases) {
+    $got = Get-ResponseApiCode $c.b
+    if ([string]$got -eq [string]$c.harus) { Write-Host "  OK   $($c.n)" -ForegroundColor Green }
+    else { Write-Host "  FAIL $($c.n) (dapat='$got' harus='$($c.harus)')" -ForegroundColor Red; $failed++ }
+  }
+  $ttlCases = @(
+    @{ n = 'TTL 12 jam terbaca dari sumbernya'; t = 'const SESSION_TTL_SECONDS = 12 * 60 * 60;'; harus = 43200 },
+    @{ n = 'TTL dua faktor terbaca'; t = 'const SESSION_TTL_SECONDS = 8 * 60 * 60;'; harus = 28800 },
+    @{ n = 'pola tidak dikenal menghasilkan 0, bukan tebakan'; t = 'const SESSION_TTL_SECONDS = SOME_VAR;'; harus = 0 }
+  )
+  foreach ($c in $ttlCases) {
+    $got = Get-SessionTtlSeconds $c.t
+    if ([int]$got -eq [int]$c.harus) { Write-Host "  OK   $($c.n)" -ForegroundColor Green }
+    else { Write-Host "  FAIL $($c.n) (dapat=$got harus=$($c.harus))" -ForegroundColor Red; $failed++ }
+  }
+  # Pembacaan body respons error. Kasus pertama adalah yang benar-benar terjadi
+  # saat mengukur 401 live: ErrorDetails berisi JSON aplikasi, stream kosong
+  # karena sudah dihabiskan Invoke-WebRequest. Kalau urutannya dibalik, probe
+  # membaca body kosong dan menyimpulkan "bukan jawaban aplikasi" - temuan palsu.
+  $bodyCases = @(
+    @{ n = 'ErrorDetails menang atas stream kosong (PowerShell 5.1)'; e = '{"code":"AUTH_REQUIRED"}'; s = ''; harus = '{"code":"AUTH_REQUIRED"}' },
+    @{ n = 'ErrorDetails menang walau stream berisi lain'; e = '{"code":"AUTH_REQUIRED"}'; s = 'sisa stream'; harus = '{"code":"AUTH_REQUIRED"}' },
+    @{ n = 'tanpa ErrorDetails stream dipakai (cadangan)'; e = ''; s = '{"code":"FORBIDDEN"}'; harus = '{"code":"FORBIDDEN"}' },
+    @{ n = 'ErrorDetails hanya-spasi dianggap kosong'; e = '   '; s = 'halaman Caddy'; harus = 'halaman Caddy' },
+    @{ n = 'dua-duanya kosong menghasilkan kosong, bukan tebakan'; e = ''; s = ''; harus = '' }
+  )
+  foreach ($c in $bodyCases) {
+    $got = Resolve-ResponseErrorBody $c.e $c.s
+    if ([string]$got -eq [string]$c.harus) { Write-Host "  OK   $($c.n)" -ForegroundColor Green }
+    else { Write-Host "  FAIL $($c.n) (dapat='$got' harus='$($c.harus)')" -ForegroundColor Red; $failed++ }
+  }
+  # Rantai lengkap body -> kode -> penilaian, supaya urutan ErrorDetails terbukti
+  # mengubah kesimpulan akhir, bukan hanya isi string tengah.
+  $rantai = Resolve-ResponseErrorBody '{"success":false,"code":"AUTH_REQUIRED","error":"Silakan login ke dashboard terlebih dahulu."}' ''
+  $verdictRantai = Get-PrivateProbeVerdict -Status 401 -Code (Get-ResponseApiCode $rantai) -WithCookie $false -JsonBody $true
+  if ([string]$verdictRantai.State -eq 'gerbang-sesi-benar') {
+    Write-Host "  OK   401 live terbaca sebagai gerbang sesi yang benar" -ForegroundColor Green
+  } else {
+    Write-Host "  FAIL 401 live terbaca sebagai '$($verdictRantai.State)' harus='gerbang-sesi-benar'" -ForegroundColor Red; $failed++
+  }
+
   Remove-Item Function:Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue
   Remove-Item Function:Get-NetFirewallServiceFilter -ErrorAction SilentlyContinue
   if ($failed -gt 0) { Write-Host "  SELFTEST GAGAL: $failed kasus salah." -ForegroundColor Red; return 1 }
-  Write-Host '  Semua kasus penilaian port firewall & aksi pemulihan service lulus.' -ForegroundColor Green
+  Write-Host '  Semua kasus penilaian port firewall, aksi pemulihan service, gerbang sesi private, dan pembacaan body respons error lulus.' -ForegroundColor Green
   return 0
 }
 
@@ -556,6 +672,222 @@ function Get-RecoveryVerdict($state) {
     return [pscustomobject]@{ Level = 'tak terbaca'; Detail = 'registri aksi pemulihan tidak terbaca dan service tidak dikelola NSSM' }
   }
   return [pscustomobject]@{ Level = 'tanpa-pengawas'; Detail = "failure action Windows: $windows" }
+}
+
+# ---------------------------------------------------------------------
+# Sesi dashboard & rute private (sumber gejala "401" di panel diagnostik).
+#
+# Panel diagnostik di browser membaca /api/backend/diagnostics. Rutenya masuk
+# PRIVATE_API_PREFIXES di server.ts, jadi tanpa cookie sesi dashboard server
+# menjawab 401 { code: AUTH_REQUIRED }. Angka 401 bukan otomatis kerusakan:
+# yang memisahkan "gerbang bekerja" dari "deploy belum selesai" adalah body
+# JSON-nya, dan itu dinilai per rute lewat Get-PrivateProbeVerdict.
+#
+# Sumber secret sesi dinilai persis seperti getSessionSecret() di
+# server/devAuth.ts: urutan APP_SESSION_SECRET, JOURNAL_SESSION_SECRET,
+# PB_ADMIN_PASSWORD, REMOTE_ACCESS_PASS, dan nilai whitespace dihitung kosong
+# karena server memakai String(process.env.X || '').trim(). Peta yang masuk
+# adalah HASIL PEMBACAAN .env (key -> @{present; length; trimmed}), bukan nilai
+# aslinya: pembaca .env di skrip ini sengaja tidak pernah mengeluarkan nilai
+# rahasia, jadi penilaiannya wajib memakai panjang setelah spasi dibuang.
+# Kalau keempatnya kosong, server memakai secret acak per proses, sehingga
+# SELURUH cookie sesi mati setiap service restart: aplikasi masih tampak login
+# di perangkat (state login memang disimpan di sana) sementara semua rute
+# private menjawab 401. Menyimpulkan "sesi kedaluwarsa" tanpa mengukur keempat
+# kunci itu adalah tebakan, dan itu yang bikin temuan palsu.
+# ---------------------------------------------------------------------
+$SESSION_SECRET_KEYS = @('APP_SESSION_SECRET', 'JOURNAL_SESSION_SECRET', 'PB_ADMIN_PASSWORD', 'REMOTE_ACCESS_PASS')
+
+function Get-SessionSecretSource($EnvInfo) {
+  foreach ($key in $SESSION_SECRET_KEYS) {
+    if ($EnvInfo -is [hashtable]) { $info = $EnvInfo[$key] } else { $info = $EnvInfo.$key }
+    if ($info -and [int]$info.trimmed -gt 0) {
+      return @{ Key = $key; Length = [int]$info.length }
+    }
+  }
+  return @{ Key = ''; Length = 0 }
+}
+
+# Menilai satu hasil probe rute private dari status HTTP + bentuk body.
+# 401 ber-code AUTH_REQUIRED = jawaban aplikasi (gerbang sesi); 401 tanpa body
+# JSON = ditahan sebelum Express (Basic Auth Caddy); 403 ber-code FORBIDDEN
+# justru bukti cookie terbaca karena perannya yang tidak cukup; 404 = rute
+# tidak ada di build yang berjalan; 200 BERBODY JSON tanpa cookie = rute bocor;
+# 200 tanpa body JSON = yang menjawab bukan Express (halaman SPA dev server
+# atau proxy di depan), jadi rute tidak boleh dinyatakan terbuka maupun bocor.
+function Get-PrivateProbeVerdict {
+  param([int]$Status, [string]$Code, [bool]$WithCookie, [bool]$JsonBody = $false)
+  $kode = ([string]$Code).Trim().ToUpper()
+  if ($Status -eq 0) {
+    return @{ Level = 'fail'; State = 'tidak-merespons'; Text = 'tidak ada jawaban dari server (service mati atau URL salah)' }
+  }
+  if ($Status -eq 429) {
+    return @{ Level = 'warn'; State = 'kuota-login-habis'; Text = 'kuota percobaan login habis; rute tidak dinilai, tunggu 15 menit' }
+  }
+  if ($Status -ge 500) {
+    return @{ Level = 'fail'; State = 'server-galat'; Text = "HTTP $Status dari aplikasi (Express error, bukan gerbang sesi)" }
+  }
+  if ($Status -eq 404) {
+    return @{ Level = 'fail'; State = 'rute-tidak-ada'; Text = 'HTTP 404: rute tidak ada di build yang berjalan (deploy belum selesai?)' }
+  }
+  if ($Status -eq 401) {
+    if ($kode -eq 'AUTH_REQUIRED') {
+      if ($WithCookie) {
+        return @{ Level = 'fail'; State = 'cookie-ditolak'; Text = '401 AUTH_REQUIRED padahal cookie baru saja diterbitkan server: yang menjawab berbeda dari yang menerbitkan (secret sesi berubah / lebih dari satu proses Node)' }
+      }
+      return @{ Level = 'info'; State = 'gerbang-sesi-benar'; Text = '401 AUTH_REQUIRED dari aplikasi: rute hidup, gerbang sesi bekerja' }
+    }
+    if ($kode -eq 'INVALID_CREDENTIALS') {
+      return @{ Level = 'warn'; State = 'kredensial-ditolak'; Text = 'login ditolak server; tidak ada kesimpulan tentang rute private' }
+    }
+    if ([string]::IsNullOrWhiteSpace($kode)) {
+      return @{ Level = 'warn'; State = 'ditahan-sebelum-express'; Text = '401 tanpa body JSON aplikasi: ditahan di depan (Basic Auth Caddy), jadi Express belum tentu yang menjawab' }
+    }
+    return @{ Level = 'warn'; State = 'galat-401-lain'; Text = "401 ber-code $kode" }
+  }
+  if ($Status -eq 403) {
+    if ($kode -eq 'INVALID_ORIGIN') {
+      return @{ Level = 'warn'; State = 'origin-ditolak'; Text = 'Origin permintaan ditolak server (periksa APP_URL dan alamat yang dipakai browser)' }
+    }
+    if ($WithCookie) {
+      return @{ Level = 'ok'; State = 'sesi-terbaca'; Text = '403 FORBIDDEN: cookie sesi terbaca server, hanya perannya tidak cukup' }
+    }
+    return @{ Level = 'warn'; State = 'peran-ditolak-tanpa-sesi'; Text = '403 tanpa cookie: gerbang peran menjawab sebelum gerbang sesi (tidak biasa)' }
+  }
+  if ($Status -ge 200 -and $Status -lt 300) {
+    if (-not $JsonBody) {
+      return @{ Level = 'warn'; State = 'bukan-jawaban-api'; Text = "HTTP ${Status} tanpa body JSON aplikasi: yang menjawab bukan Express (halaman SPA dev server atau proxy di depan port ini) - rute private tidak dinilai dari jawaban begitu" }
+    }
+    if ($WithCookie) {
+      return @{ Level = 'ok'; State = 'rute-terbuka-dengan-sesi'; Text = "HTTP ${Status}: rute private menjawab normal dengan cookie sesi" }
+    }
+    return @{ Level = 'fail'; State = 'rute-terbuka-tanpa-sesi'; Text = "HTTP ${Status} ber-body JSON: rute private benar-benar terbuka tanpa login (seharusnya 401)" }
+  }
+  return @{ Level = 'warn'; State = 'status-tak-dikenal'; Text = "HTTP $Status tidak dikenal untuk gerbang sesi" }
+}
+
+# Umur cookie sesi dibaca dari sumbernya, bukan ditebak. server/posAuth.ts
+# menulis `const SESSION_TTL_SECONDS = 12 * 60 * 60`; bentuk perkalian dua atau
+# tiga faktor didukung. Kalau polanya tidak cocok hasilnya 0 dan seksi K menulis
+# "tidak terbaca" alih-alih mengarang angka.
+function Get-SessionTtlSeconds([string]$sourceText) {
+  $m = [regex]::Match([string]$sourceText, 'SESSION_TTL_SECONDS\s*=\s*([0-9]+)\s*\*\s*([0-9]+)(?:\s*\*\s*([0-9]+))?')
+  if (-not $m.Success) { return 0 }
+  $hasil = [long]$m.Groups[1].Value * [long]$m.Groups[2].Value
+  if ($m.Groups[3].Success) { $hasil = $hasil * [long]$m.Groups[3].Value }
+  return $hasil
+}
+
+# Body dari respons BERSTATUS ERROR tidak bisa dibaca dari stream di PowerShell
+# 5.1: Invoke-WebRequest sudah menghabiskan stream itu lebih dulu dan menaruh
+# isinya di $_.ErrorDetails.Message. Membaca GetResponseStream() saja selalu
+# menghasilkan string kosong untuk 401/403/404, dan itu membuat skrip menyimpulkan
+# "bukan jawaban aplikasi" padahal Express menjawab dengan body JSON yang utuh.
+# Urutannya: ErrorDetails dulu, stream hanya sebagai cadangan.
+function Resolve-ResponseErrorBody([string]$errorDetails, [string]$streamBody) {
+  if (-not [string]::IsNullOrWhiteSpace($errorDetails)) { return [string]$errorDetails }
+  return [string]$streamBody
+}
+
+# Kode dari body JSON aplikasi. Dicari dengan regex, bukan ConvertFrom-Json,
+# karena body error bisa saja bukan JSON (halaman Caddy, nginx, atau HTML).
+function Get-ResponseApiCode([string]$body) {
+  $m = [regex]::Match([string]$body, '"code"\s*:\s*"([^"]+)"')
+  if ($m.Success) { return $m.Groups[1].Value }
+  return ''
+}
+
+# Probe satu rute private. Cookie hanya dipakai sebagai header, tidak pernah
+# dicetak; yang dikembalikan panjangnya saja.
+function Invoke-PrivateProbe {
+  param([string]$Url, [string]$CookieHeader = '')
+  $headers = @{}
+  if ($CookieHeader) { $headers['Cookie'] = $CookieHeader }
+  $status = 0
+  $body = ''
+  try {
+    $resp = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 20 -Headers $headers
+    $status = [int]$resp.StatusCode
+    $body = [string]$resp.Content
+  } catch {
+    $webResponse = $_.Exception.Response
+    if ($null -ne $webResponse) {
+      $status = [int]$webResponse.StatusCode
+      $streamBody = ''
+      try {
+        $stream = $webResponse.GetResponseStream()
+        if ($stream.CanSeek) { [void]$stream.Seek(0, [System.IO.SeekOrigin]::Begin) }
+        $reader = New-Object System.IO.StreamReader($stream)
+        $streamBody = [string]$reader.ReadToEnd()
+      } catch { $streamBody = '' }
+      $body = Resolve-ResponseErrorBody ([string]$_.ErrorDetails.Message) $streamBody
+    }
+  }
+  return @{
+    Status = $status
+    Code = (Get-ResponseApiCode $body)
+    Body = $body
+    # Body JSON = jawaban Express. HTML berarti yang menjawab lapisan lain di
+    # depan port ini (dev server atau proxy), dan itu tidak boleh dibaca sebagai
+    # rute terbuka maupun sebagai gerbang sesi.
+    JsonBody = ($body.TrimStart().StartsWith('{') -or $body.TrimStart().StartsWith('['))
+    CookieLength = ([string]$CookieHeader).Length
+  }
+}
+
+# Percobaan login DEVELOPER lewat -ProbeSession. Password diminta dengan input
+# tersembunyi, dipakai sekali di memori untuk body POST, lalu dikosongkan; ia
+# tidak pernah masuk laporan, transcript, maupun baris yang dicetak. Cookie
+# hasilnya juga hanya dilaporkan panjangnya. Login memakan satu jatah
+# checkLoginRate di sisi server, karena itu opsinya dipakai dengan sadar.
+function Invoke-SessionLoginProbe {
+  param([string]$BaseUrl, [string]$Username, [securestring]$Password)
+  $plain = ''
+  $body = $null
+  $status = 0
+  $setCookie = ''
+  $content = ''
+  try {
+    $plain = [System.Net.NetworkCredential]::new('', $Password).Password
+    $body = (@{ username = $Username; password = $plain } | ConvertTo-Json -Compress)
+    try {
+      $resp = Invoke-WebRequest -Uri "$BaseUrl/api/auth/login" -Method Post -Body $body `
+        -ContentType 'application/json' -UseBasicParsing -TimeoutSec 20
+      $status = [int]$resp.StatusCode
+      try { $setCookie = [string]$resp.Headers['Set-Cookie'] } catch { $setCookie = '' }
+      $content = [string]$resp.Content
+    } catch {
+      $webResponse = $_.Exception.Response
+      if ($null -ne $webResponse) {
+        $status = [int]$webResponse.StatusCode
+        try { $setCookie = [string]$webResponse.Headers['Set-Cookie'] } catch { $setCookie = '' }
+        $streamBody = ''
+        try {
+          $stream = $webResponse.GetResponseStream()
+          if ($stream.CanSeek) { [void]$stream.Seek(0, [System.IO.SeekOrigin]::Begin) }
+          $reader = New-Object System.IO.StreamReader($stream)
+          $streamBody = [string]$reader.ReadToEnd()
+        } catch { $streamBody = '' }
+        $content = Resolve-ResponseErrorBody ([string]$_.ErrorDetails.Message) $streamBody
+      }
+    }
+  } finally {
+    $plain = ''
+    $body = $null
+  }
+  $m = [regex]::Match($setCookie, '(bejo_pos_session=[^;]+)')
+  $header = ''
+  if ($m.Success) { $header = $m.Groups[1].Value }
+  $sameSite = ([regex]::Match($setCookie, '(?i)SameSite=([A-Za-z]+)')).Groups[1].Value
+  return @{
+    Status = $status
+    Code = (Get-ResponseApiCode $content)
+    JsonBody = ([string]$content).TrimStart().StartsWith('{') -or ([string]$content).TrimStart().StartsWith('[')
+    CookieHeader = $header
+    CookieLength = $header.Length
+    HasSecureFlag = [bool]($setCookie -match '(?i);\s*Secure')
+    SameSite = $sameSite
+  }
 }
 
 function Find-LogFiles {
@@ -772,13 +1104,21 @@ try {
   $localMe = Get-Endpoint "$LocalAppUrl/api/auth/me" 10
   if ($localMe.Ok) { Ok ("Route sesi lokal hidup: HTTP $($localMe.Status)") } else { Warn ("Route /api/auth/me lokal: $($localMe.Error)") }
 
-  $localDiag = Get-Endpoint "$LocalAppUrl/api/backend/diagnostics" 15
-  if ($localDiag.Ok) {
+  # /api/backend/diagnostics berada di belakang gerbang sesi dashboard, jadi
+  # tanpa cookie jawabannya selalu 401 dan blok ini dulu diam-diam tidak pernah
+  # terisi. Penilaiannya sekarang lewat helper yang sama dengan seksi K, dan
+  # hasil pembacaan isinya hanya dilaporkan bila rute memang menjawab 200.
+  $diagUrl = ((($LocalAppUrl).TrimEnd('/')) + '/api/backend/diagnostics')
+  $localDiag = Invoke-PrivateProbe -Url $diagUrl
+  if ($localDiag.Status -eq 200) {
     try {
-      $dj = $localDiag.Body | ConvertFrom-Json
+      $dj = [string]$localDiag.Body | ConvertFrom-Json
       Info ("Diagnostics server: status=$($dj.status) | RAM heap $($dj.memoryUsageMb) MB | error aktif $($dj.unresolvedCount)")
       if ([int]$dj.unresolvedCount -gt 0) { Warn "$($dj.unresolvedCount) error backend belum diselesaikan (lihat panel Auto-Fix)." }
-    } catch { }
+    } catch { Warn 'Respons /api/backend/diagnostics bukan JSON yang valid.' }
+  } else {
+    $diagVerdict = Get-PrivateProbeVerdict -Status $localDiag.Status -Code $localDiag.Code -WithCookie $false -JsonBody ([bool]$localDiag.JsonBody)
+    Info ("Isi diagnostics server tidak dibaca tanpa sesi: {0} ({1}) - penilaiannya ada di seksi K." -f $diagVerdict.State, $diagVerdict.Text)
   }
 
   # ------------------------------------------------------------------
@@ -1503,7 +1843,153 @@ console.log(JSON.stringify(out, null, 2));
   }
 
   # ------------------------------------------------------------------
-  Write-Section 'K. RINGKASAN'
+  Write-Section 'K. SESI DASHBOARD & RUTE PRIVATE (PENGUKUR PENYEBAB 401)'
+  # ------------------------------------------------------------------
+  # Gejala yang diukur di sini: panel diagnostik di browser melaporkan
+  # "Server Express Mengembalikan Status 401". Rute yang dibacanya masuk
+  # PRIVATE_API_PREFIXES (server.ts:174-186) dan dijaga getPosSession()
+  # (server/posAuth.ts:189), jadi 401 punya beberapa sebab berbeda dan hanya
+  # sebagian yang bisa dipulihkan dari VPS. Setiap sebab diukur, tidak ada yang
+  # disimpulkan dari badge koneksi.
+  $privateRoutes = @(
+    '/api/backend/diagnostics',
+    '/api/invoices',
+    '/api/marketing/status',
+    '/api/blueprint'
+  )
+
+  if ($envInfo) {
+    $secretSource = Get-SessionSecretSource $envInfo
+    if ([string]::IsNullOrWhiteSpace($secretSource.Key)) {
+      Fail 'Secret sesi dashboard acak per proses: APP_SESSION_SECRET, JOURNAL_SESSION_SECRET, PB_ADMIN_PASSWORD, dan REMOTE_ACCESS_PASS semuanya kosong di .env. Setiap service restart membuat seluruh cookie sesi tidak terbaca lagi, jadi semua rute private menjawab 401 walau aplikasi masih tampak login di perangkat.'
+      Info 'Isi APP_SESSION_SECRET di .env VPS (deploy-vps.ps1 -EnablePublicSite menulisnya otomatis dan tidak mencetak nilainya), restart service, lalu login ulang.'
+    } else {
+      Ok ("Secret sesi dashboard berasal dari {0} (panjang {1} karakter, nilai aslinya disembunyikan), jadi cookie tetap terbaca setelah restart." -f $secretSource.Key, $secretSource.Length)
+      if ($secretSource.Key -ne 'APP_SESSION_SECRET') {
+        Warn ("Secret sesi bergantung pada {0}. Mengganti kredensial itu membuat seluruh sesi lama ditolak server; sediakan APP_SESSION_SECRET sendiri supaya umur sesi tidak menempel pada kredensial lain." -f $secretSource.Key)
+      }
+    }
+  } else {
+    Warn 'Sumber secret sesi tidak disimpulkan: .env tidak terbaca lewat dotenv.'
+  }
+
+  # Bukti dari proses yang berjalan, bukan dari dugaan: server mencetak satu
+  # peringatan saat benar-benar memakai secret acak.
+  $markerHits = @()
+  foreach ($log in @(Find-LogFiles)) {
+    try {
+      $tail = Get-Content -LiteralPath $log -Tail ([Math]::Max($LogLines, 400)) -ErrorAction Stop
+      $markerHits += @($tail | Select-String -SimpleMatch 'APP_SESSION_SECRET belum disetel')
+    } catch { }
+  }
+  if (@($markerHits).Count -gt 0) {
+    Fail ("Log aplikasi memuat {0} baris peringatan secret sesi acak; contoh: {1}" -f @($markerHits).Count, (Redact ([string](@($markerHits)[-1]).Line)))
+  } elseif ($envInfo) {
+    Info 'Peringatan secret sesi acak tidak muncul di ekor log yang dibaca.'
+  }
+
+  $ttlSeconds = 0
+  $posAuthPath = Join-Path $AppDir 'server\posAuth.ts'
+  $posSumberAda = Test-Path -LiteralPath $posAuthPath
+  if ($posSumberAda) {
+    $ttlSeconds = Get-SessionTtlSeconds (Get-Content -LiteralPath $posAuthPath -Raw -ErrorAction SilentlyContinue)
+  }
+  if ($ttlSeconds -gt 0) {
+    Info ("Umur cookie sesi (Max-Age) dibaca dari server/posAuth.ts: {0} jam. Cookie yang terbit lebih lama dari itu wajib ditolak - itu jawaban benar, bukan kerusakan." -f [math]::Round(($ttlSeconds / 3600), 1))
+  } elseif ($posSumberAda) {
+    Info 'Umur cookie sesi tidak disimpulkan: polanya tidak dikenali di server/posAuth.ts yang ada.'
+  } else {
+    Info ("Umur cookie sesi tidak disimpulkan: {0} tidak ada (source deploy belum tersalin?)." -f $posAuthPath)
+  }
+
+  $healthProbe = Invoke-PrivateProbe -Url ((($LocalAppUrl).TrimEnd('/')) + '/api/health')
+  $uptimeSeconds = 0
+  if ($healthProbe.Status -eq 200) {
+    try { $uptimeSeconds = [double](([string]$healthProbe.Body | ConvertFrom-Json).uptimeSeconds) } catch { }
+  }
+  if ($uptimeSeconds -gt 0) {
+    Info ("Proses aplikasi berjalan {0} jam. Cookie yang terbit sebelum jam itu pasti ditolak bila secret-nya acak." -f [math]::Round(($uptimeSeconds / 3600), 1))
+  } else {
+    Info 'Uptime proses tidak terbaca dari /api/health.'
+  }
+
+  $portPids = @()
+  try {
+    $portPids = @(Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction Stop | ForEach-Object { $_.OwningProcess } | Select-Object -Unique)
+  } catch {
+    Info 'Pemilik port 3000 tidak terbaca (Get-NetTCPConnection butuh Administrator); jumlah proses tidak disimpulkan.'
+  }
+  if ($portPids.Count -gt 1) {
+    Warn ("Port 3000 dipegang {0} proses berbeda. Dengan secret acak, cookie yang diterbitkan satu proses ditolak proses lainnya." -f $portPids.Count)
+  } elseif ($portPids.Count -eq 1) {
+    try {
+      $appProc = Get-Process -Id ([int]$portPids[0]) -ErrorAction Stop
+      Info ("Port 3000 dipegang satu proses {0} sejak {1}." -f $appProc.ProcessName, $appProc.StartTime.ToString('yyyy-MM-dd HH:mm:ss'))
+    } catch {
+      Info 'Proses pemilik port 3000 tidak terbaca namanya/waktunya.'
+    }
+  }
+
+  Info 'Probe tanpa cookie: 401 ber-body JSON AUTH_REQUIRED = gerbang bekerja, 404 = rute tidak ada di build yang jalan, 200 ber-body JSON = rute bocor, 200 tanpa JSON = bukan jawaban Express.'
+  $baseUrlLocal = ($LocalAppUrl).TrimEnd('/')
+  foreach ($route in $privateRoutes) {
+    $probe = Invoke-PrivateProbe -Url ($baseUrlLocal + $route)
+    $verdict = Get-PrivateProbeVerdict -Status $probe.Status -Code $probe.Code -WithCookie $false -JsonBody ([bool]$probe.JsonBody)
+    $pesan = ('{0} -> {1}: {2}' -f $route, $verdict.State, $verdict.Text)
+    switch ($verdict.Level) {
+      'ok' { Ok $pesan }
+      'fail' { Fail $pesan }
+      'warn' { Warn $pesan }
+      default { Info $pesan }
+    }
+  }
+
+  $pubProbe = Invoke-PrivateProbe -Url ('https://' + $Domain + '/api/backend/diagnostics')
+  $pubVerdict = Get-PrivateProbeVerdict -Status $pubProbe.Status -Code $pubProbe.Code -WithCookie $false -JsonBody ([bool]$pubProbe.JsonBody)
+  if ($pubVerdict.State -eq 'ditahan-sebelum-express') {
+    Warn ('Rute diagnostik lewat https://{0} berhenti sebelum Express (401 tanpa body JSON aplikasi): yang menjawab lapisan di depan server, bukan gerbang sesi. Cookie browser tidak akan pernah tembus dari alamat itu.' -f $Domain)
+  } else {
+    Info ('Lewat domain publik: {0} ({1})' -f $pubVerdict.State, $pubVerdict.Text)
+  }
+
+  if (-not $ProbeSession) {
+    Info 'Uji login tidak dijalankan. Tambahkan -ProbeSession untuk membuktikan cookie sesi benar-benar diterima rute private (memakan satu jatah percobaan login).'
+  } else {
+    $devUser = (Read-Host 'Username DEVELOPER').Trim()
+    if ([string]::IsNullOrWhiteSpace($devUser)) {
+      Warn 'Probe sesi dilewati: username kosong.'
+    } else {
+      $devPass = Read-Host 'Password DEVELOPER (input tersembunyi, tidak dicetak)' -AsSecureString
+      $login = Invoke-SessionLoginProbe -BaseUrl $baseUrlLocal -Username $devUser -Password $devPass
+      if ($login.Status -eq 200 -and $login.CookieLength -gt 0) {
+        Ok ('Login menerbitkan cookie sesi (panjang {0}, SameSite={1}, Secure={2}); nilainya tidak dicetak.' -f $login.CookieLength, $login.SameSite, $login.HasSecureFlag)
+        foreach ($route in $privateRoutes) {
+          $probe = Invoke-PrivateProbe -Url ($baseUrlLocal + $route) -CookieHeader ([string]$login.CookieHeader)
+          $verdict = Get-PrivateProbeVerdict -Status $probe.Status -Code $probe.Code -WithCookie $true -JsonBody ([bool]$probe.JsonBody)
+          $pesan = ('{0} dengan cookie baru -> {1}: {2}' -f $route, $verdict.State, $verdict.Text)
+          switch ($verdict.Level) {
+            'ok' { Ok $pesan }
+            'fail' { Fail $pesan }
+            'warn' { Warn $pesan }
+            default { Info $pesan }
+          }
+        }
+        if ($login.HasSecureFlag) {
+          Info 'Cookie bertanda Secure: browser hanya mengirimnya lewat HTTPS. Membuka aplikasi lewat http:// alamat LAN membuat semua rute private 401 padahal servernya sehat.'
+        }
+      } elseif ($login.Status -eq 200 -and [bool]$login.JsonBody) {
+        Fail 'Login 200 ber-body JSON tetapi server tidak mengirim cookie bejo_pos_session; selama itu terjadi semua rute private akan 401 untuk browser mana pun.'
+      } elseif ($login.Status -eq 200) {
+        Warn ("Login menjawab 200 tanpa body JSON aplikasi ({0}): port ini dijawab lapisan lain, jadi uji sesi tidak disimpulkan dari percobaan ini." -f $baseUrlLocal)
+      } else {
+        $verdict = Get-PrivateProbeVerdict -Status $login.Status -Code $login.Code -WithCookie $false -JsonBody ([bool]$login.JsonBody)
+        Warn ('Probe sesi tidak selesai: login menjawab {0} ({1})' -f $verdict.State, $verdict.Text)
+      }
+    }
+  }
+
+  # ------------------------------------------------------------------
+  Write-Section 'L. RINGKASAN'
   # ------------------------------------------------------------------
   $duration = [math]::Round(((Get-Date) - $startedAt).TotalSeconds, 1)
   Write-Host ("  OK: {0} | WARN: {1} | FAIL: {2} | durasi {3}s" -f $script:OkCount, $script:WarnCount, $script:FailCount, $duration) -ForegroundColor White

@@ -54,8 +54,12 @@
     -SkipProvisioning            Lewati seksi I dan J (provisioning/Caddy/bundel)
     -RequireClean                Exit code 2 bila masih ada WARN (untuk CI/cron)
     -ProbeSession                Seksi K ditambah uji login DEVELOPER (input
-                                 tersembunyi, nilai tidak pernah dicetak) untuk
-                                 membuktikan cookie sesi diterima rute private.
+                                 tersembunyi, nilai tidak pernah dicetak). Cookie
+                                 dibawa dengan WebRequestSession - satu-satunya
+                                 cara yang terbukti dikirim PowerShell 5.1 - lalu
+                                 dibuktikan di /api/auth/me (gema sesi) dan di
+                                 setiap rute private, lengkap dengan jumlah cookie
+                                 yang benar-benar ikut terkirim.
                                  Memakan 1 jatah percobaan login di server.
     -SelfTest                    Uji logika penilaian port, aksi pemulihan
                                  service, dan gerbang sesi private dengan contoh
@@ -332,26 +336,18 @@ function Test-FwUnrestrictedValue([string]$value) {
 # paparan), 'terikat' (dibatok program/paket/service, bukan pembuka port umum),
 # atau 'tak terbaca' (ikatan tidak bisa dibaca - tidak boleh disimpulkan apa pun).
 #
-# SEMUA kolom ikatan diperiksa. Aturan bawaan Windows seperti
-# 'Remote Desktop - Shadow (TCP-In)' dan 'Desktop App Web Viewer' menyimpan
-# programnya di kolom 'Application' berupa path (svchost.exe), sementara
-# 'ApplicationName' kosong. Membaca 'ApplicationName' saja membuat aturan itu
-# disangka pembuka port umum dan menghasilkan FAIL palsu "Port 3000 dibuka ke
+# SEMUA kolom ikatan diperiksa, lewat pemindaian nama properti, bukan daftar
+# kolom yang ditebak. Aturan bawaan Windows menyimpan ikatannya di kolom yang
+# berbeda-beda: 'Remote Desktop - Shadow (TCP-In)' menulis svchost.exe di
+# 'Application' sementara 'ApplicationName' kosong, dan aturan UWP seperti
+# 'Desktop App Web Viewer' hanya mengisi 'Package'/'PackageSid'. Membaca sebagian
+# kolom saja sudah tiga kali menghasilkan FAIL palsu "Port 3000/8090 dibuka ke
 # internet" di VPS, padahal portnya tidak bisa tersambung dari luar.
 function Get-FwScopeVerdict($binding) {
   if (-not $binding -or -not [bool]$binding.Readable) {
     return [pscustomobject]@{ State = 'tak terbaca'; Detail = 'ikatan program/paket/service tidak terbaca' }
   }
-  $parts = @()
-  $fields = @(
-    @{ label = 'program'; value = [string]$binding.App },
-    @{ label = 'namaProgram'; value = [string]$binding.AppName },
-    @{ label = 'paket'; value = [string]$binding.Pkg },
-    @{ label = 'service'; value = [string]$binding.Svc }
-  )
-  foreach ($pair in $fields) {
-    if (-not (Test-FwUnrestrictedValue $pair.value)) { $parts += ("{0}={1}" -f $pair.label, $pair.value) }
-  }
+  $parts = @($binding.Parts | Where-Object { $_ })
   if ($parts.Count -gt 0) {
     return [pscustomobject]@{ State = 'terikat'; Detail = ($parts -join ', ') }
   }
@@ -362,15 +358,30 @@ function Test-FwCouldExposePort($map, [int]$port) {
   return (Test-FwTcpProtocol ([string]$map.Protocol)) -and (Test-FwPortMatch ([string]$map.Ports) $port) -and (Test-FwInternetRemote ([string]$map.Remote)) -and (Test-FwPublicProfile ([string]$map.Profile))
 }
 
-function Join-FwFilterValues($items, [string]$property) {
-  $values = @()
+# Kolom yang boleh membatasi sebuah aturan. Nama kolom dibaca dari objek filter
+# aslinya, BUKAN ditebak satu per satu: aturan bawaan Windows menyimpan ikatannya
+# di kolom berbeda-beda (Shadow di 'Application' berupa path svchost.exe dengan
+# 'ApplicationName' kosong; aturan UWP seperti 'Desktop App Web Viewer' di
+# 'Package'/'PackageSid'; aturan service di 'Service'). Membaca hanya sebagian
+# nama kolom sudah tiga kali menghasilkan FAIL palsu "Port 3000/8090 dibuka ke
+# internet", jadi setiap kolom yang namanya mengandung ikatan ikut dipindai dan
+# nama kolomnya ikut dicetak supaya laporan bisa dibaca ulang.
+$FW_BINDING_PROPERTY_PATTERN = '^(Application|ApplicationName|ApplicationSecurity|Package|PackageId|PackageName|PackageSid|Service|User)$'
+
+function Get-FwBindingParts($items) {
+  $parts = @()
   foreach ($item in @($items)) {
-    $prop = $item.PSObject.Properties[$property]
-    if (-not $prop) { continue }
-    $textValue = [string]$prop.Value
-    if ($textValue -ne '') { $values += $textValue }
+    if (-not $item) { continue }
+    foreach ($prop in @($item.PSObject.Properties)) {
+      $nama = [string]$prop.Name
+      if ($nama -notmatch $FW_BINDING_PROPERTY_PATTERN) { continue }
+      $textValue = [string]$prop.Value
+      if ([string]::IsNullOrWhiteSpace($textValue)) { continue }
+      if (Test-FwUnrestrictedValue $textValue) { continue }
+      $parts += ("{0}={1}" -f $nama, $textValue)
+    }
   }
-  return ($values -join ',')
+  return @($parts | Select-Object -Unique)
 }
 
 # Baca SEMUA kolom ikatan satu aturan. ErrorRecord dikumpulkan lewat
@@ -382,12 +393,10 @@ function Read-FwRuleBinding($rule) {
   $svcErr = $null
   $appFilter = @(Get-NetFirewallApplicationFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue -ErrorVariable appErr 2>$null)
   $svcFilter = @(Get-NetFirewallServiceFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue -ErrorVariable svcErr 2>$null)
+  $parts = @(Get-FwBindingParts $appFilter) + @(Get-FwBindingParts $svcFilter)
   return @{
     Readable = ($appFilter.Count -gt 0 -and -not $appErr -and -not $svcErr)
-    App      = Join-FwFilterValues $appFilter 'Application'
-    AppName  = Join-FwFilterValues $appFilter 'ApplicationName'
-    Pkg      = Join-FwFilterValues $appFilter 'PackageId'
-    Svc      = Join-FwFilterValues $svcFilter 'Service'
+    Parts = @($parts | Where-Object { $_ })
   }
 }
 
@@ -431,13 +440,14 @@ function Invoke-FirewallSelfTest {
     else { Write-Host "  FAIL $($c.n) (dapat=$got harus=$($c.expect))" -ForegroundColor Red; $failed++ }
   }
   $scopeCases = @(
-    @{ n = 'path Application terisi = terikat (kasus aturan bawaan VPS)'; b = @{ Readable = $true; App = 'C:\Windows\System32\svchost.exe'; AppName = ''; Pkg = ''; Svc = 'Any' }; expect = 'terikat' },
-    @{ n = 'hanya PackageId terisi = terikat'; b = @{ Readable = $true; App = 'Any'; AppName = ''; Pkg = 'Microsoft.Windows.Cortana_cw5n1h2txyewy'; Svc = 'Any' }; expect = 'terikat' },
-    @{ n = 'hanya Service terisi = terikat'; b = @{ Readable = $true; App = 'Any'; AppName = ''; Pkg = ''; Svc = 'AllJoynRouterService' }; expect = 'terikat' },
-    @{ n = 'nama program saja terisi = terikat'; b = @{ Readable = $true; App = 'Any'; AppName = 'Desktop App Web Viewer'; Pkg = ''; Svc = 'Any' }; expect = 'terikat' },
-    @{ n = 'semua kolom Any = pembuka port umum'; b = @{ Readable = $true; App = 'Any'; AppName = 'Any'; Pkg = 'Any'; Svc = 'Any' }; expect = 'umum' },
-    @{ n = 'semua kolom kosong = pembuka port umum'; b = @{ Readable = $true; App = ''; AppName = ''; Pkg = ''; Svc = '' }; expect = 'umum' },
-    @{ n = 'ikatan tidak terbaca = jangan menyimpulkan'; b = @{ Readable = $false }; expect = 'tak terbaca' },
+    @{ n = 'path Application terisi = terikat (kasus aturan bawaan VPS)'; b = @{ Readable = $true; Parts = @('Application=C:\Windows\System32\svchost.exe') }; expect = 'terikat' },
+    @{ n = 'hanya PackageId terisi = terikat'; b = @{ Readable = $true; Parts = @('PackageId=Microsoft.Windows.Cortana_cw5n1h2txyewy') }; expect = 'terikat' },
+    @{ n = 'hanya Package/PackageSid terisi = terikat (bentuk aturan UWP)'; b = @{ Readable = $true; Parts = @('Package=MicrosoftWindows.Client.CBS_cw5n1h2txyewy', 'PackageSid=S-1-15-2-3235854242-2820777765') }; expect = 'terikat' },
+    @{ n = 'hanya Service terisi = terikat'; b = @{ Readable = $true; Parts = @('Service=AllJoynRouterService') }; expect = 'terikat' },
+    @{ n = 'nama program saja terisi = terikat'; b = @{ Readable = $true; Parts = @('ApplicationName=Desktop App Web Viewer') }; expect = 'terikat' },
+    @{ n = 'semua kolom Any = pembuka port umum'; b = @{ Readable = $true; Parts = @() }; expect = 'umum' },
+    @{ n = 'semua kolom kosong = pembuka port umum'; b = @{ Readable = $true; Parts = @() }; expect = 'umum' },
+    @{ n = 'ikatan tidak terbaca = jangan menyimpulkan'; b = @{ Readable = $false; Parts = @() }; expect = 'tak terbaca' },
     @{ n = 'aturan tanpa objek ikatan = jangan menyimpulkan'; b = $null; expect = 'tak terbaca' }
   )
   foreach ($c in $scopeCases) {
@@ -455,6 +465,7 @@ function Invoke-FirewallSelfTest {
   $appByRule = @{
     'hanya-path' = @([pscustomobject]@{ Application = 'C:\Windows\System32\svchost.exe'; ApplicationName = ''; PackageId = '' })
     'paket-saja' = @([pscustomobject]@{ Application = 'Any'; ApplicationName = ''; PackageId = 'Microsoft.Windows.Cortana_cw5n1h2txyewy' })
+    'paket-uwp' = @([pscustomobject]@{ Application = 'Any'; ApplicationName = 'Any'; Package = 'MicrosoftWindows.Client.CBS_cw5n1h2txyewy'; PackageSid = 'S-1-15-2-3235854242-2820777765'; User = 'Any' })
     'bebas' = @([pscustomobject]@{ Application = 'Any'; ApplicationName = 'Any'; PackageId = 'Any' })
     'kosong' = @()
     'galat' = @()
@@ -462,6 +473,7 @@ function Invoke-FirewallSelfTest {
   $svcByRule = @{
     'hanya-path' = @([pscustomobject]@{ Service = 'Any' })
     'paket-saja' = @([pscustomobject]@{ Service = 'Any' })
+    'paket-uwp' = @()
     'bebas' = @([pscustomobject]@{ Service = 'Any' })
     'kosong' = @()
     'galat' = @([pscustomobject]@{ Service = 'TermService' })
@@ -482,6 +494,7 @@ function Invoke-FirewallSelfTest {
   $bucketCases = @(
     @{ n = 'Shadow (hanya path Application) masuk Terikat, bukan paparan'; kunci = 'hanya-path'; harus = 'Terikat'; mengandung = 'svchost.exe' },
     @{ n = 'paket UWP masuk Terikat'; kunci = 'paket-saja'; harus = 'Terikat'; mengandung = 'Cortana' },
+    @{ n = 'ikatan hanya di Package/PackageSid (bentuk Desktop App Web Viewer) masuk Terikat'; kunci = 'paket-uwp'; harus = 'Terikat'; mengandung = 'PackageSid' },
     @{ n = 'aturan bebas masuk Umum (boleh disebut paparan)'; kunci = 'bebas'; harus = 'Umum'; mengandung = '' },
     @{ n = 'ikatan tidak ada objek masuk TakTerbaca'; kunci = 'kosong'; harus = 'TakTerbaca'; mengandung = '' },
     @{ n = 'cmdlet gagal masuk TakTerbaca'; kunci = 'galat'; harus = 'TakTerbaca'; mengandung = '' }
@@ -543,23 +556,45 @@ function Invoke-FirewallSelfTest {
   # yang bekerja, rute yang hilang, rute yang bocor, dan lapisan di depan
   # Express. Tanpa ini, 401 di panel diagnostik selalu dibaca "server rusak".
   $probeCases = @(
-    @{ n = '401 AUTH_REQUIRED tanpa cookie = gerbang benar'; s = 401; c = 'AUTH_REQUIRED'; w = $false; j = $true; harus = 'gerbang-sesi-benar' },
-    @{ n = '401 AUTH_REQUIRED dengan cookie baru = cookie ditolak'; s = 401; c = 'AUTH_REQUIRED'; w = $true; j = $true; harus = 'cookie-ditolak' },
-    @{ n = '401 tanpa body JSON = ditahan sebelum Express'; s = 401; c = ''; w = $false; j = $false; harus = 'ditahan-sebelum-express' },
-    @{ n = '404 = rute tidak ada di build yang jalan'; s = 404; c = ''; w = $false; j = $false; harus = 'rute-tidak-ada' },
-    @{ n = '200 ber-body JSON tanpa cookie = rute bocor'; s = 200; c = ''; w = $false; j = $true; harus = 'rute-terbuka-tanpa-sesi' },
-    @{ n = '200 tanpa body JSON = bukan jawaban Express, rute tidak dinilai'; s = 200; c = ''; w = $false; j = $false; harus = 'bukan-jawaban-api' },
-    @{ n = '200 dengan cookie = rantai sesi utuh'; s = 200; c = ''; w = $true; j = $true; harus = 'rute-terbuka-dengan-sesi' },
-    @{ n = '403 FORBIDDEN dengan cookie = sesi terbaca'; s = 403; c = 'FORBIDDEN'; w = $true; j = $true; harus = 'sesi-terbaca' },
-    @{ n = '403 INVALID_ORIGIN dinilai terpisah'; s = 403; c = 'INVALID_ORIGIN'; w = $true; j = $true; harus = 'origin-ditolak' },
-    @{ n = '429 = kuota login habis, rute tidak dinilai'; s = 429; c = 'RATE_LIMITED'; w = $true; j = $true; harus = 'kuota-login-habis' },
-    @{ n = '500 = galat aplikasi, bukan gerbang sesi'; s = 500; c = ''; w = $false; j = $true; harus = 'server-galat' },
-    @{ n = 'tanpa jawaban jangan disebut 401'; s = 0; c = ''; w = $false; j = $false; harus = 'tidak-merespons' }
+    @{ n = '401 AUTH_REQUIRED tanpa cookie = gerbang benar'; s = 401; c = 'AUTH_REQUIRED'; w = $false; j = $true; ks = -1; harus = 'gerbang-sesi-benar' },
+    @{ n = '401 AUTH_REQUIRED dengan cookie yang terbukti terkirim = cookie ditolak'; s = 401; c = 'AUTH_REQUIRED'; w = $true; j = $true; ks = 1; harus = 'cookie-ditolak' },
+    @{ n = '401 dengan sesi tetapi 0 cookie terkirim = jangan disebut cookie ditolak'; s = 401; c = 'AUTH_REQUIRED'; w = $true; j = $true; ks = 0; harus = 'cookie-tidak-terkirim' },
+    @{ n = '200 dengan sesi tetapi 0 cookie terkirim = jangan disebut terbuka dengan sesi'; s = 200; c = ''; w = $true; j = $true; ks = 0; harus = 'cookie-tidak-terkirim' },
+    @{ n = 'CookieSent tidak diukur (-1) juga jangan disebut cookie ditolak'; s = 401; c = 'AUTH_REQUIRED'; w = $true; j = $true; ks = -1; harus = 'cookie-tidak-terkirim' },
+    @{ n = '401 tanpa body JSON = ditahan sebelum Express'; s = 401; c = ''; w = $false; j = $false; ks = -1; harus = 'ditahan-sebelum-express' },
+    @{ n = '404 = rute tidak ada di build yang jalan'; s = 404; c = ''; w = $false; j = $false; ks = -1; harus = 'rute-tidak-ada' },
+    @{ n = '200 ber-body JSON tanpa cookie = rute bocor'; s = 200; c = ''; w = $false; j = $true; ks = -1; harus = 'rute-terbuka-tanpa-sesi' },
+    @{ n = '200 tanpa body JSON = bukan jawaban Express, rute tidak dinilai'; s = 200; c = ''; w = $false; j = $false; ks = -1; harus = 'bukan-jawaban-api' },
+    @{ n = '200 dengan cookie terkirim = rantai sesi utuh'; s = 200; c = ''; w = $true; j = $true; ks = 1; harus = 'rute-terbuka-dengan-sesi' },
+    @{ n = '403 FORBIDDEN dengan cookie = sesi terbaca'; s = 403; c = 'FORBIDDEN'; w = $true; j = $true; ks = 1; harus = 'sesi-terbaca' },
+    @{ n = '403 INVALID_ORIGIN dinilai terpisah'; s = 403; c = 'INVALID_ORIGIN'; w = $true; j = $true; ks = 1; harus = 'origin-ditolak' },
+    @{ n = '429 = kuota login habis, rute tidak dinilai'; s = 429; c = 'RATE_LIMITED'; w = $true; j = $true; ks = 1; harus = 'kuota-login-habis' },
+    @{ n = '500 = galat aplikasi, bukan gerbang sesi'; s = 500; c = ''; w = $false; j = $true; ks = -1; harus = 'server-galat' },
+    @{ n = 'tanpa jawaban jangan disebut 401'; s = 0; c = ''; w = $false; j = $false; ks = -1; harus = 'tidak-merespons' }
   )
   foreach ($c in $probeCases) {
-    $got = (Get-PrivateProbeVerdict -Status $c.s -Code $c.c -WithCookie $c.w -JsonBody $c.j).State
+    $got = (Get-PrivateProbeVerdict -Status $c.s -Code $c.c -WithCookie $c.w -JsonBody $c.j -CookieSent ([int]$c.ks)).State
     if ([string]$got -eq [string]$c.harus) { Write-Host "  OK   $($c.n)" -ForegroundColor Green }
     else { Write-Host "  FAIL $($c.n) (dapat='$got' harus='$($c.harus)')" -ForegroundColor Red; $failed++ }
+  }
+  # Penjaga TRANSPORT cookie. Kegagalannya tidak terlihat dari angka status:
+  # header Cookie manual membuat probe anonim, dan 401 yang benar dari permintaan
+  # anonim lalu dibaca sebagai "cookie ditolak server" (FAIL palsu di VPS
+  # 2026-11-04). Karena itu cara kirim cookie ikut diperiksa dari sumber skrip,
+  # sama seperti TTL diperiksa dari server/posAuth.ts.
+  $sumberSkrip = ''
+  try { $sumberSkrip = [string](Get-Content -LiteralPath $PSCommandPath -Raw -ErrorAction Stop) } catch { $sumberSkrip = '' }
+  $transportCases = @(
+    @{ n = 'probe rute private memakai -WebSession dari hasil login'; pola = 'Invoke-PrivateProbe -Url \(\$baseUrlLocal \+ \$route\) -WebSession \$login\.Session'; harus = $true },
+    @{ n = 'probe cookie tidak lagi dikirim sebagai header Cookie manual'; pola = '-CookieHeader \(\[string\]\$login\.CookieHeader\)'; harus = $false },
+    @{ n = 'Invoke-PrivateProbe tidak lagi menerima parameter CookieHeader sama sekali'; pola = 'param\(\[string\]\$Url, \[string\]\$CookieHeader'; harus = $false },
+    @{ n = 'penilai menolak menyimpulkan cookie tanpa bukti terkirim'; pola = 'if \(\$WithCookie -and -not \(\$CookieSent -gt 0\)\)'; harus = $true },
+    @{ n = 'login memakai WebRequestSession, bukan string cookie hasil regex'; pola = 'New-Object Microsoft\.PowerShell\.Commands\.WebRequestSession'; harus = $true }
+  )
+  foreach ($c in $transportCases) {
+    $ada = ($sumberSkrip -match $c.pola)
+    if ($ada -eq $c.harus) { Write-Host "  OK   $($c.n)" -ForegroundColor Green }
+    else { Write-Host "  FAIL $($c.n) (ada=$ada harus=$($c.harus))" -ForegroundColor Red; $failed++ }
   }
   # Kode dibaca dari body JSON, dan body non-JSON (halaman Caddy) tidak boleh
   # menghasilkan kode palsu.
@@ -612,7 +647,7 @@ function Invoke-FirewallSelfTest {
   Remove-Item Function:Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue
   Remove-Item Function:Get-NetFirewallServiceFilter -ErrorAction SilentlyContinue
   if ($failed -gt 0) { Write-Host "  SELFTEST GAGAL: $failed kasus salah." -ForegroundColor Red; return 1 }
-  Write-Host '  Semua kasus penilaian port firewall, aksi pemulihan service, gerbang sesi private, dan pembacaan body respons error lulus.' -ForegroundColor Green
+  Write-Host '  Semua kasus penilaian port firewall, aksi pemulihan service, gerbang sesi private, transportasi cookie, dan pembacaan body respons error lulus.' -ForegroundColor Green
   return 0
 }
 
@@ -715,8 +750,10 @@ function Get-SessionSecretSource($EnvInfo) {
 # tidak ada di build yang berjalan; 200 BERBODY JSON tanpa cookie = rute bocor;
 # 200 tanpa body JSON = yang menjawab bukan Express (halaman SPA dev server
 # atau proxy di depan), jadi rute tidak boleh dinyatakan terbuka maupun bocor.
+# CookieSent = jumlah cookie yang benar-benar ikut terkirim; 0 artinya probe itu
+# sebenarnya anonim dan jawabannya TIDAK boleh dibaca sebagai "cookie ditolak".
 function Get-PrivateProbeVerdict {
-  param([int]$Status, [string]$Code, [bool]$WithCookie, [bool]$JsonBody = $false)
+  param([int]$Status, [string]$Code, [bool]$WithCookie, [bool]$JsonBody = $false, [int]$CookieSent = -1)
   $kode = ([string]$Code).Trim().ToUpper()
   if ($Status -eq 0) {
     return @{ Level = 'fail'; State = 'tidak-merespons'; Text = 'tidak ada jawaban dari server (service mati atau URL salah)' }
@@ -730,10 +767,17 @@ function Get-PrivateProbeVerdict {
   if ($Status -eq 404) {
     return @{ Level = 'fail'; State = 'rute-tidak-ada'; Text = 'HTTP 404: rute tidak ada di build yang berjalan (deploy belum selesai?)' }
   }
+  # Cookie tidak terbukti berangkat (0 cookie, atau tidak diukur sama sekali) =
+  # probe ini sebenarnya anonim. Menilai jawabannya sebagai "cookie ditolak"
+  # adalah temuan palsu, dan sebagai "rute terbuka dengan sesi" juga salah. Yang
+  # boleh dikatakan hanya: pengukuran tidak sampai ke server.
+  if ($WithCookie -and -not ($CookieSent -gt 0)) {
+    return @{ Level = 'warn'; State = 'cookie-tidak-terkirim'; Text = "HTTP $Status tanpa bukti cookie ikut terkirim (CookieSent=$CookieSent): probe berjalan sebagai permintaan anonim, jadi jawaban server bukan bukti cookie diterima atau ditolak" }
+  }
   if ($Status -eq 401) {
     if ($kode -eq 'AUTH_REQUIRED') {
       if ($WithCookie) {
-        return @{ Level = 'fail'; State = 'cookie-ditolak'; Text = '401 AUTH_REQUIRED padahal cookie baru saja diterbitkan server: yang menjawab berbeda dari yang menerbitkan (secret sesi berubah / lebih dari satu proses Node)' }
+        return @{ Level = 'fail'; State = 'cookie-ditolak'; Text = '401 AUTH_REQUIRED padahal cookie terbukti ikut terkirim dari sesi login: server menolak cookie yang baru saja diterbitkannya sendiri (secret sesi berubah di tengah jalan / lebih dari satu proses Node / cookie terbit sebelum proses ini mulai)' }
       }
       return @{ Level = 'info'; State = 'gerbang-sesi-benar'; Text = '401 AUTH_REQUIRED dari aplikasi: rute hidup, gerbang sesi bekerja' }
     }
@@ -797,16 +841,31 @@ function Get-ResponseApiCode([string]$body) {
   return ''
 }
 
-# Probe satu rute private. Cookie hanya dipakai sebagai header, tidak pernah
-# dicetak; yang dikembalikan panjangnya saja.
+# Probe satu rute private. Cookie hanya dipakai sebagai sesi, tidak pernah
+# dicetak; yang dikembalikan jumlah cookie yang benar-benar ikut terkirim.
+#
+# Header Cookie manual lewat -Headers @{Cookie=...} TIDAK BOLEH dipakai untuk
+# membuktikan cookie diterima: PowerShell 5.1 membuangnya sebelum permintaan
+# dikirim. Ini terukur (bukan dugaan) dengan server echo di workstation ini -
+# permintaan dengan -Headers menghasilkan cookieReceived=null, sedangkan
+# -WebSession menghasilkan cookieReceived='bejo_pos_session=...'. Tanpa bukti itu,
+# -ProbeSession mengira "cookie ditolak server" padahal yang dijawab aplikasi
+# adalah permintaan TANPA cookie - FAIL palsu, gejala yang sama dengan 401 tanpa
+# body yang dulu dibaca sebagai "ditahan sebelum Express".
 function Invoke-PrivateProbe {
-  param([string]$Url, [string]$CookieHeader = '')
-  $headers = @{}
-  if ($CookieHeader) { $headers['Cookie'] = $CookieHeader }
+  param([string]$Url, [object]$WebSession = $null)
+  # Tidak ada jalur header Cookie manual di fungsi ini: satu-satunya cara
+  # mengirim cookie yang terbukti bekerja di PowerShell 5.1 adalah WebSession.
+  $cookieSent = 0
+  if ($WebSession) {
+    try { $cookieSent = @($WebSession.Cookies.GetCookies([Uri]$Url)).Count } catch { $cookieSent = 0 }
+  }
   $status = 0
   $body = ''
   try {
-    $resp = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 20 -Headers $headers
+    $call = @{ Uri = $Url; UseBasicParsing = $true; TimeoutSec = 20 }
+    if ($WebSession) { $call['WebSession'] = $WebSession }
+    $resp = Invoke-WebRequest @call
     $status = [int]$resp.StatusCode
     $body = [string]$resp.Content
   } catch {
@@ -831,7 +890,9 @@ function Invoke-PrivateProbe {
     # depan port ini (dev server atau proxy), dan itu tidak boleh dibaca sebagai
     # rute terbuka maupun sebagai gerbang sesi.
     JsonBody = ($body.TrimStart().StartsWith('{') -or $body.TrimStart().StartsWith('['))
-    CookieLength = ([string]$CookieHeader).Length
+    # Jumlah cookie yang benar-benar ikut terkirim: 0 = permintaan anonim (tanpa
+    # sesi, atau sesi yang ternyata tidak mengirim apa pun), >0 = cookie terkirim.
+    CookieSent = $cookieSent
   }
 }
 
@@ -847,12 +908,15 @@ function Invoke-SessionLoginProbe {
   $status = 0
   $setCookie = ''
   $content = ''
+  # Sesi dipakai bersama oleh login dan probe berikutnya, persis seperti browser.
+  # Cara ini dipilih karena header Cookie manual terbukti dibuang PowerShell 5.1.
+  $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
   try {
     $plain = [System.Net.NetworkCredential]::new('', $Password).Password
     $body = (@{ username = $Username; password = $plain } | ConvertTo-Json -Compress)
     try {
       $resp = Invoke-WebRequest -Uri "$BaseUrl/api/auth/login" -Method Post -Body $body `
-        -ContentType 'application/json' -UseBasicParsing -TimeoutSec 20
+        -ContentType 'application/json' -UseBasicParsing -TimeoutSec 20 -WebSession $session
       $status = [int]$resp.StatusCode
       try { $setCookie = [string]$resp.Headers['Set-Cookie'] } catch { $setCookie = '' }
       $content = [string]$resp.Content
@@ -879,12 +943,18 @@ function Invoke-SessionLoginProbe {
   $header = ''
   if ($m.Success) { $header = $m.Groups[1].Value }
   $sameSite = ([regex]::Match($setCookie, '(?i)SameSite=([A-Za-z]+)')).Groups[1].Value
+  $cookieCount = 0
+  try { $cookieCount = @($session.Cookies.GetCookies([Uri]$BaseUrl)).Count } catch { $cookieCount = 0 }
   return @{
     Status = $status
     Code = (Get-ResponseApiCode $content)
     JsonBody = ([string]$content).TrimStart().StartsWith('{') -or ([string]$content).TrimStart().StartsWith('[')
+    Session = $session
     CookieHeader = $header
     CookieLength = $header.Length
+    # Jumlah cookie yang tersimpan di sesi untuk host ini = bukti bahwa probe
+    # berikutnya benar-benar mengirim cookie, bukan permintaan anonim.
+    CookieCount = $cookieCount
     HasSecureFlag = [bool]($setCookie -match '(?i);\s*Secure')
     SameSite = $sameSite
   }
@@ -1931,6 +2001,7 @@ console.log(JSON.stringify(out, null, 2));
   }
 
   Info 'Probe tanpa cookie: 401 ber-body JSON AUTH_REQUIRED = gerbang bekerja, 404 = rute tidak ada di build yang jalan, 200 ber-body JSON = rute bocor, 200 tanpa JSON = bukan jawaban Express.'
+  Info 'Kesimpulan tentang cookie HANYA dikeluarkan dari probe yang mengirim sesi (WebSession) dan mencatat jumlah cookie yang ikut terkirim; PowerShell 5.1 membuang header Cookie manual.'
   $baseUrlLocal = ($LocalAppUrl).TrimEnd('/')
   foreach ($route in $privateRoutes) {
     $probe = Invoke-PrivateProbe -Url ($baseUrlLocal + $route)
@@ -1963,9 +2034,27 @@ console.log(JSON.stringify(out, null, 2));
       $login = Invoke-SessionLoginProbe -BaseUrl $baseUrlLocal -Username $devUser -Password $devPass
       if ($login.Status -eq 200 -and $login.CookieLength -gt 0) {
         Ok ('Login menerbitkan cookie sesi (panjang {0}, SameSite={1}, Secure={2}); nilainya tidak dicetak.' -f $login.CookieLength, $login.SameSite, $login.HasSecureFlag)
+        Info ('Cookie tersimpan di sesi probe: {0} buah untuk {1} - dikirim lewat WebSession, karena PowerShell 5.1 membuang header Cookie manual.' -f $login.CookieCount, $baseUrlLocal)
+
+        # Gema sesi: /api/auth/me TIDAK masuk gerbang private (server.ts:174-186)
+        # tetapi menilai cookie yang sama dengan getPosSession() yang sama
+        # (server/posAuth.ts:437-448). Jadi jawaban route inilah yang membuktikan
+        # cookie benar-benar sampai ke Express, terpisah dari sikap rute private.
+        $echoUrl = ($baseUrlLocal + '/api/auth/me')
+        $echo = Invoke-PrivateProbe -Url $echoUrl -WebSession $login.Session
+        $echoAuthenticated = $false
+        if ($echo.Status -eq 200 -and [bool]$echo.JsonBody) {
+          try { $echoAuthenticated = [bool](([string]$echo.Body | ConvertFrom-Json).authenticated) } catch { $echoAuthenticated = $false }
+        }
+        if ($echoAuthenticated) {
+          Ok ("Gema sesi {0} -> authenticated=true dengan {1} cookie terkirim: Express menerima cookie yang diterbitkannya." -f '/api/auth/me', $echo.CookieSent)
+        } else {
+          Warn ("Gema sesi {0} -> authenticated={1} (status {2}, cookie terkirim {3}): Express TIDAK mengenali cookie yang baru diterbitkannya." -f '/api/auth/me', $echoAuthenticated, $echo.Status, $echo.CookieSent)
+        }
+
         foreach ($route in $privateRoutes) {
-          $probe = Invoke-PrivateProbe -Url ($baseUrlLocal + $route) -CookieHeader ([string]$login.CookieHeader)
-          $verdict = Get-PrivateProbeVerdict -Status $probe.Status -Code $probe.Code -WithCookie $true -JsonBody ([bool]$probe.JsonBody)
+          $probe = Invoke-PrivateProbe -Url ($baseUrlLocal + $route) -WebSession $login.Session
+          $verdict = Get-PrivateProbeVerdict -Status $probe.Status -Code $probe.Code -WithCookie $true -JsonBody ([bool]$probe.JsonBody) -CookieSent ([int]$probe.CookieSent)
           $pesan = ('{0} dengan cookie baru -> {1}: {2}' -f $route, $verdict.State, $verdict.Text)
           switch ($verdict.Level) {
             'ok' { Ok $pesan }
@@ -1973,6 +2062,9 @@ console.log(JSON.stringify(out, null, 2));
             'warn' { Warn $pesan }
             default { Info $pesan }
           }
+        }
+        if ($echoAuthenticated -and $login.CookieCount -gt 0) {
+          Info 'Bila cookie diterima server tetapi panel diagnostik browser tetap 401, yang diperiksa adalah cookie di browser itu: umur 12 jam tanpa perpanjangan diam-diam, tanda Secure bila toko membuka lewat http://, dan alamat yang dipakai (IP LAN vs domain).'
         }
         if ($login.HasSecureFlag) {
           Info 'Cookie bertanda Secure: browser hanya mengirimnya lewat HTTPS. Membuka aplikasi lewat http:// alamat LAN membuat semua rute private 401 padahal servernya sehat.'

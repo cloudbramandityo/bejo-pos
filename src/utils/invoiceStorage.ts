@@ -749,17 +749,141 @@ function generateSampleInvoices(): Invoice[] {
   return [sampleProformaTermin, sampleTermin1Invoice, sampleInvoice146, sampleProformaDp];
 }
 
+const STAGE_BADGE_LUNAS = 'text-emerald-700 bg-emerald-100 font-bold';
+const STAGE_BADGE_TAGIHAN_INI = 'text-indigo-700 bg-indigo-100 font-bold ring-1 ring-indigo-300';
+const STAGE_BADGE_BELUM = 'text-slate-500 bg-slate-100 font-medium';
+
+function asStageAmount(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** Baris jadwal yang memang sudah dicatat lunas (fakta yang tersimpan di data). */
+function isStageMarkedPaid(sched?: InvoiceTerminSchedule): boolean {
+  if (!sched) return false;
+  return sched.isPaid === true || String(sched.status ?? '').trim().toUpperCase() === 'LUNAS';
+}
+
+/** Dokumen sudah tertutup seluruh tagihannya (status lunas atau sisa nol). */
+function isDocumentSettled(inv: Invoice): boolean {
+  if (inv.status === 'PAID') return true;
+  return typeof inv.balanceDue === 'number' && inv.balanceDue <= 0 && asStageAmount(inv.grandTotal) > 0;
+}
+
 /**
- * Mendapatkan status tampilan jadwal termin / DP (Tagihan Ini, Lunas, Belum)
- * Sesuai skema perubahan status pada Invoice & Proforma Invoice UI & PDF:
- * - Proforma Invoice:
- *   - Termin yang sudah diterbitkan & belum bayar: "Tagihan Ini"
- *   - Termin yang sudah menerima pelunasan / termin berikutnya sudah diterbitkan: "Lunas"
- *   - Termin yang belum diterbitkan: "Belum"
- * - Invoice Final (INV):
- *   - Termin tahap ini: "Tagihan Ini" (atau "Lunas" jika invoice sudah dibayar/PAID)
- *   - Termin sebelum tahap ini: "Lunas"
- *   - Termin sesudah tahap ini: "Belum"
+ * Tahap ke-berapa yang ditagih dokumen ini, dibaca dari field tahap yang
+ * ditulis saat konversi; bila tidak ada, dari nomor dokumen itu sendiri
+ * (penanda /T1.. atau /DP, /PELUNASAN). Tidak ada angka tahap yang ditulis
+ * tetap untuk keterangan bebas: menafsirkan kata "pelunasan" sebagai tahap ke-2
+ * adalah sebab invoice pelunasan penuh menyatakan Termin 3 "Belum" padahal
+ * dokumennya sendiri berstatus Lunas.
+ */
+function findBilledStageIndex(inv: Invoice, scheds: InvoiceTerminSchedule[]): number {
+  if (inv.terminStageId) {
+    const byId = scheds.findIndex(s => s.id === inv.terminStageId);
+    if (byId !== -1) return byId;
+  }
+  if (typeof inv.terminStageNumber === 'number' && inv.terminStageNumber >= 1) {
+    return inv.terminStageNumber - 1;
+  }
+  const docNum = String(inv.documentNumber ?? '');
+  const termin = docNum.match(/\/T(\d+)/i);
+  if (termin) return Number(termin[1]) - 1;
+  if (/\/DP\b/i.test(docNum)) return 0;
+  // Pelunasan dalam skema dua tahap adalah tahap TERAKHIR, bukan tahap kedua
+  // dari daftar yang panjangnya selalu dua — jadi nilainya dari jumlah tahap.
+  if (/\/PELUNASAN\b/i.test(docNum)) return Math.max(0, scheds.length - 1);
+  return -1;
+}
+
+/**
+ * Dokumen komersial yang menagih SELURUH kontrak (mode konversi "Penuh (Full)"):
+ * tidak ada satu pun tahap yang belum ditagih, jadi tahap tidak boleh dinilai
+ * dari posisinya terhadap satu tahap yang ditebak.
+ */
+function billsWholeContract(inv: Invoice, scheds: InvoiceTerminSchedule[]): boolean {
+  if (scheds.length === 0) return false;
+  const totalScheduled = scheds.reduce((acc, s) => acc + asStageAmount(s.amount), 0);
+  if (totalScheduled <= 0) return false;
+  const billed = asStageAmount(inv.grandTotal);
+  // Toleransi Rp 1 untuk pembulatan per tahap.
+  return billed >= totalScheduled - 1 || (typeof inv.terminPercentage === 'number' && inv.terminPercentage >= 100);
+}
+
+/**
+ * Uang yang benar-benar masuk ke dokumen ini, menutup tahap dari depan sesuai
+ * urutan jadwal. Dipakai hanya untuk dokumen yang menagih seluruh kontrak,
+ * karena invoice satu tahap hanya menerima uang untuk tahapnya sendiri.
+ */
+function isStageCoveredByRecordedPayment(
+  inv: Invoice,
+  scheds: InvoiceTerminSchedule[],
+  schedIdx: number
+): boolean {
+  const paid = Math.max(asStageAmount(inv.amountPaid), (inv.payments || [])
+    .reduce((acc, p) => acc + asStageAmount(p.amount), 0));
+  if (paid <= 0) return false;
+  let cumulative = 0;
+  for (let i = 0; i <= schedIdx; i++) {
+    cumulative += asStageAmount(scheds[i]?.amount);
+  }
+  return cumulative > 0 && paid >= cumulative - 1;
+}
+
+/**
+ * Penanda tahap pada akhir nomor dokumen (contoh INV/BJP/2026/11/0002/T3).
+ *
+ * Nilainya SELALU hasil pembacaan skema + posisi tahap, bukan angka yang ditulis
+ * tetap di layar atau di alur konversi: skema DP memakai /DP untuk tahap pertama
+ * dan /PELUNASAN untuk tahap TERAKHIR (jumlah tahapnya dibaca, jadi skema DP tiga
+ * tahap tidak lagi menyalahkan tahap tengah sebagai pelunasan), skema lain memakai
+ * /T{nomor tahap}. Pembaca status tahap (findBilledStageIndex) memakai aturan yang
+ * sama, jadi nomor dan isian tidak pernah saling bertentangan.
+ */
+export function resolveStageSuffix(
+  scheme: InvoicePaymentMethodType | undefined,
+  stageIndex: number,
+  totalStages: number
+): string {
+  if (scheme === 'DP') {
+    if (stageIndex <= 0) return 'DP';
+    if (stageIndex >= totalStages - 1) return 'PELUNASAN';
+  }
+  return `T${stageIndex + 1}`;
+}
+
+/**
+ * Semua penanda nomor dokumen yang sah untuk satu tahap.
+ *
+ * Daftar ini dibangun dari resolveStageSuffix (aturan tunggal) plus bentuk /T{n}
+ * umum, jadi membandingkan nomor dokumen tidak pernah menulis angka tahap di
+ * tempat lain. Skema DP ikut menerima /DP dan /PELUNASAN karena dokumen lama
+ * bisa memakai keduanya, dan tahap terakhir skema DP bernama /PELUNASAN apa pun
+ * jumlah tahapnya.
+ */
+function stageNumberAliases(
+  scheme: InvoicePaymentMethodType | undefined,
+  stageIndex: number,
+  totalStages: number
+): string[] {
+  const aliases = [`/${resolveStageSuffix(scheme, stageIndex, totalStages)}`, `/T${stageIndex + 1}`];
+  if (scheme === 'DP') {
+    if (stageIndex === 0) aliases.push('/DP');
+    if (stageIndex === totalStages - 1) aliases.push('/PELUNASAN');
+  }
+  return Array.from(new Set(aliases));
+}
+
+/**
+ * Mendapatkan status tampilan jadwal termin / DP (Tagihan Ini, Lunas, Belum).
+ *
+ * Dasarnya selalu keadaan yang tercatat, bukan posisi baris:
+ * - Invoice Final (INV) yang menagih seluruh kontrak: setiap tahap dinilai dari
+ *   flag lunas pada barisnya, status dokumen, atau uang yang masuk. Tidak ada
+ *   tahap yang dinyatakan "Belum" karena dokumen itu sendiri sudah menagihnya.
+ * - Invoice Final per tahap: tahap sebelumnya lunas, tahap ini mengikuti status
+ *   pembayaran, tahap sesudahnya "Belum" KECUALI barisnya sudah dicatat lunas.
+ * - Proforma Invoice: mengikuti tahap yang sudah diterbitkan child invoice-nya.
  */
 export function getTerminStageDisplayInfo(
   inv: Invoice,
@@ -772,79 +896,103 @@ export function getTerminStageDisplayInfo(
   isCurrent: boolean;
 } {
   if (!inv) {
-    return { status: 'Belum', badgeClass: 'text-slate-500 bg-slate-100 font-medium', isCurrent: false };
+    return { status: 'Belum', badgeClass: STAGE_BADGE_BELUM, isCurrent: false };
   }
+
+  const scheds = Array.isArray(inv.paymentSchedules) ? inv.paymentSchedules : [];
 
   // 1. Jika dokumen merupakan INVOICE FINAL KOMERSIAL (INV)
   if (inv.documentType === 'COMMERCIAL') {
-    let billedIdx = -1;
-    const scheds = Array.isArray(inv.paymentSchedules) ? inv.paymentSchedules : [];
+    const billedIdx = findBilledStageIndex(inv, scheds);
 
-    if (inv.terminStageId) {
-      billedIdx = scheds.findIndex(s => s.id === inv.terminStageId);
-    }
-    if (billedIdx === -1 && inv.terminStageNumber !== undefined) {
-      billedIdx = inv.terminStageNumber - 1;
-    }
-    if (billedIdx === -1) {
-      const docNum = inv.documentNumber || '';
-      const refDesc = (inv.referenceDescription || '').toLowerCase();
-      if (docNum.includes('/T1') || refDesc.includes('termin 1')) billedIdx = 0;
-      else if (docNum.includes('/T2') || refDesc.includes('termin 2')) billedIdx = 1;
-      else if (docNum.includes('/T3') || refDesc.includes('termin 3')) billedIdx = 2;
-      else if (docNum.includes('/T4') || refDesc.includes('termin 4')) billedIdx = 3;
-      else if (docNum.includes('/DP') || refDesc.includes('dp') || refDesc.includes('uang muka')) billedIdx = 0;
-      else if (docNum.includes('/PELUNASAN') || refDesc.includes('pelunasan')) billedIdx = 1;
+    if (billedIdx === -1 && billsWholeContract(inv, scheds)) {
+      const settled = isStageMarkedPaid(sched) || isDocumentSettled(inv) || isStageCoveredByRecordedPayment(inv, scheds, schedIdx);
+      if (settled) {
+        return { status: 'Lunas', badgeClass: STAGE_BADGE_LUNAS, isCurrent: false };
+      }
+      return { status: 'Tagihan Ini', badgeClass: STAGE_BADGE_TAGIHAN_INI, isCurrent: true };
     }
 
     if (billedIdx !== -1) {
       if (schedIdx < billedIdx) {
-        return { status: 'Lunas', badgeClass: 'text-emerald-700 bg-emerald-100 font-bold', isCurrent: false };
+        return { status: 'Lunas', badgeClass: STAGE_BADGE_LUNAS, isCurrent: false };
       }
       if (schedIdx === billedIdx) {
-        const isPaid = inv.status === 'PAID' || (inv.balanceDue !== undefined && inv.balanceDue <= 0) || sched.isPaid;
-        if (isPaid) {
-          return { status: 'Lunas', badgeClass: 'text-emerald-700 bg-emerald-100 font-bold', isCurrent: true };
+        if (isDocumentSettled(inv) || isStageMarkedPaid(sched)) {
+          return { status: 'Lunas', badgeClass: STAGE_BADGE_LUNAS, isCurrent: true };
         }
-        return { status: 'Tagihan Ini', badgeClass: 'text-indigo-700 bg-indigo-100 font-bold ring-1 ring-indigo-300', isCurrent: true };
+        return { status: 'Tagihan Ini', badgeClass: STAGE_BADGE_TAGIHAN_INI, isCurrent: true };
       }
-      return { status: 'Belum', badgeClass: 'text-slate-500 bg-slate-100 font-medium', isCurrent: false };
+      // Tahap sesudahnya: flag lunas yang tercatat menang atas urutan posisi.
+      if (isStageMarkedPaid(sched) || isDocumentSettled(inv)) {
+        return { status: 'Lunas', badgeClass: STAGE_BADGE_LUNAS, isCurrent: false };
+      }
+      return { status: 'Belum', badgeClass: STAGE_BADGE_BELUM, isCurrent: false };
     }
+
+    // Invoice komersial tanpa penanda tahap dan tidak menagih seluruh kontrak:
+    // tutup tahap dari depan sesuai uang yang masuk, sisanya belum tertagih.
+    if (isStageMarkedPaid(sched) || isStageCoveredByRecordedPayment(inv, scheds, schedIdx)) {
+      return { status: 'Lunas', badgeClass: STAGE_BADGE_LUNAS, isCurrent: false };
+    }
+    const firstOpen = scheds.findIndex((s, i) => !isStageMarkedPaid(s) && !isStageCoveredByRecordedPayment(inv, scheds, i));
+    if (firstOpen === schedIdx) {
+      return { status: 'Tagihan Ini', badgeClass: STAGE_BADGE_TAGIHAN_INI, isCurrent: true };
+    }
+    return { status: 'Belum', badgeClass: STAGE_BADGE_BELUM, isCurrent: false };
   }
 
   // 2. Jika dokumen merupakan PROFORMA INVOICE (PI) atau draf umum
   const childNums = (Array.isArray(inv.childInvoiceNumbers) ? inv.childInvoiceNumbers : [])
     .map(num => String(num ?? ''));
-  const scheds = Array.isArray(inv.paymentSchedules) ? inv.paymentSchedules : [];
 
-  // Periksa apakah termin ini sudah pernah diterbitkan invoice-nya
-  const isSchedBilled = childNums.some(num => {
-    if (num.endsWith(`/T${schedIdx + 1}`)) return true;
-    if (schedIdx === 0 && (num.endsWith('/DP') || num.includes('/T1'))) return true;
-    if (schedIdx === 1 && (num.endsWith('/PELUNASAN') || num.includes('/T2'))) return true;
-    return false;
+  // Periksa apakah ada invoice final yang menagih SELURUH kontrak di bawah PI
+  // ini. Kalau ada, tidak ada tahap yang belum ditagih — jadi tahap terakhir
+  // tidak boleh tertulis "Belum" hanya karena nomor dokumennya tanpa /T3.
+  const fullContractChild = (Array.isArray(allInvoices) ? allInvoices : []).find(ci => {
+    if (!ci || ci.documentType !== 'COMMERCIAL' || ci.status === 'CANCELLED') return false;
+    const linked = (ci.sourceProformaId && ci.sourceProformaId === inv.id) ||
+      (ci.sourceProformaNumber && ci.sourceProformaNumber === inv.documentNumber) ||
+      (inv.childInvoiceIds?.includes(ci.id)) ||
+      (inv.childInvoiceNumbers?.includes(String(ci.documentNumber ?? '')));
+    if (!linked) return false;
+    return findBilledStageIndex(ci, Array.isArray(ci.paymentSchedules) ? ci.paymentSchedules : []) === -1 &&
+      billsWholeContract(ci, Array.isArray(ci.paymentSchedules) ? ci.paymentSchedules : []);
   });
 
+  // Penanda nomor yang mungkin dipakai child invoice untuk tahap ini. Daftarnya
+  // berasal dari skema + posisi tahap (resolveStageSuffix), bukan dari angka
+  // tahap yang ditulis tetap per posisi.
+  const aliases = stageNumberAliases(inv.paymentScheme, schedIdx, scheds.length);
+  const billedByChild = (num: string) => aliases.some(alias => num.endsWith(alias));
+
+  // Periksa apakah termin ini sudah pernah diterbitkan invoice-nya
+  const isSchedBilled = !!fullContractChild || childNums.some(billedByChild);
+
   // Periksa apakah ada termin sesudahnya yang sudah diterbitkan
-  const isSubsequentBilled = scheds.some((_, laterIdx) => {
+  const isSubsequentBilled = !fullContractChild && scheds.some((_, laterIdx) => {
     if (laterIdx <= schedIdx) return false;
-    return childNums.some(num => num.endsWith(`/T${laterIdx + 1}`) || (laterIdx === 1 && num.endsWith('/PELUNASAN')));
+    const laterAliases = stageNumberAliases(inv.paymentScheme, laterIdx, scheds.length);
+    return childNums.some(num => laterAliases.some(alias => num.endsWith(alias)));
   });
 
   if (isSubsequentBilled) {
-    return { status: 'Lunas', badgeClass: 'text-emerald-700 bg-emerald-100 font-bold', isCurrent: false };
+    return { status: 'Lunas', badgeClass: STAGE_BADGE_LUNAS, isCurrent: false };
   }
 
   if (isSchedBilled) {
     let isChildPaid = false;
-    if (Array.isArray(allInvoices)) {
+    if (fullContractChild) {
+      isChildPaid = isDocumentSettled(fullContractChild) ||
+        isStageCoveredByRecordedPayment(fullContractChild, scheds, schedIdx);
+    }
+    if (!isChildPaid && Array.isArray(allInvoices)) {
       const childInv = allInvoices.find(ci => {
         const docNumber = typeof ci?.documentNumber === 'string' ? ci.documentNumber : '';
         return childNums.includes(docNumber) && (
           ci.terminStageNumber === schedIdx + 1 ||
-          docNumber.endsWith(`/T${schedIdx + 1}`) ||
-          (schedIdx === 0 && docNumber.endsWith('/DP')) ||
-          (schedIdx === 1 && docNumber.endsWith('/PELUNASAN'))
+          billedByChild(docNumber) ||
+          sched.invoiceNumber === docNumber
         );
       });
       if (childInv && (childInv.status === 'PAID' || (childInv.balanceDue !== undefined && childInv.balanceDue <= 0))) {
@@ -852,17 +1000,114 @@ export function getTerminStageDisplayInfo(
       }
     }
 
-    if (isChildPaid || sched.isPaid) {
-      return { status: 'Lunas', badgeClass: 'text-emerald-700 bg-emerald-100 font-bold', isCurrent: false };
+    if (isChildPaid || isStageMarkedPaid(sched)) {
+      return { status: 'Lunas', badgeClass: STAGE_BADGE_LUNAS, isCurrent: false };
     }
-    return { status: 'Tagihan Ini', badgeClass: 'text-indigo-700 bg-indigo-100 font-bold ring-1 ring-indigo-300', isCurrent: true };
+    return { status: 'Tagihan Ini', badgeClass: STAGE_BADGE_TAGIHAN_INI, isCurrent: true };
   }
 
-  if (sched.isPaid) {
-    return { status: 'Lunas', badgeClass: 'text-emerald-700 bg-emerald-100 font-bold', isCurrent: false };
+  if (isStageMarkedPaid(sched)) {
+    return { status: 'Lunas', badgeClass: STAGE_BADGE_LUNAS, isCurrent: false };
   }
 
-  return { status: 'Belum', badgeClass: 'text-slate-500 bg-slate-100 font-medium', isCurrent: false };
+  return { status: 'Belum', badgeClass: STAGE_BADGE_BELUM, isCurrent: false };
+}
+
+/** Induk proforma dari satu dokumen tagihan (dibaca dari relasi yang tersimpan). */
+function resolveSourceProforma(inv: Invoice, allInvoices: Invoice[]): Invoice | undefined {
+  if (inv.documentType === 'PROFORMA') return inv;
+  return allInvoices.find(p => p && p.documentType === 'PROFORMA' && (
+    (inv.sourceProformaId && p.id === inv.sourceProformaId) ||
+    (inv.sourceProformaNumber && p.documentNumber === inv.sourceProformaNumber) ||
+    (p.convertedInvoiceId === inv.id) ||
+    (p.convertedInvoiceNumber === inv.documentNumber) ||
+    (p.childInvoiceIds?.includes(inv.id)) ||
+    (p.childInvoiceNumbers?.includes(String(inv.documentNumber ?? '')))
+  ));
+}
+
+/** Seluruh invoice final yang diterbitkan dari satu proforma (tanpa yang dibatalkan). */
+function linkedCommercialInvoices(proforma: Invoice, allInvoices: Invoice[]): Invoice[] {
+  return allInvoices.filter(ci => ci && ci.documentType === 'COMMERCIAL' && ci.status !== 'CANCELLED' && (
+    (ci.sourceProformaId && ci.sourceProformaId === proforma.id) ||
+    (ci.sourceProformaNumber && ci.sourceProformaNumber === proforma.documentNumber) ||
+    (proforma.childInvoiceIds?.includes(ci.id)) ||
+    (proforma.childInvoiceNumbers?.includes(String(ci.documentNumber ?? ''))) ||
+    (proforma.convertedInvoiceId === ci.id) ||
+    (proforma.convertedInvoiceNumber === ci.documentNumber)
+  ));
+}
+
+function paymentSignature(p: InvoicePayment): string {
+  const date = String(p.paymentDate ?? '').trim();
+  const amount = asStageAmount(p.amount);
+  if (date && amount > 0) {
+    return `${date}|${amount}|${String(p.paymentMethod ?? '').trim().toUpperCase()}`;
+  }
+  return `id:${String(p.id ?? '')}`;
+}
+
+/**
+ * Riwayat pembayaran yang benar-benar tercatat untuk satu dokumen tagihan.
+ *
+ * Dokumen yang menagih seluruh kontrak (invoice "Penuh (Full)" dan proforma
+ * induknya) harus menampilkan seluruh pembayaran yang masuk ke kontrak itu,
+ * termasuk yang dicatat pada invoice termin di bawahnya. Cara lama hanya
+ * membaca `invoice.payments` milik dokumen itu sendiri, sehingga invoice
+ * pelunasan penuh tidak punya satu pun baris riwayat padahal termin 1-3 sudah
+ * dibayar dan tercetak di faktur terminnya masing-masing.
+ *
+ * Hanya untuk ditampilkan: angka `amountPaid`/`balanceDue` tidak dihitung dari
+ * daftar ini, supaya pembayaran yang tersalin antar dokumen tidak dihitung dua
+ * kali (perhitungan efektif tetap di getProformaEffectivePaymentInfo).
+ */
+export function getInvoicePaymentHistory(
+  inv: Invoice,
+  allInvoices?: Invoice[]
+): InvoicePayment[] {
+  if (!inv) return [];
+  const own = Array.isArray(inv.payments) ? inv.payments : [];
+  if (!Array.isArray(allInvoices) || allInvoices.length === 0) return [...own];
+
+  const scheds = Array.isArray(inv.paymentSchedules) ? inv.paymentSchedules : [];
+  const billsWholeContractDoc = inv.documentType === 'PROFORMA' ||
+    (inv.documentType === 'COMMERCIAL' &&
+      findBilledStageIndex(inv, scheds) === -1 &&
+      billsWholeContract(inv, scheds));
+
+  if (!billsWholeContractDoc) return [...own];
+
+  const pool = [...own];
+  const source = resolveSourceProforma(inv, allInvoices);
+  if (source) {
+    pool.push(...(Array.isArray(source.payments) ? source.payments : []));
+    for (const sibling of linkedCommercialInvoices(source, allInvoices)) {
+      if (sibling.id === inv.id) continue;
+      pool.push(...(Array.isArray(sibling.payments) ? sibling.payments : []));
+    }
+  }
+
+  const seenKeys = new Set<string>();
+  const seenReferences = new Set<string>();
+  const ordered = pool
+    .filter(p => p && asStageAmount(p.amount) > 0)
+    .sort((a, b) => {
+      const dateCompare = String(a.paymentDate ?? '').localeCompare(String(b.paymentDate ?? ''));
+      return dateCompare !== 0 ? dateCompare : Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0);
+    });
+
+  const history: InvoicePayment[] = [];
+  for (const p of ordered) {
+    const reference = String(p.referenceNumber ?? '').trim().toUpperCase();
+    if (reference && seenReferences.has(reference)) continue;
+    const signature = paymentSignature(p);
+    // Baris tanpa tanggal/nominal tidak punya tanda yang bisa dibandingkan.
+    if (signature !== 'id:' && seenKeys.has(signature)) continue;
+    seenKeys.add(signature);
+    if (reference) seenReferences.add(reference);
+    history.push(p);
+  }
+  return history;
 }
 
 /**

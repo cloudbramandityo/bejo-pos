@@ -70,6 +70,8 @@ import {
   autoBalancePaymentSchedules,
   DEFAULT_INVOICE_STORE_IDENTITY,
   getTerminStageDisplayInfo,
+  getInvoicePaymentHistory,
+  resolveStageSuffix,
   getProformaEffectivePaymentInfo
 } from '../utils/invoiceStorage';
 import {
@@ -560,6 +562,12 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
     const effectiveTaxRate = formApplyTax ? formTaxRate : 0;
     return calculateInvoiceTotals(formItems, effectiveTaxRate, formDpPercent, 0);
   }, [formItems, formApplyTax, formTaxRate, formDpPercent]);
+
+  // Riwayat pembayaran yang tampil di layar detail dan PDF dokumen yang sama.
+  const detailPaymentHistory = useMemo(
+    () => (selectedInvoice ? getInvoicePaymentHistory(selectedInvoice, invoices) : []),
+    [selectedInvoice, invoices]
+  );
 
   // Keep payment schedules in sync with grand total when not manually modified or initialized
   const prevGrandTotalRef = useRef<number>(calculatedTotals.grandTotal);
@@ -1152,10 +1160,11 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
           const newChildNums = (item.childInvoiceNumbers || []).filter(num => num !== inv.documentNumber);
 
           const newSchedules = (item.paymentSchedules || []).map((sched, idx) => {
+            const stageSuffix = resolveStageSuffix(item.paymentScheme, idx, (item.paymentSchedules || []).length);
             const isMatch = (inv.terminStageId && sched.id === inv.terminStageId) ||
               (inv.terminStageNumber && idx === inv.terminStageNumber - 1) ||
               (sched.invoiceNumber === inv.documentNumber) ||
-              (inv.documentNumber.endsWith(`/T${idx + 1}`));
+              (inv.documentNumber.endsWith(`/${stageSuffix}`));
             if (isMatch) {
               return { ...sched, isPaid: false, status: 'Belum', invoiceNumber: undefined };
             }
@@ -1269,39 +1278,46 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
 
     // Cek apakah PI memiliki skema pembayaran bertahap (TERMIN atau DP)
     const schedules = pi.paymentSchedules || [];
-    if (pi.paymentScheme === 'TERMIN' && schedules.length > 0) {
-      // Cari termin pertama yang belum ada di childInvoiceNumbers
-      const unbilledIdx = schedules.findIndex((_, idx) => !pi.childInvoiceNumbers?.some(num => num.endsWith(`/T${idx + 1}`)));
-      const chosenIdx = unbilledIdx !== -1 ? unbilledIdx : 0;
-      const chosenStage = schedules[chosenIdx];
-      const suffix = `T${chosenIdx + 1}`;
+    if ((pi.paymentScheme === 'TERMIN' || pi.paymentScheme === 'DP') && schedules.length > 0) {
+      // Tahap yang belum pernah diterbitkan invoice-nya. Tidak ada angka tahap
+      // bawaan: kalau semuanya sudah pernah ditagih, yang ditawarkan adalah
+      // faktur kontrak penuh, bukan mengulang menagih tahap pertama.
+      const unbilledIdx = schedules.findIndex((s, idx) => {
+        const suffix = resolveStageSuffix(pi.paymentScheme, idx, schedules.length);
+        const billedBySuffix = pi.childInvoiceNumbers?.some(num => String(num ?? '').endsWith(`/${suffix}`));
+        if (billedBySuffix) return false;
+        return !s.invoiceNumber;
+      });
 
-      setConversionMode('STAGE');
-      setConversionStageId(chosenStage.id);
-      setConversionStageSuffix(suffix);
-      setConversionReferenceDesc(`Pembayaran ${chosenStage.name} (${formatPercentInput(chosenStage.percentage)}%) dari Total Kontrak`);
-      const nextInvNumber = generateNextDocumentNumber('COMMERCIAL', invoices, storeIdentity, suffix);
-      setConversionNumber(nextInvNumber);
-    } else if (pi.paymentScheme === 'DP' && schedules.length > 0) {
-      const hasDpBilled = pi.childInvoiceNumbers?.some(num => num.endsWith('/DP'));
-      const chosenIdx = hasDpBilled ? 1 : 0;
-      const chosenStage = schedules[chosenIdx] || schedules[0];
-      const suffix = chosenIdx === 0 ? 'DP' : 'PELUNASAN';
+      if (unbilledIdx !== -1) {
+        const chosenStage = schedules[unbilledIdx];
+        const suffix = resolveStageSuffix(pi.paymentScheme, unbilledIdx, schedules.length);
+        setConversionMode('STAGE');
+        setConversionStageId(chosenStage.id);
+        setConversionStageSuffix(suffix);
+        setConversionReferenceDesc(`Pembayaran ${chosenStage.name} (${formatPercentInput(chosenStage.percentage)}%) dari Total Kontrak`);
+        const nextInvNumber = generateNextDocumentNumber('COMMERCIAL', invoices, storeIdentity, suffix);
+        setConversionNumber(nextInvNumber);
+        setIsConvertModalOpen(true);
+        return;
+      }
 
-      setConversionMode('STAGE');
-      setConversionStageId(chosenStage.id);
-      setConversionStageSuffix(suffix);
-      setConversionReferenceDesc(`Pembayaran ${chosenStage.name} (${formatPercentInput(chosenStage.percentage)}%) dari Total Kontrak`);
-      const nextInvNumber = generateNextDocumentNumber('COMMERCIAL', invoices, storeIdentity, suffix);
-      setConversionNumber(nextInvNumber);
-    } else {
       setConversionMode('FULL');
       setConversionStageId('ALL');
       setConversionStageSuffix('');
       setConversionReferenceDesc('Pelunasan Penuh Kontrak');
-      const nextInvNumber = generateNextDocumentNumber('COMMERCIAL', invoices, storeIdentity);
-      setConversionNumber(nextInvNumber);
+      const nextFullNumber = generateNextDocumentNumber('COMMERCIAL', invoices, storeIdentity);
+      setConversionNumber(nextFullNumber);
+      setIsConvertModalOpen(true);
+      return;
     }
+
+    setConversionMode('FULL');
+    setConversionStageId('ALL');
+    setConversionStageSuffix('');
+    setConversionReferenceDesc('Pelunasan Penuh Kontrak');
+    const nextInvNumber = generateNextDocumentNumber('COMMERCIAL', invoices, storeIdentity);
+    setConversionNumber(nextInvNumber);
 
     setIsConvertModalOpen(true);
   };
@@ -1322,9 +1338,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
     const schedIdx = scheds.findIndex(s => s.id === stageId);
     const sched = scheds[schedIdx];
     if (sched) {
-      const suffix = selectedInvoice.paymentScheme === 'DP'
-        ? (schedIdx === 0 ? 'DP' : 'PELUNASAN')
-        : `T${schedIdx + 1}`;
+      const suffix = resolveStageSuffix(selectedInvoice.paymentScheme, schedIdx, scheds.length);
       setConversionMode('STAGE');
       setConversionStageId(sched.id);
       setConversionStageSuffix(suffix);
@@ -1388,8 +1402,12 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
           stageStatus = 'Belum';
         }
       } else {
-        isPaid = (runningPaid >= sched.amount && sched.amount > 0);
-        stageStatus = isPaid ? 'Lunas' : 'Belum';
+        // Konversi penuh (mode "Penuh (Full)") menagih seluruh kontrak, jadi
+        // tidak ada tahap yang belum ditagih. Flag lunas yang sudah tercatat di
+        // proforma menang atas urutan nominal: tanpa ini tahap terakhir bisa
+        // tertulis Belum walau pembayarannya sudah dicatat.
+        isPaid = (runningPaid >= sched.amount && sched.amount > 0) || sched.isPaid === true;
+        stageStatus = isPaid ? 'Lunas' : 'Tagihan Ini';
         if (runningPaid >= sched.amount) {
           runningPaid -= sched.amount;
         }
@@ -1399,7 +1417,9 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
         ...sched,
         isPaid,
         status: stageStatus,
-        invoiceNumber: sIdx === chosenStageIdx ? finalDocNumber : sched.invoiceNumber
+        invoiceNumber: isStageBilling
+          ? (sIdx === chosenStageIdx ? finalDocNumber : sched.invoiceNumber)
+          : (sched.invoiceNumber || finalDocNumber)
       };
     });
 
@@ -1638,9 +1658,10 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
         const parentNewBalance = Math.max(0, item.grandTotal - parentNewPaid);
         const parentNewStatus: InvoiceStatus = parentNewBalance === 0 ? 'PAID' : 'PARTIAL';
         const parentSchedules = (item.paymentSchedules || []).map((ps, psIdx) => {
+          const stageSuffix = resolveStageSuffix(item.paymentScheme, psIdx, (item.paymentSchedules || []).length);
           const isTargetStage = (selectedInvoice.terminStageId && ps.id === selectedInvoice.terminStageId)
             || (selectedInvoice.terminStageNumber && psIdx === selectedInvoice.terminStageNumber - 1)
-            || (selectedInvoice.documentNumber.endsWith(`/T${psIdx + 1}`));
+            || (selectedInvoice.documentNumber.endsWith(`/${stageSuffix}`));
           if (isTargetStage && isNowFullyPaid) {
             return { ...ps, isPaid: true, status: 'Lunas' };
           }
@@ -1877,10 +1898,11 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
 
       if (isParent && item.status !== 'CANCELLED') {
         const newSchedules = (item.paymentSchedules || []).map((sched, idx) => {
+          const stageSuffix = resolveStageSuffix(item.paymentScheme, idx, (item.paymentSchedules || []).length);
           const isMatch = (cancellingInvoice.terminStageId && sched.id === cancellingInvoice.terminStageId) ||
             (cancellingInvoice.terminStageNumber && idx === cancellingInvoice.terminStageNumber - 1) ||
             (sched.invoiceNumber === cancellingInvoice.documentNumber) ||
-            (cancellingInvoice.documentNumber.endsWith(`/T${idx + 1}`));
+            (cancellingInvoice.documentNumber.endsWith(`/${stageSuffix}`));
           if (isMatch) {
             return { ...sched, isPaid: false, status: 'Belum' };
           }
@@ -3751,28 +3773,29 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                                   </thead>
                                    <tbody className="divide-y divide-slate-100">
                                     {formPaymentSchedules.map((s, sIdx) => {
-                                      let stageStatus = 'Belum';
+                                      let stageStatus: 'Lunas' | 'Tagihan Ini' | 'Belum' = 'Belum';
                                       let badgeStyle = 'text-[8px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded';
 
                                       if (formDocType === 'COMMERCIAL') {
-                                        const refDesc = (formReferenceDescription || '').toLowerCase();
-                                        const docNum = (formSourceProformaNumber || '').toUpperCase();
-                                        let activeStageIdx = 0;
-                                        if (refDesc.includes('termin 1') || docNum.includes('/T1')) activeStageIdx = 0;
-                                        else if (refDesc.includes('termin 2') || docNum.includes('/T2')) activeStageIdx = 1;
-                                        else if (refDesc.includes('termin 3') || docNum.includes('/T3')) activeStageIdx = 2;
-                                        else if (refDesc.includes('termin 4') || docNum.includes('/T4')) activeStageIdx = 3;
-                                        else if (refDesc.includes('pelunasan') || docNum.includes('/PELUNASAN')) activeStageIdx = 1;
-
-                                        if (sIdx < activeStageIdx) {
-                                          stageStatus = 'Lunas';
+                                        // Pratinjau form memakai aturan status yang sama dengan
+                                        // layar detail dan PDF (getTerminStageDisplayInfo), bukan
+                                        // menebak tahap dari kata "pelunasan" di keterangan.
+                                        const draft = {
+                                          ...selectedInvoice,
+                                          id: selectedInvoice?.id || 'draft',
+                                          documentType: 'COMMERCIAL',
+                                          documentNumber: formDocNumber,
+                                          paymentScheme: formPaymentScheme,
+                                          paymentSchedules: formPaymentSchedules,
+                                          grandTotal: calculatedTotals.grandTotal,
+                                          referenceDescription: formReferenceDescription,
+                                          contractTotalAmount: formContractTotalAmount,
+                                        } as Invoice;
+                                        stageStatus = getTerminStageDisplayInfo(draft, s, sIdx, invoices).status;
+                                        if (stageStatus === 'Lunas') {
                                           badgeStyle = 'text-[8px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded';
-                                        } else if (sIdx === activeStageIdx) {
-                                          stageStatus = 'Tagihan Ini';
+                                        } else if (stageStatus === 'Tagihan Ini') {
                                           badgeStyle = 'text-[8px] font-bold text-indigo-700 bg-indigo-100 px-1.5 py-0.5 rounded ring-1 ring-indigo-300';
-                                        } else {
-                                          stageStatus = 'Belum';
-                                          badgeStyle = 'text-[8px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded';
                                         }
                                       }
 
@@ -4332,9 +4355,11 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {selectedInvoice.paymentSchedules.map((s, idx) => {
-                      const suffix = selectedInvoice.paymentScheme === 'DP' 
-                        ? (idx === 0 ? 'DP' : 'PELUNASAN') 
-                        : `T${idx + 1}`;
+                      const suffix = resolveStageSuffix(
+                        selectedInvoice.paymentScheme,
+                        idx,
+                        selectedInvoice.paymentSchedules?.length || 1
+                      );
                       const isSelected = conversionStageId === s.id && conversionMode === 'STAGE';
                       return (
                         <button
@@ -5419,13 +5444,13 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                           )}
 
                           {/* Riwayat Rekonsiliasi Pembayaran jika ada */}
-                          {selectedInvoice.payments && selectedInvoice.payments.length > 0 && (
+                          {detailPaymentHistory.length > 0 && (
                             <div className="pt-2 border-t border-slate-200 text-[10px]">
                               <span className="font-bold text-slate-700 uppercase tracking-wider block mb-1">
                                 Riwayat Rekonsiliasi Pembayaran:
                               </span>
                               <div className="space-y-0.5">
-                                {selectedInvoice.payments.map((p, pIdx) => (
+                                {detailPaymentHistory.map((p, pIdx) => (
                                   <div key={p.id || pIdx} className="flex justify-between text-slate-600">
                                     <span>
                                       {p.paymentDate} • {p.paymentType === 'DOWN_PAYMENT' ? 'DP' : 'Pelunasan'} ({p.paymentMethod})

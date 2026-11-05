@@ -3,7 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { Invoice, InvoiceStoreIdentity } from '../types';
 import { formatRupiah } from './formatters';
 import { downloadPdfFile } from './pdfDownload';
-import { DEFAULT_INVOICE_STORE_IDENTITY, getTerminStageDisplayInfo } from './invoiceStorage';
+import { DEFAULT_INVOICE_STORE_IDENTITY, getTerminStageDisplayInfo, getInvoicePaymentHistory } from './invoiceStorage';
 
 export type InvoicePdfPaperSize = 'a4' | 'f4';
 export type InvoicePdfOrientation = 'portrait' | 'landscape';
@@ -154,7 +154,11 @@ export function buildInvoicePdf(
   const customer = invoice.customer || ({} as Invoice['customer']);
   const items = Array.isArray(invoice.items) ? invoice.items : [];
   const schedules = Array.isArray(invoice.paymentSchedules) ? invoice.paymentSchedules : [];
-  const payments = Array.isArray(invoice.payments) ? invoice.payments : [];
+  // Riwayat yang dicetak = seluruh pembayaran tercatat untuk kontrak dokumen ini,
+  // termasuk yang dicatat pada invoice terminnya (faktur pelunasan penuh punya
+  // payments sendiri kosong padahal termin 1-3 sudah dibayar dan tercetak di
+  // faktur termin masing-masing).
+  const payments = getInvoicePaymentHistory(invoice, allInvoices);
   // Identitas toko selalu menjadi sumber terbaru; snapshot pada invoice hanya dipakai
   // bila identitas toko belum memiliki rekening sama sekali.
   const identityBankAccounts = Array.isArray(storeIdentity.bankAccounts) ? storeIdentity.bankAccounts : [];

@@ -1212,6 +1212,8 @@ export interface InvoiceStoreIdentity {
   defaultTerms?: string;
   authorizedSignerName?: string;
   authorizedSignerRole?: string;
+  /** Waktu simpan terakhir (epoch ms). Dipakai untuk memutuskan nilai mana yang lebih baru. */
+  updatedAt?: number;
 }
 
 export interface Invoice {

@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "4.14.2",
+  "version": "4.14.3",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -15,6 +15,7 @@
     "check:reconciliation": "tsx scripts/check-reconciliation.mts",
     "check:entity": "tsx scripts/check-entity-ledger.mts",
     "check:invoice": "tsx scripts/check-invoice-termin.mts",
+    "check:invoice-identity": "tsx scripts/check-invoice-identity.mts",
     "check:tax-years": "tsx scripts/check-tax-years.mts",
     "check:backup": "tsx scripts/check-backup-coverage.mts",
     "check:journal": "tsx scripts/check-journal-access.mts",

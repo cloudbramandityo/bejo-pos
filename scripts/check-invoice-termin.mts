@@ -23,7 +23,7 @@ const check = (label: string, fn: () => void) => {
   console.log(`   ok  ${label}`);
 };
 
-const CUSTOMER: InvoiceCustomerInfo = { name: 'CV Mitra Daerah', address: 'Jl. Raya Diwek No 1' };
+const CUSTOMER: InvoiceCustomerInfo = { name: 'CV Mitra Daerah', address: 'Jl. Raya Diwek No 1', phone: '0812-3456-7890' };
 
 const CONTRACT_TOTAL = 18_345_142;
 const STAGE_AMOUNTS = [5_503_543, 5_503_543, 7_338_056];

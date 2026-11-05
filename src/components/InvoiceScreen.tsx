@@ -61,25 +61,31 @@ import {
   getStoredInvoices,
   saveStoredInvoices,
   getStoredInvoiceStoreIdentity,
-  saveStoredInvoiceStoreIdentity,
   calculateInvoiceTotals,
   generateNextDocumentNumber,
   generateNextCreditNoteNumber,
   generateDefaultPaymentSchedules,
   recalculatePaymentSchedules,
   autoBalancePaymentSchedules,
-  DEFAULT_INVOICE_STORE_IDENTITY,
   getTerminStageDisplayInfo,
   getInvoicePaymentHistory,
   resolveStageSuffix,
   getProformaEffectivePaymentInfo
 } from '../utils/invoiceStorage';
 import {
+  identityEquals,
+  incomingIdentityWins
+} from '../utils/invoiceStoreIdentityRules';
+import {
+  readInvoiceIdentityFromServer,
+  rememberInvoiceIdentityLocally,
+  saveInvoiceIdentity
+} from '../utils/invoiceStoreIdentitySync';
+import {
   subscribeInvoices,
   saveInvoiceCloud,
   deleteInvoiceCloud,
-  subscribeInvoiceStoreIdentity,
-  saveInvoiceStoreIdentityCloud
+  subscribeInvoiceStoreIdentity
 } from '../backend/pocketbaseBackend';
 import { buildOpenAccountInvoiceItems } from '../utils/openAccountStorage';
 import { canManageBusinessData } from '../utils/recordAccess';
@@ -132,6 +138,37 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
   // Main Data States
   const [invoices, setInvoices] = useState<Invoice[]>(() => getStoredInvoices());
   const [storeIdentity, setStoreIdentity] = useState<InvoiceStoreIdentity>(() => getStoredInvoiceStoreIdentity());
+
+  // Isian panel Pengaturan Invoice. Mengikuti nilai yang sudah tersimpan, tetapi
+  // tidak boleh ditimpa selama operator belum menekan Simpan.
+  const [identityForm, setIdentityForm] = useState<InvoiceStoreIdentity>(storeIdentity);
+  const [savingIdentity, setSavingIdentity] = useState(false);
+  const [identityNotice, setIdentityNotice] = useState<string>('');
+  const storeIdentityRef = useRef(storeIdentity);
+  const identityFormRef = useRef(identityForm);
+  useEffect(() => { storeIdentityRef.current = storeIdentity; }, [storeIdentity]);
+  useEffect(() => { identityFormRef.current = identityForm; }, [identityForm]);
+
+  const hasUnsavedIdentityEdits = () =>
+    !identityEquals(identityFormRef.current, storeIdentityRef.current);
+
+  /**
+   * Nilai dari server, perangkat lain, atau tab lain. Dipakai hanya bila benar-benar
+   * lebih baru dan tidak ada isian yang belum disimpan di layar ini.
+   */
+  const applyExternalIdentity = (incoming: InvoiceStoreIdentity | null) => {
+    if (!incomingIdentityWins(storeIdentityRef.current, incoming)) return;
+    if (hasUnsavedIdentityEdits()) {
+      setIdentityNotice('Nilai dari perangkat lain lebih baru, tetapi isian Anda di layar ini belum disimpan.');
+      return;
+    }
+    const next = incoming as InvoiceStoreIdentity;
+    storeIdentityRef.current = next;
+    identityFormRef.current = next;
+    setStoreIdentity(next);
+    setIdentityForm(next);
+    rememberInvoiceIdentityLocally(next);
+  };
   
   // View & Tab States
   const [activeSubTab, setActiveSubTab] = useState<'list' | 'create' | 'settings'>('list');
@@ -190,18 +227,8 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
   };
 
   const fetchIdentityFromBackend = async () => {
-    try {
-      const res = await fetch('/api/invoices/store-identity');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.identity && data.identity.storeName) {
-          setStoreIdentity(data.identity);
-          saveStoredInvoiceStoreIdentity(data.identity);
-        }
-      }
-    } catch {
-      // Graceful offline fallback
-    }
+    const result = await readInvoiceIdentityFromServer();
+    if (result.ok) applyExternalIdentity(result.identity);
   };
 
   useEffect(() => {
@@ -231,10 +258,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
     });
 
     const unsubIdentity = subscribeInvoiceStoreIdentity((cloudIdentity) => {
-      if (cloudIdentity && cloudIdentity.storeName) {
-        setStoreIdentity(cloudIdentity);
-        saveStoredInvoiceStoreIdentity(cloudIdentity);
-      }
+      applyExternalIdentity(cloudIdentity);
     });
 
     // 2. Cross-tab & local storage events
@@ -245,9 +269,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
     };
 
     const handleLocalIdentityUpdated = (e: any) => {
-      if (e?.detail) {
-        setStoreIdentity(e.detail);
-      }
+      applyExternalIdentity(e?.detail ?? null);
     };
 
     const handleStorageChange = (e: StorageEvent) => {
@@ -259,8 +281,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
       }
       if (e.key === 'bejo_pos_invoice_store_identity_v1' && e.newValue) {
         try {
-          const parsed = JSON.parse(e.newValue);
-          setStoreIdentity(parsed);
+          applyExternalIdentity(JSON.parse(e.newValue));
         } catch {}
       }
     };
@@ -1986,32 +2007,36 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
 
   // =========================================================================
   // STORE IDENTITY SETTINGS
+  // (state isian + aturan penimpa ada di blok storeIdentity di atas)
   // =========================================================================
-  const [identityForm, setIdentityForm] = useState<InvoiceStoreIdentity>(storeIdentity);
-
-  // Sync identity form state whenever storeIdentity is updated by other users/cloud
-  useEffect(() => {
-    setIdentityForm(storeIdentity);
-  }, [storeIdentity]);
-
   const handleSaveIdentitySettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStoreIdentity(identityForm);
-    saveStoredInvoiceStoreIdentity(identityForm);
-    showToast('Identitas penerbit invoice berhasil disimpan!', 'success');
+    if (savingIdentity) return;
+    setSavingIdentity(true);
+    setIdentityNotice('');
 
-    // Save to PocketBase Cloud PocketBase for real-time multi-account sync
-    saveInvoiceStoreIdentityCloud(identityForm).catch(console.warn);
+    const draft = identityFormRef.current;
+    // Nilai inilah yang dipakai layar ini, supaya salinan balik dari penyimpanan
+    // sendiri tidak dibaca sebagai perubahan dari perangkat lain.
+    storeIdentityRef.current = draft;
+    identityFormRef.current = draft;
+    setStoreIdentity(draft);
+    setIdentityForm(draft);
 
-    try {
-      await fetch('/api/invoices/store-identity', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(identityForm)
-      });
-    } catch {
-      // Offline fallback
+    const outcome = await saveInvoiceIdentity(draft);
+    setSavingIdentity(false);
+    storeIdentityRef.current = outcome.identity;
+    identityFormRef.current = outcome.identity;
+    setStoreIdentity(outcome.identity);
+    setIdentityForm(outcome.identity);
+
+    if (!outcome.sharedSaved) {
+      showToast('Perubahan tersimpan di perangkat ini, belum terkirim ke server.', 'error');
+      setIdentityNotice('Alasan dari server: ' + (outcome.error || 'tidak ada jawaban.'));
+      return;
     }
+    showToast('Identitas penerbit invoice berhasil disimpan dan terkirim!', 'success');
+    if (!outcome.serverSaved) setIdentityNotice('Salinan cadangan di server belum ikut berubah.');
   };
 
   const handleAddBankAccount = () => {
@@ -2329,6 +2354,17 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
               </div>
 
               <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Situs Web (Opsional)</label>
+                <input
+                  type="text"
+                  value={identityForm.website || ''}
+                  onChange={e => setIdentityForm(prev => ({ ...prev, website: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                  placeholder="Isi bila kop surat perlu menampilkan alamat situs"
+                />
+              </div>
+
+              <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">NPWP Toko (Opsional)</label>
                 <input
                   type="text"
@@ -2423,7 +2459,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                           placeholder="Ahmad Irdianto"
                         />
                       </div>
-                      {identityForm.bankAccounts.length > 1 && (
+                      {identityForm.bankAccounts.length > 0 && (
                         <button
                           type="button"
                           onClick={() => handleRemoveBankAccount(acc.id)}
@@ -2473,19 +2509,36 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
               </div>
             </div>
 
+            {identityNotice && (
+              <div className="px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] font-semibold text-amber-800">
+                {identityNotice}
+              </div>
+            )}
+
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+              {!identityEquals(identityForm, storeIdentity) && (
+                <span className="mr-auto text-[11px] font-bold text-amber-700">
+                  Isian ini belum disimpan.
+                </span>
+              )}
               <button
                 type="button"
-                onClick={() => setActiveSubTab('list')}
+                onClick={() => {
+                  identityFormRef.current = storeIdentity;
+                  setIdentityForm(storeIdentity);
+                  setIdentityNotice('');
+                  setActiveSubTab('list');
+                }}
                 className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
               >
                 Batal
               </button>
               <button
                 type="submit"
-                className="px-5 py-2.5 bg-slate-900 text-white text-xs font-bold rounded-xl shadow-xs hover:bg-slate-800 transition-all cursor-pointer"
+                disabled={savingIdentity}
+                className="px-5 py-2.5 bg-slate-900 disabled:bg-slate-400 text-white text-xs font-bold rounded-xl shadow-xs hover:bg-slate-800 transition-all cursor-pointer disabled:cursor-wait"
               >
-                Simpan Identitas Toko
+                {savingIdentity ? 'Menyimpan...' : 'Simpan Identitas Toko'}
               </button>
             </div>
           </form>
@@ -5668,7 +5721,7 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
 
                   <div className="text-center pt-3 text-[9px] text-slate-500">
                     <p>Terima kasih atas kerja samanya.</p>
-                    <p>{storeIdentity.website || 'www.bejostiker.com'}</p>
+                    {storeIdentity.website && <p>{storeIdentity.website}</p>}
                   </div>
                 </div>
               )}

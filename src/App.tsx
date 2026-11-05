@@ -71,9 +71,13 @@ import {
 import {
   getStoredInvoices,
   saveStoredInvoices,
-  getStoredInvoiceStoreIdentity,
-  saveStoredInvoiceStoreIdentity
+  getStoredInvoiceStoreIdentity
 } from './utils/invoiceStorage';
+import { applyStoreProfileToIdentity, identityEquals, incomingIdentityWins } from './utils/invoiceStoreIdentityRules';
+import {
+  rememberInvoiceIdentityLocally,
+  saveInvoiceIdentity
+} from './utils/invoiceStoreIdentitySync';
 import {
   generateStockTransactionNumber,
   normalizeStockTransaction,
@@ -207,7 +211,7 @@ import {
   subscribeSpkOrders,
   subscribeMachines,
   subscribeInvoices,
-  saveInvoiceStoreIdentityCloud,
+  subscribeInvoiceStoreIdentity,
   subscribeLandingConfig,
   subscribeLandingDraft,
   saveLandingDraftCloud,
@@ -230,8 +234,9 @@ import { applyLedgerEntriesFromCloud } from './utils/ledgerStorage';
 
 /**
  * Samakan kop faktur Invoice dengan profil toko yang aktif.
- * Identitas juga dipush ke PocketBase dan API server karena InvoiceScreen
- * melakukan polling /api/invoices/store-identity yang bisa menimpa localStorage.
+ * Hanya empat bagian ikut disalin (nama, alamat, telepon, logo); nomor rekening,
+ * awalan nomor dokumen, dan penanda tangan tidak tersentuh. Simpan lewat satu
+ * jalur yang sama dengan layar Invoice supaya tidak ada dua penulis yang saling menimpa.
  */
 function syncInvoiceIdentityFromStore(store: {
   storeName: string;
@@ -240,20 +245,13 @@ function syncInvoiceIdentityFromStore(store: {
   logoUrl?: string;
 }) {
   const current = getStoredInvoiceStoreIdentity();
-  const merged = {
-    ...current,
-    storeName: store.storeName || current.storeName,
-    address: store.address || current.address,
-    phone: store.phone || current.phone,
-    logoUrl: store.logoUrl || current.logoUrl,
-  };
-  saveStoredInvoiceStoreIdentity(merged);
-  saveInvoiceStoreIdentityCloud(merged).catch(console.error);
-  fetch('/api/invoices/store-identity', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(merged),
-  }).catch(() => {});
+  const merged = applyStoreProfileToIdentity(current, store);
+  if (identityEquals(merged, current)) return;
+  void saveInvoiceIdentity(merged).then((outcome) => {
+    if (!outcome.sharedSaved) {
+      console.warn('[Invoice] Identitas penerbit belum terkirim ke server:', outcome.error);
+    }
+  });
 }
 
 export default function App() {
@@ -1204,6 +1202,14 @@ export default function App() {
       applyLedgerEntriesFromCloud(cloudEntries || []);
     });
 
+    // 21g. Subscribe Identitas Toko Penerbit Invoice (kop faktur ikut di perangkat ini)
+    const unsubInvoiceIdentity = subscribeInvoiceStoreIdentity((cloudIdentity) => {
+      // Nilai dari server hanya menjadi cermin perangkat ini dan tidak pernah ditulis balik.
+      if (cloudIdentity && incomingIdentityWins(getStoredInvoiceStoreIdentity(), cloudIdentity)) {
+        rememberInvoiceIdentityLocally(cloudIdentity);
+      }
+    });
+
     // 22. Periodic Auto-Cleanup for SPK Archives (Runs daily at 19:00 WIB)
     checkAndRunSpkAutoCleanup();
     const cleanupInterval = setInterval(() => {
@@ -1242,6 +1248,7 @@ export default function App() {
       unsubEntityRegistry();
       unsubAccountChart();
       unsubLedgerEntries();
+      unsubInvoiceIdentity();
     };
   }, []);
 

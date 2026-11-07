@@ -18,6 +18,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File C:\bejo-pos\deploy\deploy-vp
 
 Skrip mengunduh source `main`, menjalankan build, memperbarui Caddyfile, me-restart service, melakukan health check + rollback, lalu memverifikasi akses internet.
 
+## Catatan rekonsiliasi struk live (2026-11-07)
+
+Rekonsiliasi nomor struk ganda sudah dijalankan terhadap PocketBase produksi (`https://bejodigitalprint.com/api/pb`) lewat `npm run sales:reconcile`: pratinjau dulu, lalu `--apply` setelah rencana ditinjau pemilik. Hasil terverifikasi baca-ulang:
+
+- Record penjualan 633 → 329; 304 duplikat murni (isi sama persis) dihapus, 7 penjualan berbeda bernomor sama diberi nomor baru `BS2026/10/0159`–`BS2026/10/0165` (tidak ada penjualan nyata yang hilang), 319 penanda id disamakan.
+- Verifikasi akhir: 0 nomor struk ganda tersisa.
+- Bukti (cadangan seluruh record sebelum menulis, rencana, dan verifikasi) tersimpan di folder `backups/` perangkat yang menjalankan — sengaja tidak dilacak git: `sales-reconcile-backup-2026-11-07T04-42-40.json`, `sales-reconcile-plan-2026-11-07T04-40-34.json`, `sales-reconcile-verify-2026-11-07T04-42-40.json`.
+
 ## Run Locally
 
 **Prerequisites:**  Node.js

@@ -32,7 +32,9 @@
        dan isi direktori akun hasil proyeksi boot server
     10. Verifikasi live: DNS, HTTPS, APP_URL publik, identitas Landing,
         PocketBase publik + realtime publik + isi bundle browser (URL DB)
-    11. Ringkasan hasil deploy
+    11. Bila diminta: rekonsiliasi nomor struk penjualan (pratinjau, atau
+        terapkan dengan -ApplySalesReconciliation)
+    12. Ringkasan hasil deploy
 
   Data yang TIDAK disentuh:
     .env, data/, logs/, backups/, database PocketBase
@@ -65,6 +67,11 @@
                                  (tanpa opsi ini password stabil di .env tidak disentuh)
     -DevPasswordLength <n>       Panjang password DEVELOPER hasil rotasi (default 10)
     -PurgePlaintextEnvBackups    Hapus backup .env plaintext di backups/ (butuh -Force)
+    -ReconcileSales              Setelah deploy sukses, jalankan PRATINJAU rekonsiliasi
+                                 nomor struk penjualan (tidak menulis apa pun).
+    -ApplySalesReconciliation    Implisit -ReconcileSales, lalu terapkan rencananya.
+                                 Cadangan JSON seluruh record dibuat lebih dulu di
+                                 <AppDir>\backups, dan hasilnya dibaca ulang.
 
   Catatan keamanan:
     - Nilai rahasia tidak pernah dicetak ke konsol.
@@ -81,6 +88,7 @@
     1 deploy/health lokal/hardening gagal
     2 Marketing wajib belum LIVE
     3 verifikasi publik/DNS/HTTPS gagal
+    4 rekonsiliasi penjualan diminta tetapi gagal (deploy sendiri sukses)
 =====================================================================
 #>
 
@@ -110,7 +118,9 @@ param(
   [switch]$SetDevPassword,
   [switch]$RotateDevPassword,
   [int]$DevPasswordLength = 10,
-  [switch]$PurgePlaintextEnvBackups
+  [switch]$PurgePlaintextEnvBackups,
+  [switch]$ReconcileSales,
+  [switch]$ApplySalesReconciliation
 )
 
 $ErrorActionPreference = 'Stop'
@@ -1746,6 +1756,78 @@ if ($SkipPublicCheck) {
   }
 }
 
+# ------------------------------- rekonsiliasi nomor struk penjualan (opsional)
+# Satu sumber aturan tetap src/utils/salesReceiptReconciliation.ts +
+# scripts/reconcile-sales-receipts.mts. Langkah ini hanya menjalankan perintah
+# npm yang sama dengan operator; bawaannya pratinjau dan tidak menulis apa pun.
+$salesReconcileStatus = 'tidak diminta'
+$salesReconcileFailed = $false
+if ($ReconcileSales -or $ApplySalesReconciliation) {
+  Write-Step '8b/8 Rekonsiliasi nomor struk penjualan (opsional)'
+  Push-Location $AppDir
+  try {
+    $npmCmd = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if ($npmCmd) { $npmPath = $npmCmd.Source } else { $npmPath = (Get-Command npm).Source }
+
+    Write-Host '   Pratinjau dulu (tidak menulis apa pun) ...' -ForegroundColor DarkGray
+    $salesPreview = Invoke-NativeCapture $npmPath @('run', 'sales:reconcile')
+    $salesPreview.Output | Select-Object -Last 30 | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
+    if ($salesPreview.ExitCode -ne 0) {
+      $salesReconcileFailed = $true
+      $salesReconcileStatus = 'gagal pratinjau'
+      Write-Warn2 "Pratinjau rekonsiliasi gagal (exit $($salesPreview.ExitCode)); tidak ada yang ditulis."
+    } else {
+      $salesPlanFile = Get-ChildItem -LiteralPath (Join-Path $AppDir 'backups') -Filter 'sales-reconcile-plan-*.json' -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+      $salesPlanPath = if ($salesPlanFile) { $salesPlanFile.FullName } else { 'tidak ditemukan' }
+      $salesPending = -1
+      if ($salesPlanFile) {
+        try {
+          $salesPlanData = Get-Content -LiteralPath $salesPlanFile.FullName -Raw | ConvertFrom-Json
+          $salesPending = @($salesPlanData.plan.deletes).Count + @($salesPlanData.plan.renames).Count + @($salesPlanData.plan.normalizes).Count + @($salesPlanData.plan.spkRelinks).Count
+        } catch {
+          $salesPending = -1
+        }
+      }
+      if ($salesPending -eq 0) {
+        $salesReconcileStatus = 'tidak ada yang perlu dirapikan'
+        Write-Ok "Tidak ada nomor struk ganda yang perlu dirapikan. Rencana: $salesPlanPath"
+      } elseif ($ApplySalesReconciliation) {
+        Write-Host '   Menerapkan rencana (cadangan JSON dibuat lebih dulu oleh skrip) ...' -ForegroundColor DarkGray
+        $salesApply = Invoke-NativeCapture $npmPath @('run', 'sales:reconcile', '--', '--apply')
+        $salesApply.Output | Select-Object -Last 30 | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
+        if ($salesApply.ExitCode -ne 0) {
+          $salesReconcileFailed = $true
+          $salesReconcileStatus = 'gagal menerapkan'
+          Write-Warn2 "Penerapan rekonsiliasi gagal (exit $($salesApply.ExitCode)). Periksa berkas di $AppDir\backups."
+        } else {
+          $salesVerifyFile = Get-ChildItem -LiteralPath (Join-Path $AppDir 'backups') -Filter 'sales-reconcile-verify-*.json' -File -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if ($salesVerifyFile) {
+            $salesReconcileStatus = "diterapkan (bukti $($salesVerifyFile.Name))"
+            Write-Ok "Rekonsiliasi diterapkan dan dibaca ulang. Bukti: $($salesVerifyFile.FullName)"
+          } else {
+            $salesReconcileStatus = 'diterapkan'
+            Write-Ok 'Rekonsiliasi diterapkan.'
+          }
+        }
+      } else {
+        $salesReconcileStatus = 'pratinjau saja'
+        $pendingText = if ($salesPending -ge 0) { "$salesPending langkah tertunda" } else { 'jumlah langkah tidak terbaca' }
+        Write-Ok "Pratinjau selesai; belum ada yang ditulis ($pendingText)."
+        Write-Host "      Rencana: $salesPlanPath" -ForegroundColor DarkGray
+        Write-Host '      Tinjau rencananya, lalu jalankan ulang deploy dengan -ApplySalesReconciliation untuk menerapkan.' -ForegroundColor Yellow
+      }
+    }
+  } catch {
+    $salesReconcileFailed = $true
+    $salesReconcileStatus = "gagal: $($_.Exception.Message)"
+    Write-Warn2 "Rekonsiliasi tidak dapat dijalankan: $($_.Exception.Message)"
+  } finally {
+    Pop-Location
+  }
+}
+
 # ----------------------------------------------------------- summary
 if (-not $KeepSourceArchive) {
   if ($sourceArchive) { Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue }
@@ -1757,6 +1839,9 @@ if ($RequireMarketing -and $marketingRequiredFailed) {
   $exitCode = 2
 } elseif (-not $publicOk -and -not $SkipPublicCheck -and -not $lanOnlyMode) {
   $exitCode = 3
+}
+if ($salesReconcileFailed -and $exitCode -eq 0) {
+  $exitCode = 4
 }
 
 $appStatus = (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue).Status
@@ -1805,6 +1890,7 @@ if ($SetDevPassword) { Write-Host '   Password DEVELOPER: disetel stabil (min 10
 if ($RotateDevPassword) { Write-Host "   Password DEVELOPER: dirotasi ($DevPasswordLength karakter, hash scrypt)" }
 if ($PurgePlaintextEnvBackups) { Write-Host "   Backup .env plain : $envBackupText" }
 if ($distBackup) { Write-Host "   Backup dist       : $distBackup" }
+if ($salesReconcileStatus -ne 'tidak diminta') { Write-Host "   Rekonsiliasi      : $salesReconcileStatus" }
 Write-Host "   Log aplikasi      : $AppDir\logs\stderr.log"
 Write-Host '==================================================================' -ForegroundColor DarkCyan
 Write-Host ''
@@ -1832,6 +1918,10 @@ if ($exitCode -eq 0) {
   Write-Ok 'DEPLOY SELESAI DAN TERVERIFIKASI.'
 } elseif ($exitCode -eq 2) {
   Write-Host '   [FAIL] Marketing wajib belum LIVE. Periksa .env dan diagnostik di atas.' -ForegroundColor Red
+} elseif ($exitCode -eq 4) {
+  Write-Host '   [FAIL] Deploy sukses, tetapi rekonsiliasi penjualan gagal.' -ForegroundColor Red
+  Write-Host '          Baca pesan rekonsiliasi di atas dan berkas di <AppDir>\backups.' -ForegroundColor Yellow
+  Write-Host '          Pratinjau aman diulang: npm run sales:reconcile (di <AppDir>).' -ForegroundColor Yellow
 } else {
   Write-Host '   [FAIL] Aplikasi terdeploy, tetapi akses internet belum terverifikasi.' -ForegroundColor Red
   Write-Host '          Periksa DNS, port 80/443, service Caddy, dan firewall Windows.' -ForegroundColor Yellow

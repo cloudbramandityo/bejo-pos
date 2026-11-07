@@ -472,4 +472,15 @@ check('sesudah menulis, skrip membaca ulang dan memastikan lingkupnya bersih', (
   assert.match(reconcileScript, /if \(!planIsEmpty\(afterPlan\)\)/);
 });
 
+check('jalur VPS memakai opsi di deploy/deploy-vps.ps1, bukan skrip deploy baru', () => {
+  const deploy = read('deploy/deploy-vps.ps1');
+  assert.match(deploy, /\[switch\]\$ReconcileSales/);
+  assert.match(deploy, /\[switch\]\$ApplySalesReconciliation/);
+  assert.match(deploy, /if \(\$ReconcileSales -or \$ApplySalesReconciliation\)/);
+  const idxPreview = deploy.indexOf("'sales:reconcile')");
+  const idxApply = deploy.indexOf("'--apply')");
+  assert.ok(idxPreview > 0 && idxApply > idxPreview, 'pratinjau harus dijalankan sebelum menerapkan');
+  assert.doesNotMatch(deploy, /reconcile-sales\.ps1/);
+});
+
 console.log(`\nLulus: ${passed} kasus.`);

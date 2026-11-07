@@ -2207,7 +2207,9 @@ if (adminPb) {
         byReceipt.set(rk, (byReceipt.get(rk) || 0) + 1);
         const mk = rk.substring(0, 9);
         byMonth.set(mk, (byMonth.get(mk) || 0) + 1);
-        const items = JSON.stringify((mirror && mirror.items) || r.items || []);
+        const itemsArr = (mirror && Array.isArray(mirror.items) ? mirror.items : null) || (Array.isArray(r.items) ? r.items : []);
+        const items = JSON.stringify(itemsArr);
+        const customerRaw = mirror ? mirror.customer : null;
         const detail = {
           id: r.id,
           legacyId: legacy || null,
@@ -2219,6 +2221,15 @@ if (adminPb) {
           time: String(r.time ?? (mirror && mirror.time) ?? ''),
           items,
           updated: String(r.updated || r.created || ''),
+          cashierName: String((mirror && mirror.cashierName) || ''),
+          customerName: String((customerRaw && typeof customerRaw === 'object' ? customerRaw.name : customerRaw) || (mirror && mirror.customerName) || ''),
+          spkOrderNumber: String((mirror && mirror.spkOrderNumber) || ''),
+          itemList: itemsArr.map((it) => ({
+            name: String((it && it.name) || ''),
+            qty: Number((it && it.qty) || 0),
+            unit: String((it && it.unit) || ''),
+            totalPrice: Number((it && it.totalPrice) || 0),
+          })),
         };
         if (!receiptRows.has(rk)) receiptRows.set(rk, []);
         receiptRows.get(rk).push(detail);
@@ -2274,7 +2285,11 @@ if (adminPb) {
             count: list.length,
             totals: [...new Set(list.map((d) => d.total))],
             timestamps: [...new Set(list.map((d) => d.ts))],
-            records: list.map((d) => ({ id: d.id, legacyId: d.legacyId, mirrorId: d.mirrorId, total: d.total, ts: d.ts, date: d.date })),
+            records: list.map((d) => ({
+              id: d.id, legacyId: d.legacyId, mirrorId: d.mirrorId, total: d.total, ts: d.ts,
+              date: d.date, time: d.time, cashierName: d.cashierName, customerName: d.customerName,
+              spkOrderNumber: d.spkOrderNumber, items: d.itemList,
+            })),
           });
         }
       }
@@ -2406,11 +2421,20 @@ console.log(JSON.stringify(out, null, 2));
           }
           $konflik = @($cls.conflicting)
           if ($konflik.Count -gt 0) {
-            Warn "$($cls.conflictingGroups) pasangan KONFLIK tidak boleh dihapus otomatis - isinya berbeda (kemungkinan penjualan lama tertimpa nomor sama). Contoh (maks 40 di JSON):"
-            $konflik | Select-Object -First 10 | ForEach-Object {
-              $totals = ($_.totals | ForEach-Object { "Rp$_" }) -join ' vs '
-              Info "  - $($_.receipt): total [$totals], timestamp [$($_.timestamps -join ' vs ')], $($_.count) record"
+            Warn "$($cls.conflictingGroups) pasangan KONFLIK tidak boleh dihapus otomatis - dua penjualan nyata memakai nomor struk sama. Rincian tiap record (urut waktu):"
+            foreach ($k in $konflik) {
+              Info "  Struk $($k.receipt) ($($k.count) record):"
+              $recs = @($k.records) | Sort-Object { [long]$_.ts }
+              foreach ($rec in $recs) {
+                $pelanggan = if ($rec.customerName) { " pelanggan=$($rec.customerName)" } else { '' }
+                $spk = if ($rec.spkOrderNumber) { " spk=$($rec.spkOrderNumber)" } else { '' }
+                Info "    - tgl=$($rec.date) jam=$($rec.time) total=Rp$($rec.total) kasir=$($rec.cashierName)$pelanggan$spk | id=$($rec.id) legacy=$($rec.legacyId)"
+                foreach ($it in @($rec.items)) {
+                  Info "        item: $($it.name) x$($it.qty) $($it.unit) = Rp$($it.totalPrice)"
+                }
+              }
             }
+            Info 'Isinya berbeda, jadi tidak ada yang dihapus otomatis; opsinya memberi nomor struk baru pada salah satunya. Rincian kelompok yang tampil di sini juga ada di JSON penjualan (duplicateClassification.conflicting, maks 40 kelompok).'
           } else {
             Ok 'Tidak ada pasangan konflik - semua duplikat identik sehingga penggabungan nanti tidak kehilangan penjualan berbeda.'
           }

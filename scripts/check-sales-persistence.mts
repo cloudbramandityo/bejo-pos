@@ -31,6 +31,11 @@ import {
   salesWriteNotice,
   type SalesWriteOutcome,
 } from '../src/utils/salesTransactionStore';
+import {
+  planReceiptReconciliation,
+  planIsEmpty,
+  receiptKeyOf,
+} from '../src/utils/salesReceiptReconciliation';
 import type { Transaction } from '../src/types';
 
 let passed = 0;
@@ -268,6 +273,203 @@ check('layar riwayat membaca hasil tulis, bukan sukses tetap', () => {
   assert.match(history, /onUpdateTransaction\?: \(updatedTx: Transaction\) => Promise<SalesWriteOutcome>/);
   assert.match(history, /onDeleteTransaction\?: \(transactionId: string\) => Promise<SalesWriteOutcome>/);
   assert.match(history, /salesWriteNotice\(/);
+});
+
+console.log('F. Rekonsiliasi nomor struk yang tercatat dua kali');
+
+type Rec = Parameters<typeof planReceiptReconciliation>[0][number];
+
+function rec(overrides: Partial<Rec> & { recordId: string }): Rec {
+  const appId = overrides.appId ?? 'BS2026/10/0100';
+  return {
+    recordId: overrides.recordId,
+    appId,
+    legacyId: overrides.legacyId ?? appId.replace(/\//g, '_'),
+    mirrorId: overrides.mirrorId ?? appId,
+    hasMirror: overrides.hasMirror ?? true,
+    createdAt: overrides.createdAt ?? '2026-10-22T03:00:00.000Z',
+    updated: overrides.updated ?? '2026-10-22T03:00:00.000Z',
+    timestamp: overrides.timestamp ?? 1000,
+    total: overrides.total ?? 48000,
+    date: overrides.date ?? '22/10/26',
+    time: overrides.time ?? '10:00:00',
+    items: overrides.items ?? [{ name: 'Banner', qty: 1, totalPrice: 48000 }],
+  };
+}
+
+check('receiptKeyOf menyamakan "/" dan "_", menolak nomor bukan struk', () => {
+  assert.equal(receiptKeyOf('BS2026/10/0155'), 'BS2026/10/0155');
+  assert.equal(receiptKeyOf('BS2026_10_0155'), 'BS2026/10/0155');
+  assert.equal(receiptKeyOf('BS2026_10_155'), 'BS2026/10/0155');
+  assert.equal(receiptKeyOf('INV/BJP/2026/11/0001'), null);
+  assert.equal(receiptKeyOf(''), null);
+});
+
+check('duplikat murni: satu record dipertahankan, sisanya dihapus', () => {
+  const plan = planReceiptReconciliation([
+    rec({ recordId: 'lama', legacyId: 'BS2026/10/0155', appId: 'BS2026/10/0155', hasMirror: false, mirrorId: '' }),
+    rec({ recordId: 'baru', legacyId: 'BS2026_10_0155', appId: 'BS2026/10/0155' }),
+  ]);
+  assert.equal(plan.identicalGroups, 1);
+  assert.equal(plan.conflictGroups, 0);
+  assert.deepEqual(plan.deletes.map((item) => item.recordId), ['lama']);
+  assert.equal(plan.deletes[0].keepRecordId, 'baru');
+  assert.equal(plan.renames.length, 0);
+});
+
+check('record dengan cermin data dipilih untuk dipertahankan', () => {
+  const plan = planReceiptReconciliation([
+    rec({ recordId: 'tanpa-cermin', appId: 'BS2026_10_0155', mirrorId: '', hasMirror: false }),
+    rec({ recordId: 'bercermin', appId: 'BS2026_10_0155' }),
+  ]);
+  assert.equal(plan.groups[0].keepRecordId, 'bercermin');
+  assert.deepEqual(plan.deletes.map((item) => item.recordId), ['tanpa-cermin']);
+});
+
+check('penjualan berbeda dengan nomor sama: yang awal tetap, yang berikutnya diberi nomor baru', () => {
+  const plan = planReceiptReconciliation([
+    rec({ recordId: 'awal', appId: 'BS2026/10/0200', timestamp: 1000, total: 10000 }),
+    rec({ recordId: 'berikut', appId: 'BS2026_10_0200', timestamp: 2000, total: 20000, items: [{ name: 'Stiker', qty: 2 }] }),
+  ]);
+  assert.equal(plan.conflictGroups, 1);
+  assert.equal(plan.deletes.length, 0, 'penjualan nyata tidak boleh dihapus');
+  assert.equal(plan.groups[0].keepRecordId, 'awal');
+  assert.equal(plan.renames.length, 1);
+  assert.equal(plan.renames[0].recordId, 'berikut');
+  assert.equal(plan.renames[0].newReceipt, 'BS2026/10/0201');
+});
+
+check('nomor baru tidak menabrak struk lain maupun nomor baru lainnya', () => {
+  const plan = planReceiptReconciliation([
+    rec({ recordId: 'a1', appId: 'BS2026/10/0300', timestamp: 1000, total: 1 }),
+    rec({ recordId: 'a2', appId: 'BS2026/10/0300', timestamp: 2000, total: 2 }),
+    rec({ recordId: 'a3', appId: 'BS2026/10/0300', timestamp: 3000, total: 3 }),
+    rec({ recordId: 'b1', appId: 'BS2026/10/0301', timestamp: 4000, total: 4 }),
+    rec({ recordId: 'b2', appId: 'BS2026/10/0301', timestamp: 5000, total: 5 }),
+    rec({ recordId: 'single', appId: 'BS2026/10/0302', timestamp: 6000, total: 6 }),
+  ]);
+  const assigned = plan.renames.map((item) => item.newReceipt);
+  assert.deepEqual(assigned, ['BS2026/10/0303', 'BS2026/10/0304', 'BS2026/10/0305']);
+  assert.equal(new Set(assigned).size, assigned.length);
+});
+
+check('rencana tidak bergantung pada urutan record yang dibaca', () => {
+  const records = [
+    rec({ recordId: 'x1', appId: 'BS2026/10/0400', timestamp: 1000, total: 1 }),
+    rec({ recordId: 'x2', appId: 'BS2026/10/0400', timestamp: 2000, total: 2 }),
+    rec({ recordId: 'y1', appId: 'BS2026/10/0401', timestamp: 3000, total: 3 }),
+    rec({ recordId: 'y2', appId: 'BS2026/10/0401', timestamp: 4000, total: 4 }),
+  ];
+  const forward = planReceiptReconciliation(records);
+  const backward = planReceiptReconciliation([...records].reverse());
+  assert.deepEqual(
+    forward.renames.map((item) => [item.recordId, item.newReceipt]),
+    backward.renames.map((item) => [item.recordId, item.newReceipt])
+  );
+  assert.deepEqual(forward.deletes.map((item) => item.recordId), backward.deletes.map((item) => item.recordId));
+});
+
+check('penanda id yang dipertahankan disamakan ke legacyId "_" + cermin "/"', () => {
+  const plan = planReceiptReconciliation([
+    rec({ recordId: 'a-lama', appId: 'BS2026_10_0500', legacyId: 'BS2026_10_0500', mirrorId: 'BS2026_10_0500' }),
+    rec({ recordId: 'b-baru', appId: 'BS2026_10_0500', legacyId: 'BS2026_10_0500', mirrorId: 'BS2026_10_0500' }),
+  ]);
+  const keepId = plan.groups[0].keepRecordId;
+  const normalize = plan.normalizes.find((item) => item.recordId === keepId);
+  assert.ok(normalize, 'record yang dipertahankan harus dinormalkan');
+  assert.equal(normalize?.desiredAppId, 'BS2026/10/0500');
+  assert.equal(toStoredDocId(normalize!.desiredAppId), 'BS2026_10_0500');
+  assert.equal(normalize?.createsMirror, false);
+});
+
+check('record tanpa cermin hanya ditambah data.id, bukan dikarang isinya', () => {
+  const plan = planReceiptReconciliation([
+    rec({ recordId: 'polos', appId: 'BS2026_10_0600', legacyId: 'BS2026_10_0600', mirrorId: '', hasMirror: false }),
+    rec({ recordId: 'kembar', appId: 'BS2026_10_0600', legacyId: 'BS2026_10_0600', mirrorId: '', hasMirror: false }),
+  ]);
+  const normalize = plan.normalizes[0];
+  assert.equal(normalize.createsMirror, true);
+  assert.match(normalize.reason, /hanya menambah data\.id/);
+});
+
+check('tautan SPK dipindah hanya ke penjualan yang waktunya paling dekat', () => {
+  const records = [
+    rec({ recordId: 'awal', appId: 'BS2026/10/0700', timestamp: 1000, total: 1 }),
+    rec({ recordId: 'berikut', appId: 'BS2026/10/0700', timestamp: 2000, total: 2 }),
+  ];
+  const dekatBaru = planReceiptReconciliation(records, [
+    { recordId: 'spk1', orderNumber: 'SPK-1', posTransactionId: 'BS2026/10/0700', timestamp: 2100 },
+  ]);
+  assert.equal(dekatBaru.spkRelinks.length, 1);
+  assert.equal(dekatBaru.spkRelinks[0].toReceipt, 'BS2026/10/0701');
+
+  const dekatLama = planReceiptReconciliation(records, [
+    { recordId: 'spk2', orderNumber: 'SPK-2', posTransactionId: 'BS2026_10_0700', timestamp: 900 },
+  ]);
+  assert.equal(dekatLama.spkRelinks.length, 0);
+
+  const seri = planReceiptReconciliation(records, [
+    { recordId: 'spk3', orderNumber: 'SPK-3', posTransactionId: 'BS2026/10/0700', timestamp: 1500 },
+  ]);
+  assert.equal(seri.spkRelinks.length, 0);
+  assert.equal(seri.spkAmbiguous.length, 1, 'waktu seri tidak boleh dipindahkan diam-diam');
+});
+
+check('record tunggal berbentuk "/" ikut disamakan agar tidak jadi duplikat berikutnya', () => {
+  const plan = planReceiptReconciliation([
+    rec({ recordId: 'tunggal', appId: 'BS2026/10/0900', legacyId: 'BS2026/10/0900' }),
+  ]);
+  assert.equal(plan.duplicateGroups, 0);
+  assert.equal(plan.deletes.length, 0);
+  assert.equal(plan.renames.length, 0);
+  assert.equal(plan.normalizes.length, 1);
+  assert.equal(plan.normalizes[0].desiredAppId, 'BS2026/10/0900');
+  assert.equal(planIsEmpty(plan), false);
+});
+
+check('rencana kosong setelah tidak ada duplikat', () => {
+  const plan = planReceiptReconciliation([rec({ recordId: 'tunggal', appId: 'BS2026/10/0800' })]);
+  assert.equal(plan.duplicateGroups, 0);
+  assert.equal(planIsEmpty(plan), true);
+});
+
+console.log('G. Pemasangan rekonsiliasi di sumber');
+
+const receiptRules = read('src/utils/salesReceiptReconciliation.ts');
+const reconcileScript = read('scripts/reconcile-sales-receipts.mts');
+
+check('modul aturan murni: hanya mengimpor pengenal nomor struk dan id', () => {
+  const imports = [...receiptRules.matchAll(/^import .* from '([^']+)';$/gm)].map((m) => m[1]);
+  assert.deepEqual(imports, ['./formatters', './appRecordId']);
+  assert.doesNotMatch(receiptRules, /localStorage|pocketbaseBackend|from '\.\.\/backend/);
+});
+
+check('skrip memakai modul aturan, tidak menulis klasifikasi sendiri', () => {
+  assert.match(reconcileScript, /from '\.\.\/src\/utils\/salesReceiptReconciliation'/);
+  assert.doesNotMatch(reconcileScript, /function saleSignature|function receiptKeyOf/);
+});
+
+check('bawaan skrip adalah pratinjau; menulis hanya dengan --apply', () => {
+  assert.match(reconcileScript, /apply: false/);
+  assert.match(reconcileScript, /if \(!args\.apply\)/);
+  assert.match(reconcileScript, /PRATINJAU \(tidak menulis\)/);
+});
+
+check('cadangan ditulis sebelum satu pun record diubah', () => {
+  const idxBackup = reconcileScript.indexOf('sales-reconcile-backup-');
+  const writes = [
+    reconcileScript.indexOf(".collection('transactions').update"),
+    reconcileScript.indexOf(".collection('transactions').delete"),
+    reconcileScript.indexOf(".collection('spk_orders').update"),
+  ].filter((index) => index > 0);
+  assert.ok(idxBackup > 0 && writes.length === 3, 'ketiga jalur tulis harus ada');
+  assert.ok(writes.every((index) => index > idxBackup), 'cadangan harus lebih dulu');
+  assert.match(reconcileScript, /if \(!fs\.existsSync\(backupPath\)/);
+});
+
+check('sesudah menulis, skrip membaca ulang dan memastikan lingkupnya bersih', () => {
+  assert.match(reconcileScript, /sales-reconcile-verify-/);
+  assert.match(reconcileScript, /if \(!planIsEmpty\(afterPlan\)\)/);
 });
 
 console.log(`\nLulus: ${passed} kasus.`);

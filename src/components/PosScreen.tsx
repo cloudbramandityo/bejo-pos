@@ -39,12 +39,14 @@ import {
 import { StoreLogo } from './StoreLogo';
 import { APP_NAME } from '../config/brand';
 import {
-  saveSpkOrderCloud
+  saveSpkOrderCloud,
+  isWriteQueuedForRetry
 } from '../backend/pocketbaseBackend';
 import {
   getStoredSpkOrders,
   updateStoredSpkOrder
 } from '../utils/storage';
+import { salesWriteNotice, type SalesSaveOutcome } from '../utils/salesTransactionStore';
 import { clearOpenAccountConfigForCustomer, groupOpenAccountOrders, OpenAccountCustomerGroup } from '../utils/openAccountStorage';
 import { SpkPickerModal } from './modals/SpkPickerModal';
 import {
@@ -107,7 +109,7 @@ interface PosScreenProps {
   onOpenNewCustomerModal: () => void;
   onOpenEditCustomerModal?: (customer: Customer) => void;
   onOpenShiftModal: () => void;
-  onCompleteTransaction: (transaction: Transaction) => void;
+  onCompleteTransaction: (transaction: Transaction) => Promise<SalesSaveOutcome>;
   latestCustomer: Customer | null;
   selectedCustomer?: Customer | null;
   onSelectCustomer?: (customer: Customer | null) => void;
@@ -743,7 +745,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
   };
 
   // Execute payment
-  const handleProcessPayment = () => {
+  const handleProcessPayment = async () => {
     if (isSubmitting) return;
 
     if (cartItems.length === 0) {
@@ -833,32 +835,76 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         openAccountNotes: isOpenAccountTx ? cashierNotes : undefined
       };
 
+      // Penjualan dicatat lebih dulu, order SPK menyusul. Dengan urutan ini, satu
+      // kegagalan di sisi SPK tidak pernah menghapus penjualan yang baru dibayar.
+      const outcome = await onCompleteTransaction(newTx);
+
+      if (!outcome.saved) {
+        alert(
+          `Penjualan belum tercatat: ${outcome.error || 'nomor struk tidak tersedia.'} Barang masih ada di keranjang.`
+        );
+        return;
+      }
+
+      const savedInvoiceId = outcome.savedId || invoiceId;
+
+      if (outcome.renumberedFrom) {
+        alert(
+          `Nomor struk ${outcome.renumberedFrom} sudah dipakai. Penjualan ini tercatat sebagai ${savedInvoiceId}.`
+        );
+      }
+
       // Automatically complete and close linked SPK orders (pindah ke Selesai / Arsip)
       if (linkedSpkIds.length > 0) {
-        linkedSpkIds.forEach((sId) => {
-          const updated = updateStoredSpkOrder(
-            sId,
-            {
-              status: 'SELESAI_LUNAS',
-              isPaid: true,
-              isOpenAccount: isOpenAccountTx ? true : undefined,
-              posTransactionId: invoiceId,
-              remainingAmount: 0
-            },
-            activeShift.cashierName || 'Kasir POS'
-          );
-          const refreshed = updated.find((o) => o.id === sId);
-          if (refreshed) {
-            saveSpkOrderCloud(refreshed).catch(console.error);
+        const belumTerkirim: string[] = [];
+        try {
+          for (const sId of linkedSpkIds) {
+            const updated = updateStoredSpkOrder(
+              sId,
+              {
+                status: 'SELESAI_LUNAS',
+                isPaid: true,
+                isOpenAccount: isOpenAccountTx ? true : undefined,
+                posTransactionId: savedInvoiceId,
+                remainingAmount: 0
+              },
+              activeShift.cashierName || 'Kasir POS'
+            );
+            const refreshed = updated.find((o) => o.id === sId);
+            if (!refreshed) {
+              belumTerkirim.push(sId);
+              continue;
+            }
+            try {
+              await saveSpkOrderCloud(refreshed);
+            } catch (spkSendErr: any) {
+              console.warn('[POS] Kirim status SPK ke server gagal:', spkSendErr);
+              // Kegagalan jaringan sudah masuk antrean kirim ulang; yang ditolak
+              // server hilang tanpa jejak, jadi itu yang harus dilaporkan.
+              if (!isWriteQueuedForRetry(spkSendErr)) {
+                belumTerkirim.push(refreshed.orderNumber || refreshed.id);
+              }
+            }
           }
-        });
+        } catch (spkErr) {
+          console.error('[POS] Penjualan tercatat, penutupan SPK gagal:', spkErr);
+          alert(
+            'Penjualan sudah tercatat, tetapi ada order SPK yang belum berpindah ke Selesai. Periksa tab SPK Cetak.'
+          );
+        }
+        if (belumTerkirim.length > 0) {
+          alert(
+            `Status SPK ${belumTerkirim.join(', ')} belum terkirim ke server. Periksa tab SPK Cetak setelah koneksi baik.`
+          );
+        }
       }
 
       if (isOpenAccountTx && oaCustId) {
         clearOpenAccountConfigForCustomer(oaCustId);
       }
 
-      onCompleteTransaction(newTx);
+      const notice = salesWriteNotice(`Penjualan #${savedInvoiceId}`, outcome);
+      if (notice.tone === 'warning') alert(notice.message);
 
       // Reset after success
       onClearCart();
@@ -870,6 +916,11 @@ export const PosScreen: React.FC<PosScreenProps> = ({
       setCashierNotes('');
       setLoadedSpkOrders([]);
       setLoadedOpenAccountNotice(null);
+    } catch (paymentErr: any) {
+      console.error('[POS] Pembayaran gagal diproses:', paymentErr);
+      alert(
+        `Pembayaran gagal diproses: ${paymentErr?.message || 'terjadi kesalahan.'} Barang masih ada di keranjang.`
+      );
     } finally {
       setTimeout(() => {
         setIsSubmitting(false);

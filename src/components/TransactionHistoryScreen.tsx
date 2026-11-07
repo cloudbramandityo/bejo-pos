@@ -51,6 +51,7 @@ import { formatRupiah, formatItemTransactionSpec, formatVolume, isTransactionOnD
 import { exportTransactionsToExcel, exportStockTransactionsToExcel, exportSingleStockTransactionToExcel } from '../utils/excelExport';
 import { exportTransactionsToPDF, exportStockTransactionsToPDF, exportSingleStockTransactionToPDF } from '../utils/pdfExport';
 import { convertInvoicesToTransactions } from '../utils/invoiceStorage';
+import { salesWriteNotice, type SalesWriteOutcome } from '../utils/salesTransactionStore';
 import { canManageBusinessData } from '../utils/recordAccess';
 
 import { groupStockTransactionsByBatch, normalizeStockTransaction, calculateStockItemProfit, getProductRollPakQty, calculateSalesItemCost } from '../utils/stockUtils';
@@ -77,8 +78,8 @@ interface TransactionHistoryScreenProps {
   userRole?: UserRole;
   onUpdateStockTransaction?: (updatedTx: StockTransaction) => Promise<void> | void;
   onDeleteStockTransaction?: (transactionId: string) => Promise<void> | void;
-  onUpdateTransaction?: (updatedTx: Transaction) => Promise<void> | void;
-  onDeleteTransaction?: (transactionId: string) => Promise<void> | void;
+  onUpdateTransaction?: (updatedTx: Transaction) => Promise<SalesWriteOutcome>;
+  onDeleteTransaction?: (transactionId: string) => Promise<SalesWriteOutcome>;
 }
 
 type PeriodType = 'HARIAN' | 'MINGGUAN' | 'BULANAN' | 'SEMUA';
@@ -162,7 +163,7 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
   const [isDeletingSales, setIsDeletingSales] = useState(false);
 
   // Feedback Notification Toast
-  const [actionToast, setActionToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [actionToast, setActionToast] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null);
 
   const handleOpenEditSales = (tx: Transaction) => {
     setEditingSalesTx(tx);
@@ -178,15 +179,15 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
     if (!deletingSalesTx || !onDeleteTransaction) return;
     setIsDeletingSales(true);
     try {
-      await onDeleteTransaction(deletingSalesTx.id);
+      const outcome = await onDeleteTransaction(deletingSalesTx.id);
       setIsDeleteSalesModalOpen(false);
-      const deletedId = deletingSalesTx.id;
-      setDeletingSalesTx(null);
+      const notice = salesWriteNotice(`Penghapusan transaksi #${deletingSalesTx.id}`, outcome);
       setActionToast({
-        type: 'success',
-        message: `Transaksi Penjualan #${deletedId} berhasil dihapus permanen.`
+        type: notice.tone === 'success' ? 'success' : 'warning',
+        message: notice.message
       });
-      setTimeout(() => setActionToast(null), 4000);
+      setDeletingSalesTx(null);
+      setTimeout(() => setActionToast(null), 6000);
     } catch (err: any) {
       console.error('Error deleting sales transaction:', err);
       setActionToast({
@@ -200,12 +201,13 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
 
   const handleSaveEditedSalesTx = async (updatedTx: Transaction) => {
     if (!onUpdateTransaction) return;
-    await onUpdateTransaction(updatedTx);
+    const outcome = await onUpdateTransaction(updatedTx);
+    const notice = salesWriteNotice(`Perubahan transaksi #${updatedTx.id}`, outcome);
     setActionToast({
-      type: 'success',
-      message: `Transaksi Penjualan #${updatedTx.id} berhasil diperbarui.`
+      type: notice.tone === 'success' ? 'success' : 'warning',
+      message: notice.message
     });
-    setTimeout(() => setActionToast(null), 4000);
+    setTimeout(() => setActionToast(null), 6000);
   };
 
   const handleOpenEdit = (tx: StockTransaction) => {
@@ -4002,11 +4004,15 @@ export const TransactionHistoryScreen: React.FC<TransactionHistoryScreenProps> =
             className={`px-4 py-3 rounded-xl shadow-xl flex items-center gap-3 text-xs font-medium border ${
               actionToast.type === 'success'
                 ? 'bg-slate-900 text-white border-slate-800'
-                : 'bg-rose-900 text-white border-rose-800'
+                : actionToast.type === 'warning'
+                  ? 'bg-amber-950 text-white border-amber-800'
+                  : 'bg-rose-900 text-white border-rose-800'
             }`}
           >
             {actionToast.type === 'success' ? (
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : actionToast.type === 'warning' ? (
+              <AlertTriangle className="w-4 h-4 text-amber-300 shrink-0" />
             ) : (
               <AlertCircle className="w-4 h-4 text-rose-300 shrink-0" />
             )}

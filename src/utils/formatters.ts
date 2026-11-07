@@ -117,27 +117,36 @@ export function formatItemTransactionSpec(item: {
   return `${dimPart} ${unitPart}`.trim() || `${item.qty || 1}`;
 }
 
+/**
+ * Nomor struk = BS{tahun}/{bulan}/{urut}. Pemisah "_" ikut dikenali karena id yang
+ * pernah lewat server bisa kembali tanpa garis miring; kalau tidak dikenali,
+ * penghitung mulai dari 0001 lagi dan penjualan berikutnya menimpa struk lama.
+ */
+export function parseReceiptId(
+  id: string
+): { year: number; month: string; seq: number } | null {
+  const match = /^BS(\d{4})[/_](\d{2})[/_](\d+)$/.exec(String(id || '').trim());
+  if (!match) return null;
+  return { year: Number(match[1]), month: match[2], seq: Number(match[3]) };
+}
+
 export function generateUniqueInvoiceId(transactions: { id: string }[] = []): string {
   const date = new Date();
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
-  const prefix = `BS${year}/${month}/`;
 
   let maxSeq = 0;
   if (Array.isArray(transactions)) {
     transactions.forEach((tx) => {
-      if (tx && tx.id && tx.id.startsWith(prefix)) {
-        const seqPart = tx.id.slice(prefix.length);
-        const num = parseInt(seqPart, 10);
-        if (!isNaN(num) && num > maxSeq) {
-          maxSeq = num;
-        }
+      const parsed = parseReceiptId(tx ? tx.id : '');
+      if (parsed && parsed.year === year && parsed.month === month && parsed.seq > maxSeq) {
+        maxSeq = parsed.seq;
       }
     });
   }
 
   const nextSeq = String(maxSeq + 1).padStart(4, '0');
-  return `${prefix}${nextSeq}`;
+  return `BS${year}/${month}/${nextSeq}`;
 }
 
 export function getInvoiceNumber(count: number, transactions?: { id: string }[]): string {

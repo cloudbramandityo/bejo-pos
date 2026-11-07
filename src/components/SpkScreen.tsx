@@ -1164,7 +1164,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
         printFiles,
         printFileShortcut: primary?.localPath,
         statusLogs: [
-          ...order.statusLogs,
+          ...(order.statusLogs || []),
           {
             status: order.status,
             timestamp: Date.now(),
@@ -1277,7 +1277,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
         printFiles: updatedPrintFiles,
         printFileShortcut: primaryAttachment?.localPath,
         statusLogs: [
-          ...order.statusLogs,
+          ...(order.statusLogs || []),
           {
             status: order.status,
             timestamp: Date.now(),
@@ -5128,7 +5128,7 @@ export const SpkScreen: React.FC<SpkScreenProps> = ({
                   Riwayat & Audit Trail Status
                 </h3>
                 <div className="space-y-2 text-xs">
-                  {selectedOrder.statusLogs.map((log, idx) => (
+                  {(selectedOrder.statusLogs || []).map((log, idx) => (
                     <div key={idx} className="flex items-start gap-2.5 text-[11.5px] bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                       <div className="flex-1">

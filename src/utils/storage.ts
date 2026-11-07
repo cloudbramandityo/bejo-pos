@@ -463,8 +463,41 @@ export function getStoredTransactions(): Transaction[] {
   }
 }
 
-export function saveStoredTransactions(transactions: Transaction[]): void {
-  localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+/**
+ * Tulis cermin daftar ke penyimpanan perangkat tanpa pernah melempar.
+ *
+ * Fungsi seperti ini dulu dipanggil dari dalam updater React saat kasir menekan
+ * Pembayaran; satu kuota penyimpanan penuh membuat simpan transaksi gagal di
+ * tengah jalan sehingga data hilang tanpa pesan apa pun. Sekarang sisa ruang
+ * dicoba dengan baris terbaru saja dan kejadiannya dilaporkan apa adanya.
+ */
+function writeListMirror<T extends { timestamp?: number | string }>(
+  key: string,
+  list: T[],
+  limit: number
+): boolean {
+  try {
+    localStorage.setItem(key, JSON.stringify(list));
+    return true;
+  } catch (e) {
+    console.warn('[Storage] Cermin perangkat penuh, menyimpan baris terbaru saja.', key, e);
+    try {
+      const newest = [...list]
+        .sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime())
+        .slice(0, limit);
+      localStorage.setItem(key, JSON.stringify(newest));
+    } catch (err2) {
+      console.error('[Storage] Cermin perangkat gagal disimpan sama sekali.', key, err2);
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('app:quota-exceeded', { detail: { isQuotaExceeded: true } }));
+    }
+    return false;
+  }
+}
+
+export function saveStoredTransactions(transactions: Transaction[]): boolean {
+  return writeListMirror(STORAGE_KEYS.TRANSACTIONS, transactions, 200);
 }
 
 export function getStoredStoreProfiles(): StoreProfile[] {
@@ -756,12 +789,8 @@ export function getStoredStockTransactions(): StockTransaction[] {
   }
 }
 
-export function saveStoredStockTransactions(txs: StockTransaction[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEYS.STOCK_TRANSACTIONS, JSON.stringify(txs));
-  } catch (e) {
-    console.error('Failed to save stock transactions', e);
-  }
+export function saveStoredStockTransactions(txs: StockTransaction[]): boolean {
+  return writeListMirror(STORAGE_KEYS.STOCK_TRANSACTIONS, txs, 300);
 }
 
 /** Batas cermin lokal: riwayat penyesuaian aset dipakai untuk menghitung garis tren. */
@@ -1460,6 +1489,10 @@ export function sanitizeSpkOrderForStorage(order: SpkOrder): SpkOrder {
 
   return {
     ...order,
+    // Catatan riwayat status wajib ada: order yang datang dari server bisa saja
+    // tidak membawanya, dan penyebar `...order.statusLogs` saat perubahan status
+    // akan memutus pembayaran POS yang menutup order tersebut.
+    statusLogs: order.statusLogs || [],
     printFile: sanitizeAttachment(order.printFile),
     printFiles: order.printFiles ? order.printFiles.map(sanitizeAttachment).filter(Boolean) as any : undefined,
     items: (order.items || []).map((it) => ({
@@ -1533,7 +1566,7 @@ export function updateStoredSpkOrder(orderId: string, updates: Partial<SpkOrder>
       
       const updatedLogs = statusChanged
         ? [
-            ...order.statusLogs,
+            ...(order.statusLogs || []),
             {
               status: newStatus,
               timestamp: Date.now(),

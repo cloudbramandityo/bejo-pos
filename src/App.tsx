@@ -91,6 +91,13 @@ import { checkAndRunSpkAutoCleanup } from './utils/spkAutoCleanup';
 import { isDigitalPrintingProduct, isPaketProduct, isLaserCuttingProduct } from './utils/productFilters';
 import { getTransactionsForShift, isAgenTransaction, getNetCashAmount } from './utils/formatters';
 import {
+  placeNewTransaction,
+  removeTransaction,
+  replaceTransaction,
+  type SalesSaveOutcome,
+  type SalesWriteOutcome
+} from './utils/salesTransactionStore';
+import {
   StoreInfo,
   getStoredStoreInfo,
   saveStoredStoreInfo,
@@ -168,6 +175,7 @@ import {
   deleteCustomerCategoryCloud,
   subscribeTransactions,
   saveTransactionCloud,
+  isWriteQueuedForRetry,
   deleteTransactionCloud,
   subscribeShifts,
   saveShiftCloud,
@@ -518,6 +526,21 @@ export default function App() {
   useEffect(() => {
     productsRef.current = products;
   }, [products]);
+
+  // Daftar penjualan terbaru untuk kasir: handler tidak boleh menunggu React
+  // menyelesaikan updater, karena penjualan yang baru saja disimpan harus sudah
+  // kelihatan di penjualan berikutnya.
+  const transactionsRef = useRef<Transaction[]>(transactions);
+  useEffect(() => {
+    transactionsRef.current = transactions;
+  }, [transactions]);
+
+  // Daftar mutasi stok terbaru: tulis cermin perangkat tidak boleh menunggu
+  // updater React selesai, dan updater tidak boleh menyimpan efek samping.
+  const stockTransactionsRef = useRef<StockTransaction[]>(stockTransactions);
+  useEffect(() => {
+    stockTransactionsRef.current = stockTransactions;
+  }, [stockTransactions]);
 
   /**
    * Simpan kejadian yang mengubah nilai aset toko di luar mutasi stok
@@ -1595,13 +1618,12 @@ export default function App() {
       isBackdated: isBackdated ? true : undefined
     };
 
-    setStockTransactions((prev) => {
-      const updated = [newTx, ...prev];
-      saveStoredStockTransactions(updated);
-      return updated;
-    });
+    const updatedList = [newTx, ...stockTransactionsRef.current];
+    stockTransactionsRef.current = updatedList;
+    saveStoredStockTransactions(updatedList);
+    setStockTransactions(updatedList);
 
-    saveStockTransactionCloud(newTx).catch(console.error);
+    void reportStockWrite(`Mutasi stok #${txId}`, () => saveStockTransactionCloud(newTx));
 
     // Record Activity Log
     const labelType = txData.type === 'PEMBELIAN' ? 'Pembelian Bahan' : 'Pengambilan Bahan';
@@ -1646,14 +1668,13 @@ export default function App() {
       };
     });
 
-    setStockTransactions((prev) => {
-      const updated = [...newTxs, ...prev];
-      saveStoredStockTransactions(updated);
-      return updated;
-    });
+    const updatedList = [...newTxs, ...stockTransactionsRef.current];
+    stockTransactionsRef.current = updatedList;
+    saveStoredStockTransactions(updatedList);
+    setStockTransactions(updatedList);
 
     newTxs.forEach((tx) => {
-      saveStockTransactionCloud(tx).catch(console.error);
+      void reportStockWrite(`Mutasi stok #${tx.id}`, () => saveStockTransactionCloud(tx));
 
       // Record Activity Log
       const isBackdated = tx.isBackdated;
@@ -1664,21 +1685,19 @@ export default function App() {
   };
 
   const handleUpdateStockTransaction = async (updatedTx: StockTransaction) => {
-    setStockTransactions((prev) => {
-      const updated = prev.map((t) => (t.id === updatedTx.id ? updatedTx : t));
-      saveStoredStockTransactions(updated);
-      return updated;
-    });
-    await saveStockTransactionCloud(updatedTx);
+    const updatedList = stockTransactionsRef.current.map((t) => (t.id === updatedTx.id ? updatedTx : t));
+    stockTransactionsRef.current = updatedList;
+    saveStoredStockTransactions(updatedList);
+    setStockTransactions(updatedList);
+    await reportStockWrite(`Perubahan mutasi stok #${updatedTx.id}`, () => saveStockTransactionCloud(updatedTx));
   };
 
   const handleDeleteStockTransaction = async (txId: string) => {
-    setStockTransactions((prev) => {
-      const updated = prev.filter((t) => t.id !== txId);
-      saveStoredStockTransactions(updated);
-      return updated;
-    });
-    await deleteStockTransactionCloud(txId);
+    const updatedList = stockTransactionsRef.current.filter((t) => t.id !== txId);
+    stockTransactionsRef.current = updatedList;
+    saveStoredStockTransactions(updatedList);
+    setStockTransactions(updatedList);
+    await reportStockWrite(`Penghapusan mutasi stok #${txId}`, () => deleteStockTransactionCloud(txId));
   };
 
   const handleUpdateProductStockAndCost = (productId: string, newStock: number, newCostPrice: number) => {
@@ -2189,8 +2208,12 @@ export default function App() {
     );
   };
 
-  // Transaction Handler
-  const handleCompleteTransaction = (tx: Transaction) => {
+  /**
+   * Efek samping penjualan: stok bahan, penyesuaian aset, perbelanjaan pelanggan,
+   * log aktivitas, dan akumulasi shift. Dipisah dari pencatatan penjualan supaya satu
+   * kegagalan di bagian ini tidak ikut menghapus penjualan yang sudah tercatat.
+   */
+  const applySaleSideEffects = (tx: Transaction) => {
     // 1. Deduct Product stock using borrow/return conversion logic
     //   dihitung di luar updater supaya selisih stok bisa langsung dibandingkan
     //   dan dicatat sebagai penyesuaian aset (penjualan kasir tidak menulis mutasi stok).
@@ -2308,34 +2331,110 @@ export default function App() {
       saveActiveShiftCloud(updatedShift).catch(console.error);
     }
 
-    // 4. Save to Transactions state, localStorage & Cloud PocketBase
-    setTransactions((prev) => {
-      const map = new Map<string, Transaction>();
-      map.set(tx.id, tx);
-      prev.forEach((t) => {
-        if (!map.has(t.id)) map.set(t.id, t);
-      });
-      const updated = Array.from(map.values()).sort(
-        (a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()
-      );
-      saveStoredTransactions(updated);
-      return updated;
-    });
-    saveTransactionCloud(tx).catch(console.error);
-
-    // 5. Open Thermal Receipt preview immediately
-    setReceiptTransaction(tx);
-    setIsReceiptModalOpen(true);
   };
 
-  const handleUpdateTransaction = async (updatedTx: Transaction) => {
+  /**
+   * Catat penjualan kasir.
+   *
+   * Penjualan ditulis lebih dulu (daftar + cermin perangkat), baru efek samping dan
+   * pengiriman ke server. Hasil kirim dibaca apa adanya dan dikembalikan ke layar POS
+   * supaya kasir tahu keadaan sebenarnya, bukan menebak dari struk yang muncul.
+   */
+  const handleCompleteTransaction = async (proposed: Transaction): Promise<SalesSaveOutcome> => {
+    const placed = placeNewTransaction(transactionsRef.current, proposed);
+    if (!placed.saved) {
+      return {
+        saved: false,
+        deviceSaved: false,
+        serverSaved: false,
+        queuedForRetry: false,
+        renumberedFrom: null,
+        error: `Nomor struk ${proposed.id} sudah dipakai dan tidak bisa diganti otomatis.`,
+      };
+    }
+
+    // Seluruh langkah di bawah memakai nomor yang benar-benar tersimpan.
+    const tx = placed.saved;
+    transactionsRef.current = placed.list;
+    const deviceSaved = saveStoredTransactions(placed.list);
+    setTransactions(placed.list);
+
+    try {
+      applySaleSideEffects(tx);
+    } catch (sideErr) {
+      console.warn('[POS] Penjualan tercatat, sebagian perhitungannya belum:', sideErr);
+    }
+
+    // Struk dibuka lebih dulu agar kasir tidak menunggu jawaban server.
+    setReceiptTransaction(tx);
+    setIsReceiptModalOpen(true);
+
+    let serverSaved = false;
+    let queuedForRetry = false;
+    let error: string | undefined;
+    try {
+      await saveTransactionCloud(tx);
+      serverSaved = true;
+    } catch (err: any) {
+      queuedForRetry = isWriteQueuedForRetry(err);
+      error = err?.message || String(err);
+      console.error('[POS] Kirim penjualan ke server gagal:', err);
+    }
+
+    return {
+      saved: true,
+      savedId: tx.id,
+      renumberedFrom: placed.renumberedFrom,
+      deviceSaved,
+      serverSaved,
+      queuedForRetry,
+      error,
+    };
+  };
+
+  /**
+   * Kirim satu tulis data penjualan dan kembalikan hasilnya apa adanya.
+   * Tanpa ini, kegagalan kirim hanya sampai ke konsol dan layar tetap menyebut
+   * datanya berhasil.
+   */
+  const writeSaleToServer = async (
+    run: () => Promise<void>
+  ): Promise<Pick<SalesWriteOutcome, 'serverSaved' | 'queuedForRetry' | 'error'>> => {
+    try {
+      await run();
+      return { serverSaved: true, queuedForRetry: false };
+    } catch (err: any) {
+      return {
+        serverSaved: false,
+        queuedForRetry: isWriteQueuedForRetry(err),
+        error: err?.message || String(err),
+      };
+    }
+  };
+
+  /**
+   * Tulis mutasi stok ke server dan laporkan hanya penolakan yang tidak akan
+   * dikirim ulang. Kegagalan jaringan/sesi sudah masuk antrean kirim ulang, jadi
+   * tidak perlu mengganggu operator; penolakan 4xx hilang tanpa jejak kalau
+   * berakhir di konsol saja.
+   */
+  const reportStockWrite = async (label: string, run: () => Promise<void>): Promise<void> => {
+    try {
+      await run();
+    } catch (err: any) {
+      if (isWriteQueuedForRetry(err)) return;
+      console.error('[Stock] Kirim ke server ditolak:', err);
+      alert(`${label} tersimpan di perangkat ini, belum terkirim ke server. Alasan: ${err?.message || 'tidak ada jawaban.'}`);
+    }
+  };
+
+  const handleUpdateTransaction = async (updatedTx: Transaction): Promise<SalesWriteOutcome> => {
     const previous = transactions.find((t) => t.id === updatedTx.id);
 
-    setTransactions((prev) => {
-      const updated = prev.map((t) => (t.id === updatedTx.id ? updatedTx : t));
-      saveStoredTransactions(updated);
-      return updated;
-    });
+    const updatedList = replaceTransaction(transactionsRef.current, updatedTx);
+    transactionsRef.current = updatedList;
+    const deviceSaved = saveStoredTransactions(updatedList);
+    setTransactions(updatedList);
 
     // Sesuaikan akumulasi belanja pelanggan saat nominal / pelanggan transaksi diedit
     const prevCustId = previous?.customer?.id;
@@ -2377,21 +2476,21 @@ export default function App() {
       });
     }
 
-    await saveTransactionCloud(updatedTx);
+    const cloud = await writeSaleToServer(() => saveTransactionCloud(updatedTx));
     recordActivityLog(
       'TRANSACTION',
       `Edit Transaksi Penjualan #${updatedTx.id}`,
       `Total: Rp ${updatedTx.total.toLocaleString('id-ID')} • Pelanggan: ${updatedTx.customer?.name || 'Umum'} • Tgl: ${updatedTx.date}`
     );
+    return { ...cloud, deviceSaved };
   };
 
-  const handleDeleteTransaction = async (txId: string) => {
+  const handleDeleteTransaction = async (txId: string): Promise<SalesWriteOutcome> => {
     const target = transactions.find((t) => t.id === txId);
-    setTransactions((prev) => {
-      const updated = prev.filter((t) => t.id !== txId);
-      saveStoredTransactions(updated);
-      return updated;
-    });
+    const updatedList = removeTransaction(transactionsRef.current, txId);
+    transactionsRef.current = updatedList;
+    const deviceSaved = saveStoredTransactions(updatedList);
+    setTransactions(updatedList);
 
     // Kembalikan akumulasi belanja pelanggan agar tidak meninggalkan saldo transaksi terhapus
     if (target?.customer?.id) {
@@ -2412,12 +2511,13 @@ export default function App() {
       });
     }
 
-    await deleteTransactionCloud(txId);
+    const cloud = await writeSaleToServer(() => deleteTransactionCloud(txId));
     recordActivityLog(
       'TRANSACTION',
       `Hapus Transaksi Penjualan #${txId}`,
       `Menghapus transaksi senilai Rp ${target?.total ? target.total.toLocaleString('id-ID') : 0} dari Laporan Penjualan Toko`
     );
+    return { ...cloud, deviceSaved };
   };
 
   const handlePrintReceiptDirect = (tx: Transaction) => {

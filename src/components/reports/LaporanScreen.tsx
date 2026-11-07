@@ -27,6 +27,7 @@ import {
 import { FinancialSettings } from '../../utils/financialStorage';
 import { getJournalAccess } from '../../utils/journalAccessPolicy';
 import { canViewAllReportMenus } from '../../utils/recordAccess';
+import type { SalesWriteOutcome } from '../../utils/salesTransactionStore';
 import { describeAuditActor } from '../../utils/auditActor';
 
 const LaporanJurnalScreen = React.lazy(() =>
@@ -59,8 +60,8 @@ interface LaporanScreenProps {
   shifts: Shift[];
   onUpdateStockTransaction?: (updatedTx: StockTransaction) => Promise<void> | void;
   onDeleteStockTransaction?: (transactionId: string) => Promise<void> | void;
-  onUpdateTransaction?: (updatedTx: Transaction) => Promise<void> | void;
-  onDeleteTransaction?: (transactionId: string) => Promise<void> | void;
+  onUpdateTransaction?: (updatedTx: Transaction) => Promise<SalesWriteOutcome>;
+  onDeleteTransaction?: (transactionId: string) => Promise<SalesWriteOutcome>;
   financialSettings: FinancialSettings;
   onSaveFinancialSettings: (s: FinancialSettings) => void;
   currentUserId?: string;

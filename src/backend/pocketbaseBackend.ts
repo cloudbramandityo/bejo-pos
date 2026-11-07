@@ -64,6 +64,13 @@ import {
 } from '../utils/storage';
 import { sanitizeForDb } from '../utils/dbSanitize';
 import {
+  DATA_MIRROR_FIELD,
+  LEGACY_ID_FIELD,
+  PB_ID_PATTERN,
+  resolveAppId,
+  toStoredDocId
+} from '../utils/appRecordId';
+import {
   INITIAL_CATEGORIES,
   INITIAL_CUSTOMERS,
   INITIAL_PRODUCTS,
@@ -702,11 +709,8 @@ function stripPbFields(data: Record<string, any>): Record<string, any> {
  * Aplikasi memakai id logis sendiri (mis. "A3-03", "admin", "store_info").
  * Supaya id aplikasi tetap utuh, id asli disimpan pada field `legacyId`
  * dan dikembalikan kembali ke aplikasi sebagai `id`.
+ * Aturannya ada di src/utils/appRecordId.ts (satu tempat, ikut diuji penjaga).
  */
-const LEGACY_ID_FIELD = 'legacyId';
-
-/** Pola primary key PocketBase (15 karakter huruf/angka kecil). */
-const PB_ID_PATTERN = /^[a-z0-9]{15}$/;
 
 /**
  * Koleksi users merupakan auth collection PocketBase (email + password) dan
@@ -726,7 +730,6 @@ const USERS_READ_COLLECTION = 'app_users';
  * Field kolom yang ada di skema tetap dipakai agar tabel/filter di Admin UI
  * tetap rapi.
  */
-const DATA_MIRROR_FIELD = 'data';
 
 /** Gabungkan field datar + salinan `data` menjadi objek aplikasi. */
 function withAppId<T>(record: any): T {
@@ -740,9 +743,11 @@ function withAppId<T>(record: any): T {
   delete out.collectionId;
   delete out.collectionName;
   delete out.expand;
-  if (record[LEGACY_ID_FIELD]) {
-    out.id = record[LEGACY_ID_FIELD];
-  }
+  // Nomor struk memakai "/" (mis. BS2026/11/0001) dan dikirim ke server sebagai
+  // "_" supaya aman sebagai kunci. Cermin `data` tetap membawa bentuk aslinya,
+  // jadi bentuk itulah yang harus kembali ke aplikasi — tanpa ini penomoran ulang
+  // tidak lagi mengenali transaksi bulan ini dan tulis berikutnya menimpa record lama.
+  out.id = resolveAppId(record) || out.id;
   if (out.appPassword) {
     out.password = out.appPassword;
   }
@@ -1388,17 +1393,26 @@ export function subscribeTransactions(onData: (transactions: Transaction[]) => v
 }
 
 export async function saveTransactionCloud(tx: Transaction): Promise<void> {
-  const safeDocId = tx.id.replace(/\//g, '_');
+  const safeDocId = toStoredDocId(tx.id);
   return safeCloudWrite(async () => {
     await upsertRecord('transactions', safeDocId, tx as any);
   }, OperationType.WRITE, `transactions/${safeDocId}`);
 }
 
 export async function deleteTransactionCloud(txId: string): Promise<void> {
-  const safeDocId = txId.replace(/\//g, '_');
+  const safeDocId = toStoredDocId(txId);
   return safeCloudWrite(async () => {
     await removeRecord('transactions', safeDocId);
   }, OperationType.DELETE, `transactions/${safeDocId}`);
+}
+
+/**
+ * Nilai true berarti tulis yang gagal sudah masuk antrean kirim ulang.
+ * Pemanggil memakai ini untuk menulis status yang benar: "akan terkirim otomatis"
+ * bukan "gagal", dan sebaliknya.
+ */
+export function isWriteQueuedForRetry(err: any): boolean {
+  return isRetryableWriteError(err);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1421,7 +1435,7 @@ export async function saveShiftCloud(shift: Shift): Promise<void> {
 }
 
 export async function deleteShiftCloud(shiftId: string): Promise<void> {
-  const safeDocId = shiftId.replace(/\//g, '_');
+  const safeDocId = toStoredDocId(shiftId);
   return safeCloudWrite(async () => {
     await removeRecord('shifts', safeDocId);
   }, OperationType.DELETE, `shifts/${safeDocId}`);
@@ -2066,14 +2080,14 @@ export function subscribeInvoices(callback: (invoices: Invoice[]) => void): () =
 }
 
 export async function saveInvoiceCloud(invoice: Invoice): Promise<void> {
-  const safeDocId = invoice.id.replace(/\//g, '_');
+  const safeDocId = toStoredDocId(invoice.id);
   return safeCloudWrite(async () => {
     await upsertRecord('invoices', safeDocId, invoice as any);
   }, OperationType.WRITE, `invoices/${invoice.id}`);
 }
 
 export async function deleteInvoiceCloud(invoiceId: string): Promise<void> {
-  const safeDocId = invoiceId.replace(/\//g, '_');
+  const safeDocId = toStoredDocId(invoiceId);
   return safeCloudWrite(async () => {
     await removeRecord('invoices', safeDocId);
     if (invoiceId !== safeDocId) {
@@ -2135,7 +2149,7 @@ export function subscribeTaxAnnualReturns(
 }
 
 export async function saveTaxAnnualReturnCloud(returnItem: TaxAnnualReturn1770): Promise<void> {
-  const safeDocId = returnItem.id.replace(/\//g, '_');
+  const safeDocId = toStoredDocId(returnItem.id);
   return safeCloudWrite(async () => {
     await upsertRecord('tax_annual_returns', safeDocId, returnItem as any);
   }, OperationType.WRITE, `tax_annual_returns/${returnItem.id}`);
@@ -2148,7 +2162,7 @@ export async function saveAllTaxAnnualReturnsCloud(
   return safeCloudWrite(async () => {
     let firstError: any = null;
     for (const r of returns) {
-      const safeDocId = r.id.replace(/\//g, '_');
+      const safeDocId = toStoredDocId(r.id);
       try {
         await upsertRecord('tax_annual_returns', safeDocId, r as any);
       } catch (err) {
@@ -2160,7 +2174,7 @@ export async function saveAllTaxAnnualReturnsCloud(
 }
 
 export async function deleteTaxAnnualReturnCloud(returnId: string): Promise<void> {
-  const safeDocId = returnId.replace(/\//g, '_');
+  const safeDocId = toStoredDocId(returnId);
   return safeCloudWrite(async () => {
     await removeRecord('tax_annual_returns', safeDocId);
   }, OperationType.DELETE, `tax_annual_returns/${returnId}`);

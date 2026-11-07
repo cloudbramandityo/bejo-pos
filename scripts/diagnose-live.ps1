@@ -39,6 +39,7 @@
     I. Provisioning: software, folder, service & firewall
     J. Caddyfile, DNS, dan isi bundel browser
     K. Sesi dashboard & rute private (pengukur penyebab 401)
+    M. Data penjualan end-to-end (transactions/stock/spk/invoices)
     L. Ringkasan
 
   Opsi:
@@ -51,6 +52,7 @@
     -LogLines 120                Jumlah baris log yang dipindai
     -ReportPath <file>           Lokasi laporan .txt (.json ikut di sampingnya)
     -SkipAccounts                Lewati seksi F (pemeriksaan akun, paling lambat)
+    -SkipSales                   Lewati seksi M (pemeriksaan data penjualan)
     -SkipProvisioning            Lewati seksi I dan J (provisioning/Caddy/bundel)
     -RequireClean                Exit code 2 bila masih ada WARN (untuk CI/cron)
     -ProbeSession                Seksi K ditambah uji login DEVELOPER (input
@@ -85,6 +87,7 @@ param(
   [int]$LogLines     = 120,
   [string]$ReportPath = '',
   [switch]$SkipAccounts,
+  [switch]$SkipSales,
   [switch]$SkipProvisioning,
   [switch]$RequireClean,
   [switch]$ProbeSession,
@@ -100,6 +103,7 @@ if ([string]::IsNullOrWhiteSpace($ReportPath)) {
   $ReportPath = Join-Path $env:TEMP "bejo-diagnose-$stamp.txt"
 }
 $JsonPath = [System.IO.Path]::ChangeExtension($ReportPath, '.json')
+$SalesJsonPath = Join-Path $env:TEMP "bejo-diagnose-sales-$stamp.json"
 
 $script:OkCount = 0
 $script:WarnCount = 0
@@ -2081,6 +2085,284 @@ console.log(JSON.stringify(out, null, 2));
   }
 
   # ------------------------------------------------------------------
+  Write-Section 'M. DATA PENJUALAN END-TO-END (READ-ONLY)'
+  # ------------------------------------------------------------------
+  # Memeriksa jalur data penjualan yang dilihat browser: koleksi ada + aturan
+  # baca/tulis, jumlah record, integritas id (legacyId vs cermin data.id),
+  # duplikat nomor struk lintas bentuk "/" vs "_", dan record terbaru. Hanya
+  # membaca; tidak menulis apa pun. Pola auth superuser sama dengan seksi F.
+  $salesResult = $null
+  $tmpSales = Join-Path $AppDir ".tmp-diagnose-sales-$stamp.mjs"
+  if ($SkipSales) {
+    Info 'Seksi M dilewati (-SkipSales): data penjualan tidak diperiksa.'
+  } elseif (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+    Fail 'Node.js tidak tersedia; pemeriksaan data penjualan dilewati.'
+  } elseif (-not (Test-Path (Join-Path $AppDir 'node_modules\pocketbase'))) {
+    Fail 'Paket pocketbase tidak ditemukan di node_modules; pemeriksaan data penjualan dilewati.'
+  } else {
+    $salesScript = @'
+import dotenv from 'dotenv';
+import PocketBase from 'pocketbase';
+
+const [envPath, pbUrl] = process.argv.slice(2);
+const out = { pbUrl, generatedAt: new Date().toISOString(), admin: {}, collections: {}, transactions: {}, stock: {}, spk: {} };
+let env = {};
+try {
+  env = { ...(dotenv.config({ path: envPath, override: true, quiet: true }).parsed || {}) };
+} catch (e) {
+  out.envError = String(e?.message || e);
+}
+if (!/^https?:\/\//i.test(String(pbUrl || ''))) {
+  out.configError = `URL PocketBase tidak valid: "${pbUrl}"`;
+}
+const brief = (e) => {
+  const status = Number(e?.status) || 0;
+  const original = String(e?.originalError?.message || '').trim();
+  const message = String(e?.message || e || '').trim() || 'galat tanpa pesan';
+  if (status) return original && original !== message ? `${status} ${message} (${original})` : `${status} ${message}`;
+  return original ? `jaringan ${original}` : message;
+};
+const newClient = () => { const pb = new PocketBase(pbUrl); pb.autoCancellation(false); return pb; };
+
+const adminEmail = (env.PB_ADMIN_EMAIL || '').trim();
+const adminPass = env.PB_ADMIN_PASSWORD || '';
+out.admin.configured = Boolean(adminEmail && adminPass);
+let adminPb = null;
+if (out.admin.configured) {
+  adminPb = newClient();
+  try {
+    await adminPb.collection('_superusers').authWithPassword(adminEmail, adminPass);
+    out.admin.auth = 'OK';
+  } catch (e1) {
+    try {
+      if (adminPb.admins?.authWithPassword) {
+        await adminPb.admins.authWithPassword(adminEmail, adminPass);
+        out.admin.auth = 'OK (legacy admins)';
+      } else { out.admin.auth = 'FAIL'; out.admin.error = brief(e1); adminPb = null; }
+    } catch (e2) { out.admin.auth = 'FAIL'; out.admin.error = brief(e2); adminPb = null; }
+  }
+} else {
+  out.admin.auth = 'SKIPPED';
+}
+
+// Nomor struk BS{tahun}/{bulan}/{urut}. Bentuk "_" dikenali sama karena id yang
+// lewat server kembali tanpa garis miring; kunci bulan diambil dari 9 karakter
+// pertama ("BS2026/11") supaya rekap per bulan tidak salah potong.
+const receiptKey = (s) => {
+  const m = /^BS(\d{4})[/_](\d{2})[/_](\d+)$/.exec(String(s || '').trim());
+  return m ? `BS${m[1]}/${m[2]}/${String(Number(m[3])).padStart(4, '0')}` : null;
+};
+
+if (adminPb) {
+  for (const name of ['transactions', 'stock_transactions', 'spk_orders', 'invoices']) {
+    try {
+      const c = await adminPb.collections.getOne(name);
+      out.collections[name] = {
+        exists: true,
+        listRule: c.listRule,
+        viewRule: c.viewRule,
+        createRule: c.createRule,
+        updateRule: c.updateRule,
+        deleteRule: c.deleteRule,
+        hasLegacyId: (c.fields || []).some((f) => f.name === 'legacyId'),
+        hasData: (c.fields || []).some((f) => f.name === 'data'),
+      };
+    } catch (e) {
+      out.collections[name] = { exists: false, error: brief(e) };
+    }
+  }
+
+  const readAll = async (name, fields) => {
+    try {
+      return { rows: await adminPb.collection(name).getFullList({ fields, requestKey: null }) };
+    } catch (e) {
+      return { error: brief(e) };
+    }
+  };
+
+  const tx = await readAll('transactions', 'id,legacyId,data,invoiceNumber,total,date,time,timestamp,createdAt');
+  if (tx.error) {
+    out.transactions.error = tx.error;
+  } else {
+    const rows = tx.rows;
+    out.transactions.total = rows.length;
+    let mirrorMissing = 0, legacyUnderscore = 0, legacySlash = 0, mirrorSlash = 0, shapeMismatch = 0;
+    const byLegacy = new Map();
+    const byReceipt = new Map();
+    const byMonth = new Map();
+    for (const r of rows) {
+      const legacy = String(r.legacyId || '');
+      const mirrorId = r.data && typeof r.data === 'object' ? String(r.data.id || '') : '';
+      if (!mirrorId) mirrorMissing++;
+      if (legacy.includes('_')) legacyUnderscore++;
+      if (legacy.includes('/')) legacySlash++;
+      if (mirrorId.includes('/')) mirrorSlash++;
+      if (mirrorId && legacy && mirrorId !== legacy) shapeMismatch++;
+      const lk = legacy || r.id;
+      byLegacy.set(lk, (byLegacy.get(lk) || 0) + 1);
+      const rk = receiptKey(mirrorId || legacy);
+      if (rk) {
+        byReceipt.set(rk, (byReceipt.get(rk) || 0) + 1);
+        const mk = rk.substring(0, 9);
+        byMonth.set(mk, (byMonth.get(mk) || 0) + 1);
+      }
+    }
+    out.transactions.mirrorMissing = mirrorMissing;
+    out.transactions.legacyUnderscore = legacyUnderscore;
+    out.transactions.legacySlash = legacySlash;
+    out.transactions.mirrorSlash = mirrorSlash;
+    out.transactions.shapeMismatch = shapeMismatch;
+    out.transactions.duplicateLegacyId = [...byLegacy.entries()].filter(([, n]) => n > 1).map(([k, n]) => ({ legacyId: k, count: n }));
+    out.transactions.duplicateReceipt = [...byReceipt.entries()].filter(([, n]) => n > 1).map(([k, n]) => ({ receipt: k, count: n }));
+    out.transactions.byMonth = [...byMonth.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([month, count]) => ({ month, count }));
+    out.transactions.newest = [...rows]
+      .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+      .slice(0, 15)
+      .map((r) => ({
+        id: r.id,
+        legacyId: r.legacyId ?? null,
+        mirrorId: r.data && typeof r.data === 'object' ? (r.data.id ?? null) : null,
+        invoiceNumber: r.invoiceNumber ?? null,
+        total: r.total ?? null,
+        date: r.date ?? null,
+        timestamp: r.timestamp ?? null,
+      }));
+  }
+
+  const st = await readAll('stock_transactions', 'id,legacyId,transactionNumber,type,date,totalAmount,timestamp');
+  if (st.error) {
+    out.stock.error = st.error;
+  } else {
+    out.stock.total = st.rows.length;
+    const byLegacy = new Map();
+    for (const r of st.rows) { const k = String(r.legacyId || r.id); byLegacy.set(k, (byLegacy.get(k) || 0) + 1); }
+    out.stock.duplicateLegacyId = [...byLegacy.entries()].filter(([, n]) => n > 1).map(([k, n]) => ({ legacyId: k, count: n }));
+    out.stock.newest = [...st.rows].sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0)).slice(0, 5)
+      .map((r) => ({ id: r.id, legacyId: r.legacyId ?? null, transactionNumber: r.transactionNumber ?? null, type: r.type ?? null, date: r.date ?? null, totalAmount: r.totalAmount ?? null }));
+  }
+
+  const sp = await readAll('spk_orders', 'id,legacyId,orderNumber,status,date,totalAmount,timestamp');
+  if (sp.error) {
+    out.spk.error = sp.error;
+  } else {
+    out.spk.total = sp.rows.length;
+    const byStatus = new Map();
+    for (const r of sp.rows) { const s = String(r.status || '?'); byStatus.set(s, (byStatus.get(s) || 0) + 1); }
+    out.spk.byStatus = [...byStatus.entries()].map(([status, count]) => ({ status, count }));
+    out.spk.newest = [...sp.rows].sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0)).slice(0, 5)
+      .map((r) => ({ id: r.id, legacyId: r.legacyId ?? null, orderNumber: r.orderNumber ?? null, status: r.status ?? null, date: r.date ?? null, totalAmount: r.totalAmount ?? null }));
+  }
+}
+
+console.log(JSON.stringify(out, null, 2));
+'@
+
+    try {
+      [System.IO.File]::WriteAllText($tmpSales, $salesScript, [System.Text.UTF8Encoding]::new($false))
+      $run = Invoke-NodeScript $tmpSales @($envPath, $LocalPbUrl)
+      $raw = [string]$run.Out
+      $first = $raw.IndexOf('{')
+      $last = $raw.LastIndexOf('}')
+      if ($first -ge 0 -and $last -gt $first) { $raw = $raw.Substring($first, $last - $first + 1) }
+      try {
+        $salesResult = $raw | ConvertFrom-Json
+        [System.IO.File]::WriteAllText($SalesJsonPath, $raw, [System.Text.UTF8Encoding]::new($false))
+        Ok "Pemeriksaan data penjualan selesai (detail JSON: $SalesJsonPath)"
+      } catch {
+        Fail 'Hasil pemeriksaan data penjualan bukan JSON valid.'
+        if ($run.Err) { Info ('Node: ' + $run.Err.Substring(0, [Math]::Min(500, $run.Err.Length))) }
+        Info ('Output: ' + $raw.Substring(0, [Math]::Min(500, $raw.Length)))
+      }
+    } finally {
+      Remove-Item -LiteralPath $tmpSales -Force -ErrorAction SilentlyContinue
+    }
+  }
+
+  if ($salesResult) {
+    if ($salesResult.configError) { Fail $salesResult.configError }
+    if ($salesResult.admin.auth -eq 'OK' -or $salesResult.admin.auth -eq 'OK (legacy admins)') {
+      Ok "Login admin PocketBase berhasil ($($salesResult.admin.auth))"
+
+      foreach ($name in @('transactions', 'stock_transactions', 'spk_orders', 'invoices')) {
+        $c = $salesResult.collections.$name
+        if (-not $c) { continue }
+        if ($c.exists -eq $false) {
+          Fail "Koleksi '$name' tidak ada di server: tulis cloud gagal dan data hanya tersimpan di perangkat. ($($c.error))"
+          continue
+        }
+        Ok "Koleksi '$name' ada (legacyId=$($c.hasLegacyId), cermin data=$($c.hasData))."
+        if (($c.hasLegacyId -eq $false) -or ($c.hasData -eq $false)) {
+          Fail "Koleksi '$name' kehilangan field legacyId/data - id aplikasi tidak bisa pulang utuh; jalankan skrip koleksi."
+        }
+        $readOpen = [string]::IsNullOrEmpty([string]$c.listRule) -and [string]::IsNullOrEmpty([string]$c.viewRule)
+        if ($readOpen) { Warn "Aturan baca '$name' kosong (hanya superuser): browser tidak bisa menarik datanya." }
+        Info "  aturan '$name': list='$($c.listRule)' create='$($c.createRule)' update='$($c.updateRule)' delete='$($c.deleteRule)'"
+      }
+
+      $tx = $salesResult.transactions
+      if ($tx.error) {
+        Fail "Tidak bisa membaca transactions: $($tx.error)"
+      } else {
+        Info "Jumlah record penjualan (transactions): $($tx.total)"
+        if ([int]$tx.total -eq 0) {
+          Warn 'Koleksi transactions kosong. Bila browser menampilkan penjualan, berarti penjualan itu belum pernah sampai server (Mode Lokal / antrean kirim belum terkirim).'
+        }
+        if ([int]$tx.mirrorMissing -gt 0) {
+          Warn "$($tx.mirrorMissing) record tanpa cermin data.id: id pulang sebagai legacyId '_' sehingga penomoran struk bisa mulai ulang dan menimpa record lama (data sebelum perbaikan)."
+        } else {
+          Ok 'Semua record penjualan membawa cermin data.id (id asli "/" pulang utuh).'
+        }
+        Info "Bentuk id: legacyId '_'=$($tx.legacyUnderscore) '/'=$($tx.legacySlash) | data.id '/'=$($tx.mirrorSlash) | beda bentuk=$($tx.shapeMismatch)"
+
+        $dupLegacy = @($tx.duplicateLegacyId)
+        if ($dupLegacy.Count -gt 0) {
+          Fail "$($dupLegacy.Count) legacyId ganda di transactions (record kembar / saling timpa): $(($dupLegacy | ForEach-Object { "$($_.legacyId)x$($_.count)" }) -join ', ')"
+        } else { Ok 'Tidak ada legacyId ganda di transactions.' }
+
+        $dupReceipt = @($tx.duplicateReceipt)
+        if ($dupReceipt.Count -gt 0) {
+          Fail "$($dupReceipt.Count) nomor struk ganda lintas bentuk '/' vs '_' (satu struk tersimpan sebagai dua record): $(($dupReceipt | ForEach-Object { "$($_.receipt)x$($_.count)" }) -join ', ')"
+        } else { Ok 'Tidak ada nomor struk ganda (bentuk "/" dan "_" dihitung satu).' }
+
+        $months = @($tx.byMonth)
+        if ($months.Count -gt 0) {
+          Info "Penjualan per bulan: $(($months | ForEach-Object { "$($_.month)=$($_.count)" }) -join ', ')"
+        }
+        $newest = @($tx.newest)
+        if ($newest.Count -gt 0) {
+          Info 'Penjualan terbaru di server (bandingkan dengan Riwayat Penjualan di browser):'
+          $newest | ForEach-Object { Info "  - struk=$($_.mirrorId) legacy=$($_.legacyId) total=$($_.total) tgl=$($_.date) ts=$($_.timestamp)" }
+        }
+      }
+
+      $st = $salesResult.stock
+      if ($st.error) { Warn "Tidak bisa membaca stock_transactions: $($st.error)" }
+      else {
+        Info "Jumlah record stok masuk/keluar (stock_transactions): $($st.total)"
+        $dupStock = @($st.duplicateLegacyId)
+        if ($dupStock.Count -gt 0) { Warn "$($dupStock.Count) legacyId ganda di stock_transactions: $(($dupStock | ForEach-Object { "$($_.legacyId)x$($_.count)" }) -join ', ')" }
+      }
+
+      $sp = $salesResult.spk
+      if ($sp.error) { Warn "Tidak bisa membaca spk_orders: $($sp.error)" }
+      else {
+        Info "Jumlah order SPK (spk_orders): $($sp.total)"
+        $statuses = @($sp.byStatus)
+        if ($statuses.Count -gt 0) { Info "Status SPK: $(($statuses | ForEach-Object { "$($_.status)=$($_.count)" }) -join ', ')" }
+        $newestSpk = @($sp.newest)
+        if ($newestSpk.Count -gt 0) {
+          Info 'Order SPK terbaru (sumber penjualan yang ditarik ke POS):'
+          $newestSpk | ForEach-Object { Info "  - order=$($_.orderNumber) status=$($_.status) total=$($_.totalAmount) tgl=$($_.date)" }
+        }
+      }
+    } elseif ($salesResult.admin.auth -eq 'SKIPPED') {
+      Warn 'PB_ADMIN_EMAIL/PB_ADMIN_PASSWORD tidak diset: pemeriksaan data penjualan mendalam dilewati.'
+    } else {
+      Warn "Login admin PocketBase gagal ($($salesResult.admin.error)): pemeriksaan data penjualan dilewati."
+    }
+  }
+
+  # ------------------------------------------------------------------
   Write-Section 'L. RINGKASAN'
   # ------------------------------------------------------------------
   $duration = [math]::Round(((Get-Date) - $startedAt).TotalSeconds, 1)
@@ -2096,6 +2378,9 @@ console.log(JSON.stringify(out, null, 2));
     Write-Host "  Detail JSON  : $JsonPath" -ForegroundColor White
   } else {
     Write-Host '  Detail JSON  : tidak ditulis (seksi F dilewati atau gagal).' -ForegroundColor DarkGray
+  }
+  if (Test-Path $SalesJsonPath) {
+    Write-Host "  JSON penjualan: $SalesJsonPath" -ForegroundColor White
   }
   if ($script:FailCount -gt 0) {
     Write-Host '  VERDICT: ADA KEGAGALAN KRITIS - kirim file laporan untuk analisis.' -ForegroundColor Red

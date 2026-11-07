@@ -14,6 +14,7 @@ interface StoreLogoProps {
   storeName?: string;
   subtitle?: string;
   customLogoUrl?: string;
+  customUrl?: string;
   variant?: 'icon' | 'badge' | 'header';
 }
 
@@ -25,6 +26,7 @@ export const StoreLogo: React.FC<StoreLogoProps> = ({
   storeName = 'BEJO Digital Print',
   subtitle,
   customLogoUrl,
+  customUrl,
   variant = 'icon',
 }) => {
   const [imgError, setImgError] = useState(false);
@@ -49,7 +51,7 @@ export const StoreLogo: React.FC<StoreLogoProps> = ({
   }, []);
 
   // Resolve logo image source: explicit prop > stored default logo / storeInfo > default asset image
-  const resolvedLogoSrc = customLogoUrl || currentStoredLogo || getStoredDefaultLogo() || getStoredStoreInfo()?.logoUrl || DEFAULT_BEJO_STORE_LOGO;
+  const resolvedLogoSrc = customLogoUrl || customUrl || currentStoredLogo || getStoredDefaultLogo() || getStoredStoreInfo()?.logoUrl || DEFAULT_BEJO_STORE_LOGO;
 
   useEffect(() => {
     setImgError(false);

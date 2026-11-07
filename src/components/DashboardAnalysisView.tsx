@@ -1120,7 +1120,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
 
           <div className="h-64 w-full pt-1">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={timelineChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+              <LineChart data={timelineChartData as any} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                 <XAxis dataKey="displayDate" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#cbd5e1' }} tickLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={(val) => `Rp ${(val / 1000).toFixed(0)}k`} />
@@ -1600,7 +1600,7 @@ export const DashboardAnalysisView: React.FC<DashboardAnalysisViewProps> = ({
             <div className="h-72 w-full pt-2">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart
-                  data={timelineChartData}
+                  data={timelineChartData as any}
                   margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />

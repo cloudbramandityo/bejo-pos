@@ -412,7 +412,7 @@ export default function App() {
     };
   }, []);
 
-  const [currentTab, setCurrentTab] = useState<'pos' | 'inventory' | 'stock' | 'customers' | 'transactions' | 'shift' | 'agen' | 'spk' | 'landing_editor' | 'invoices' | 'tax'>(() => {
+  const [currentTab, setCurrentTab] = useState<'pos' | 'inventory' | 'stock' | 'customers' | 'transactions' | 'shift' | 'agen' | 'spk' | 'landing_editor' | 'invoices' | 'tax' | 'marketing'>(() => {
     const user = getStoredAuthUser();
     if (user?.role === 'SPK') return 'spk';
     if (user?.role === 'AGEN') return 'agen';

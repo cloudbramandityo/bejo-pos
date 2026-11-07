@@ -37,7 +37,10 @@ export const recomputeMonthlyBillingYear = (
 ): MonthlyTaxBilling[] => {
   let runningCumulative = 0;
   return items.map((item) => {
-    const tariff = typeof item.tariffRatePercent === 'number' && item.tariffRatePercent > 0
+    // Tarif 0 yang tersimpan adalah nilai sah (bulan PT/rezim tanpa PPh Final),
+    // bukan "belum diisi" — hanya nilai yang tidak ada yang memakai fallback.
+    const tariff = typeof item.tariffRatePercent === 'number' &&
+      Number.isFinite(item.tariffRatePercent) && item.tariffRatePercent >= 0
       ? item.tariffRatePercent
       : (fallbackTariffPercent ?? 0);
     const mode = normalizeDppBasisMode(item.dppBasisMode);
@@ -46,7 +49,9 @@ export const recomputeMonthlyBillingYear = (
     let dpp = Number(item.taxableBaseDpp) || 0;
     let gross = Number(item.grossRevenue) || 0;
 
-    if (pph > 0) {
+    if (pph > 0 && tariff > 0) {
+      // Tarif 0 dengan PPh terisi tidak bisa dibalik menjadi DPP (pembagian nol);
+      // DPP yang sudah tercatat dipertahankan, bukan dijadikan Infinity.
       dpp = Math.round(pph / (tariff / 100));
       if (!gross || gross === 0) {
         gross = dpp;

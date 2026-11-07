@@ -915,7 +915,12 @@ export function getTerminStageDisplayInfo(
 
     if (billedIdx !== -1) {
       if (schedIdx < billedIdx) {
-        return { status: 'Lunas', badgeClass: STAGE_BADGE_LUNAS, isCurrent: false };
+        // Tahap sebelum tahap yang ditagih hanya Lunas bila pembayarannya
+        // tercatat — posisi tagihan bukan bukti uang sudah masuk.
+        if (isStageMarkedPaid(sched) || isDocumentSettled(inv) || isStageCoveredByRecordedPayment(inv, scheds, schedIdx)) {
+          return { status: 'Lunas', badgeClass: STAGE_BADGE_LUNAS, isCurrent: false };
+        }
+        return { status: 'Belum', badgeClass: STAGE_BADGE_BELUM, isCurrent: false };
       }
       if (schedIdx === billedIdx) {
         if (isDocumentSettled(inv) || isStageMarkedPaid(sched)) {
@@ -969,17 +974,8 @@ export function getTerminStageDisplayInfo(
   // Periksa apakah termin ini sudah pernah diterbitkan invoice-nya
   const isSchedBilled = !!fullContractChild || childNums.some(billedByChild);
 
-  // Periksa apakah ada termin sesudahnya yang sudah diterbitkan
-  const isSubsequentBilled = !fullContractChild && scheds.some((_, laterIdx) => {
-    if (laterIdx <= schedIdx) return false;
-    const laterAliases = stageNumberAliases(inv.paymentScheme, laterIdx, scheds.length);
-    return childNums.some(num => laterAliases.some(alias => num.endsWith(alias)));
-  });
-
-  if (isSubsequentBilled) {
-    return { status: 'Lunas', badgeClass: STAGE_BADGE_LUNAS, isCurrent: false };
-  }
-
+  // Terbitnya invoice tahap sesudah tidak membuktikan tahap ini sudah dibayar;
+  // status hanya dari pembayaran/penanda lunas yang tercatat.
   if (isSchedBilled) {
     let isChildPaid = false;
     if (fullContractChild) {
@@ -1006,7 +1002,7 @@ export function getTerminStageDisplayInfo(
     return { status: 'Tagihan Ini', badgeClass: STAGE_BADGE_TAGIHAN_INI, isCurrent: true };
   }
 
-  if (isStageMarkedPaid(sched)) {
+  if (isStageMarkedPaid(sched) || isStageCoveredByRecordedPayment(inv, scheds, schedIdx)) {
     return { status: 'Lunas', badgeClass: STAGE_BADGE_LUNAS, isCurrent: false };
   }
 

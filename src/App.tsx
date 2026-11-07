@@ -2372,9 +2372,21 @@ export default function App() {
     let serverSaved = false;
     let queuedForRetry = false;
     let error: string | undefined;
+    let finalTx = tx;
     try {
-      await saveTransactionCloud(tx);
+      const finalId = await saveTransactionCloud(tx);
       serverSaved = true;
+      if (finalId && finalId !== tx.id) {
+        // Server memberi nomor bebas karena nomor ini sudah dipakai penjualan
+        // perangkat lain; cermin dan struk di layar ikut memakai nomor akhir.
+        finalTx = { ...tx, id: finalId };
+        const updatedList = replaceTransaction(transactionsRef.current, finalTx);
+        transactionsRef.current = updatedList;
+        saveStoredTransactions(updatedList);
+        setTransactions(updatedList);
+        setReceiptTransaction(finalTx);
+        console.warn(`[POS] Nomor struk ${tx.id} sudah dipakai perangkat lain; tersimpan sebagai ${finalId}.`);
+      }
     } catch (err: any) {
       queuedForRetry = isWriteQueuedForRetry(err);
       error = err?.message || String(err);
@@ -2383,8 +2395,8 @@ export default function App() {
 
     return {
       saved: true,
-      savedId: tx.id,
-      renumberedFrom: placed.renumberedFrom,
+      savedId: finalTx.id,
+      renumberedFrom: placed.renumberedFrom || (finalTx.id !== tx.id ? tx.id : null),
       deviceSaved,
       serverSaved,
       queuedForRetry,
@@ -2476,7 +2488,9 @@ export default function App() {
       });
     }
 
-    const cloud = await writeSaleToServer(() => saveTransactionCloud(updatedTx));
+    const cloud = await writeSaleToServer(async () => {
+      await saveTransactionCloud(updatedTx, 'existing');
+    });
     recordActivityLog(
       'TRANSACTION',
       `Edit Transaksi Penjualan #${updatedTx.id}`,

@@ -231,7 +231,7 @@ for (const domain of BACKUP_DOMAINS) {
     check(`D3/${domain.key} domain hanya-perangkat tidak mengirim ke server`, !/\bcloud: /.test(entry));
     continue;
   }
-  const cloudCall = /\bcloud: \(value\) => (\w+)\(/.exec(entry)?.[1] || '';
+  const cloudCall = /\bcloud: (?:async )?\(value\) => (?:\{\s*await\s+)?(\w+)\(/.exec(entry)?.[1] || '';
   check(`D4/${domain.key} jalur kirim ke server nyata`,
     Boolean(cloudCall) && new RegExp(`export (async )?function ${cloudCall}`).test(pbSource),
     cloudCall || 'tidak ada panggilan kirim');

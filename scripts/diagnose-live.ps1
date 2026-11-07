@@ -2180,7 +2180,7 @@ if (adminPb) {
     }
   };
 
-  const tx = await readAll('transactions', 'id,legacyId,data,invoiceNumber,total,date,time,timestamp,createdAt');
+  const tx = await readAll('transactions', 'id,legacyId,data,invoiceNumber,total,date,time,timestamp,items,createdAt,created,updated');
   if (tx.error) {
     out.transactions.error = tx.error;
   } else {
@@ -2190,9 +2190,11 @@ if (adminPb) {
     const byLegacy = new Map();
     const byReceipt = new Map();
     const byMonth = new Map();
+    const receiptRows = new Map();
     for (const r of rows) {
       const legacy = String(r.legacyId || '');
-      const mirrorId = r.data && typeof r.data === 'object' ? String(r.data.id || '') : '';
+      const mirror = r.data && typeof r.data === 'object' ? r.data : null;
+      const mirrorId = mirror ? String(mirror.id || '') : '';
       if (!mirrorId) mirrorMissing++;
       if (legacy.includes('_')) legacyUnderscore++;
       if (legacy.includes('/')) legacySlash++;
@@ -2205,6 +2207,21 @@ if (adminPb) {
         byReceipt.set(rk, (byReceipt.get(rk) || 0) + 1);
         const mk = rk.substring(0, 9);
         byMonth.set(mk, (byMonth.get(mk) || 0) + 1);
+        const items = JSON.stringify((mirror && mirror.items) || r.items || []);
+        const detail = {
+          id: r.id,
+          legacyId: legacy || null,
+          mirrorId: mirrorId || null,
+          hasMirror: Boolean(mirrorId),
+          total: Number(r.total ?? (mirror && mirror.total) ?? 0),
+          ts: Number(r.timestamp ?? (mirror && mirror.timestamp) ?? 0),
+          date: String(r.date ?? (mirror && mirror.date) ?? ''),
+          time: String(r.time ?? (mirror && mirror.time) ?? ''),
+          items,
+          updated: String(r.updated || r.created || ''),
+        };
+        if (!receiptRows.has(rk)) receiptRows.set(rk, []);
+        receiptRows.get(rk).push(detail);
       }
     }
     out.transactions.mirrorMissing = mirrorMissing;
@@ -2214,6 +2231,62 @@ if (adminPb) {
     out.transactions.shapeMismatch = shapeMismatch;
     out.transactions.duplicateLegacyId = [...byLegacy.entries()].filter(([, n]) => n > 1).map(([k, n]) => ({ legacyId: k, count: n }));
     out.transactions.duplicateReceipt = [...byReceipt.entries()].filter(([, n]) => n > 1).map(([k, n]) => ({ receipt: k, count: n }));
+
+    // Klasifikasi pasangan duplikat (read-only): IDENTIK bila total+timestamp+
+    // tanggal+jam+items sama persis (duplikat murni dari bug id lama), KONFLIK
+    // bila isinya berbeda (penjualan berbeda memakai nomor sama - bila dihapus
+    // salah satunya berarti kehilangan penjualan nyata, jadi wajib review).
+    // Rekomendasi record yang dipertahankan memilih yang punya cermin data.id
+    // berbentuk "/" (provenance benar yang dibaca kode perbaikan), lalu legacyId
+    // "_" (scrubbed), lalu updated terbaru. Tidak ada data yang diubah di sini.
+    const rankKeep = (d) => {
+      let score = 0;
+      if (d.hasMirror) score += 4;
+      if (d.mirrorId && d.mirrorId.includes('/')) score += 2;
+      if (d.legacyId && d.legacyId.includes('_')) score += 1;
+      return score;
+    };
+    const sigOf = (d) => `${d.total}|${d.ts}|${d.date}|${d.time}|${d.items}`;
+    let identicalGroups = 0, conflictingGroups = 0, identicalRedundant = 0, conflictingRecords = 0;
+    const identicalKeep = [];
+    const conflicting = [];
+    for (const [rk, list] of receiptRows.entries()) {
+      if (list.length < 2) continue;
+      const first = sigOf(list[0]);
+      const same = list.every((d) => sigOf(d) === first);
+      if (same) {
+        identicalGroups++;
+        identicalRedundant += list.length - 1;
+        const keep = [...list].sort((a, b) => rankKeep(b) - rankKeep(a) || String(b.updated).localeCompare(String(a.updated)))[0];
+        identicalKeep.push({
+          receipt: rk,
+          count: list.length,
+          keepId: keep.id,
+          keepLegacyId: keep.legacyId,
+          removeIds: list.filter((d) => d.id !== keep.id).map((d) => d.id),
+        });
+      } else {
+        conflictingGroups++;
+        conflictingRecords += list.length;
+        if (conflicting.length < 40) {
+          conflicting.push({
+            receipt: rk,
+            count: list.length,
+            totals: [...new Set(list.map((d) => d.total))],
+            timestamps: [...new Set(list.map((d) => d.ts))],
+            records: list.map((d) => ({ id: d.id, legacyId: d.legacyId, mirrorId: d.mirrorId, total: d.total, ts: d.ts, date: d.date })),
+          });
+        }
+      }
+    }
+    out.transactions.duplicateClassification = {
+      identicalGroups,
+      conflictingGroups,
+      identicalRedundant,
+      conflictingRecords,
+      identicalKeep,
+      conflicting,
+    };
     out.transactions.byMonth = [...byMonth.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([month, count]) => ({ month, count }));
     out.transactions.newest = [...rows]
       .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
@@ -2321,8 +2394,27 @@ console.log(JSON.stringify(out, null, 2));
 
         $dupReceipt = @($tx.duplicateReceipt)
         if ($dupReceipt.Count -gt 0) {
-          Fail "$($dupReceipt.Count) nomor struk ganda lintas bentuk '/' vs '_' (satu struk tersimpan sebagai dua record): $(($dupReceipt | ForEach-Object { "$($_.receipt)x$($_.count)" }) -join ', ')"
+          $sample = ($dupReceipt | Select-Object -First 10 | ForEach-Object { "$($_.receipt)x$($_.count)" }) -join ', '
+          Fail "$($dupReceipt.Count) nomor struk ganda lintas bentuk '/' vs '_' (satu struk tersimpan sebagai dua record). Contoh: $sample. Rincian lengkap ada di JSON penjualan."
         } else { Ok 'Tidak ada nomor struk ganda (bentuk "/" dan "_" dihitung satu).' }
+
+        $cls = $tx.duplicateClassification
+        if ($cls) {
+          Info "Klasifikasi duplikat: $($cls.identicalGroups) pasangan IDENTIK (duplikat murni, $($cls.identicalRedundant) record redundan) | $($cls.conflictingGroups) pasangan KONFLIK (isi berbeda, $($cls.conflictingRecords) record, wajib review manual)."
+          if ([int]$cls.identicalGroups -gt 0) {
+            Ok "$($cls.identicalGroups) pasangan identik aman digabungkan nanti (total+timestamp+items sama); record yang dipertahankan dipilih dari cermin data.id '/' lalu legacyId '_'. Daftar keepId/removeIds ada di JSON penjualan (duplicateClassification.identicalKeep)."
+          }
+          $konflik = @($cls.conflicting)
+          if ($konflik.Count -gt 0) {
+            Warn "$($cls.conflictingGroups) pasangan KONFLIK tidak boleh dihapus otomatis - isinya berbeda (kemungkinan penjualan lama tertimpa nomor sama). Contoh (maks 40 di JSON):"
+            $konflik | Select-Object -First 10 | ForEach-Object {
+              $totals = ($_.totals | ForEach-Object { "Rp$_" }) -join ' vs '
+              Info "  - $($_.receipt): total [$totals], timestamp [$($_.timestamps -join ' vs ')], $($_.count) record"
+            }
+          } else {
+            Ok 'Tidak ada pasangan konflik - semua duplikat identik sehingga penggabungan nanti tidak kehilangan penjualan berbeda.'
+          }
+        }
 
         $months = @($tx.byMonth)
         if ($months.Count -gt 0) {

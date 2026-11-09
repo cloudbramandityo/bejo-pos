@@ -862,7 +862,10 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
       grandTotal: calculatedTotals.grandTotal,
       downPaymentAmount: formPaymentScheme === 'DP' ? (formPaymentSchedules[0]?.amount || 0) : 0,
       paidAmount: 0,
+      amountPaid: 0,
       remainingAmount: calculatedTotals.grandTotal,
+      balanceDue: calculatedTotals.grandTotal,
+      issuedBy: 'Admin',
       status: formDocType === 'PROFORMA' ? 'PENDING_DP' : 'UNPAID',
       notes: formNotes,
       paymentTerms: formPaymentTerms,
@@ -873,8 +876,8 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
       contractTotalAmount: formContractTotalAmount > 0 ? formContractTotalAmount : undefined,
       payments: [],
       bankAccounts: storeIdentity.bankAccounts,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
     };
   }, [
     editingInvoiceId,

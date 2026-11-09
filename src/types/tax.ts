@@ -28,6 +28,7 @@ export interface TaxpayerProfile {
   spouseName?: string;
   spouseNik?: string;
   ptkpStatus: PtkpStatus;
+  employerName?: string;
 }
 
 // 1. DAFTAR HARTA PADA AKHIR TAHUN (Lampiran 1 - Bagian A)
@@ -48,6 +49,7 @@ export interface TaxDebtItem {
   lenderName: string; // Nama Pemberi Pinjaman
   lenderAddress: string;
   loanYear: number; // Tahun Peminjaman
+  borrowingYear?: number;
   initialAmount: number; // Jumlah Pinjaman Awal
   endingBalance: number; // Saldo Sisa Utang Akhir Tahun
   description?: string;
@@ -59,7 +61,9 @@ export interface TaxDependentItem {
   fullName: string;
   nik: string;
   familyRelationship: 'ISTRI' | 'ANAK_KANDUNG' | 'ANAK_ANGKAT' | 'ORANG_TUA' | 'MERTUA';
+  relationship?: string;
   jobOrStatus: string; // Misal: Pelajar, Mahasiswa, Belum Bekerja, Mengurus Rumah Tangga
+  occupation?: string;
   description?: string;
 }
 
@@ -70,7 +74,9 @@ export interface TaxWithholdingItem {
   withholderNpwp: string; // NPWP Pemotong / Pemungut
   withholderName: string; // Nama Pemotong / Pemungut
   withholdingSlipNumber: string; // Nomor Bukti Potong (contoh: 1721-A1 atau Bukti Potong Bupot Unifikasi)
+  taxSlipNumber?: string;
   withholdingDate: string; // Tanggal Bukti Potong (YYYY-MM-DD)
+  taxSlipDate?: string;
   incomeCategory: string; // Jenis Penghasilan
   grossIncome: number; // Jumlah Penghasilan Bruto
   withheldTaxAmount: number; // Jumlah PPh yang Dipotong / Dipungut

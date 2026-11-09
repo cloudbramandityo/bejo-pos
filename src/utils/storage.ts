@@ -204,6 +204,7 @@ export function saveStoredProductCategories(categories: ProductCategoryItem[]): 
 
 export interface StoreInfo {
   storeName: string;
+  name?: string;
   /** Judul aplikasi pada header (dapat diedit manual di tab Pengaturan) */
   appTitle?: string;
   branch: string;

@@ -201,7 +201,9 @@ const DOMAIN_ACCESS: Record<string, DomainAccess> = {
   transactions: {
     read: getStoredTransactions,
     restore: (value) => saveStoredTransactions(value),
-    cloud: (value) => saveTransactionCloud(value),
+    cloud: async (value) => {
+      await saveTransactionCloud(value, 'existing');
+    },
   },
   shifts: {
     read: getStoredShifts,

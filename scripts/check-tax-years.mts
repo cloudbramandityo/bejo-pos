@@ -410,6 +410,22 @@ check('I28 layar menjelaskan lewat aturan, bukan nama mode mentah',
 check('I29 cetak tidak lagi mengklaim fasilitas saat dasarnya bruto penuh',
   !/FASILITAS: <strong>Bebas Pajak/.test(printSource) && /DASAR DPP: <strong>\{DPP_BASIS_MODE_LABEL\[billingMode\]\}<\/strong>/.test(printSource));
 
+// H6: tarif 0 tersimpan adalah nilai sah, bukan "belum diisi".
+const tarifNol = recomputeMonthlyBillingYear([billingRow(2026, 1, { grossRevenue: 80000000, tariffRatePercent: 0, dppBasisMode: 'BRUTO_PENUH' })]);
+check('I30 tarif 0 dihormati: PPh nol, tidak diam-diam diganti 0,5%',
+  tarifNol[0].pphFinalPaid === 0 && tarifNol[0].tariffRatePercent === 0, JSON.stringify(tarifNol[0]));
+const nolDenganPph = recomputeMonthlyBillingYear([billingRow(2026, 1, { pphFinalPaid: 500000, taxableBaseDpp: 100000000, tariffRatePercent: 0, dppBasisMode: 'BRUTO_PENUH' })]);
+check('I31 tarif 0 dengan PPh terisi tidak menghasilkan Infinity',
+  Number.isFinite(nolDenganPph[0].taxableBaseDpp) && nolDenganPph[0].taxableBaseDpp === 100000000
+  && Number.isFinite(nolDenganPph[0].cumulativeRevenue), JSON.stringify(nolDenganPph[0]));
+const tanpaTarif = recomputeMonthlyBillingYear([billingRow(2026, 1, { grossRevenue: 80000000, tariffRatePercent: undefined, dppBasisMode: 'BRUTO_PENUH' })]);
+check('I32 hanya tarif yang tidak ada yang memakai fallback 0,5%',
+  tanpaTarif[0].tariffRatePercent === 0.5 && tanpaTarif[0].pphFinalPaid === 400000);
+check('I33 fallback null berarti tanpa PPh Final, bukan tarif entitas lain', (() => {
+  const tanpaPph = recomputeMonthlyBillingYear([billingRow(2026, 1, { grossRevenue: 80000000, tariffRatePercent: undefined, dppBasisMode: 'BRUTO_PENUH' })], null);
+  return tanpaPph[0].pphFinalPaid === 0 && tanpaPph[0].tariffRatePercent === 0;
+})());
+
 /* ---------------------------------------------------------------- */
 /*  J. daftar tidak pernah kosong di layar                            */
 /* ---------------------------------------------------------------- */

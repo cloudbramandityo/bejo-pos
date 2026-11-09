@@ -179,10 +179,10 @@ check('uang masuk sebagian menutup tahap dari depan, sisanya tetap tertagih', ()
   assert.deepEqual(statuses(partial), ['Lunas', 'Lunas', 'Tagihan Ini']);
 });
 
-// C. Invoice satu tahap: urutan tetap dihormati
-check('invoice termin T3: termin 1-2 Lunas, termin 3 mengikuti status dokumen', () => {
+// C. Invoice satu tahap: status dibaca dari pembayaran tercatat, bukan posisi
+check('invoice termin T3 tanpa pembayaran: tahap 1-2 tidak boleh mengaku Lunas', () => {
   const unpaidT3 = terminInvoice(2, false);
-  assert.deepEqual(statuses(unpaidT3), ['Lunas', 'Lunas', 'Tagihan Ini']);
+  assert.deepEqual(statuses(unpaidT3), ['Belum', 'Belum', 'Tagihan Ini']);
   assert.deepEqual(statuses(terminInvoice(2, true)), ['Lunas', 'Lunas', 'Lunas']);
 });
 
@@ -198,6 +198,24 @@ check('tahap sesudah tagihan berjalan yang sudah dicatat lunas tidak ditulis "Be
 check('PI dengan tiga termin terbit dan terlunasi menampilkan Lunas semua', () => {
   const pool = [proforma(), ...settledChildren(), fullSettlement()];
   assert.deepEqual(statuses(proforma(), pool), ['Lunas', 'Lunas', 'Lunas']);
+});
+
+check('termin awal tidak Lunas hanya karena termin akhir sudah terbit (H7)', () => {
+  const pi = proforma();
+  pi.childInvoiceNumbers = ['INV/BJP/2026/11/0001/T3'];
+  const pool = [pi, terminInvoice(2, false)];
+  assert.deepEqual(statuses(pi, pool), ['Belum', 'Belum', 'Tagihan Ini']);
+});
+
+check('termin awal yang pembayarannya tercatat tetap Lunas walau termin akhir terbit (H7)', () => {
+  const pi = proforma();
+  pi.childInvoiceNumbers = ['INV/BJP/2026/11/0001/T3'];
+  pi.amountPaid = STAGE_AMOUNTS[0];
+  pi.payments = [payment('pay-pi-t1', 'pi-0007', STAGE_AMOUNTS[0], '2026-11-02', 'TRF-PI-001')];
+  const pool = [pi, terminInvoice(2, false)];
+  const hasil = statuses(pi, pool);
+  assert.equal(hasil[0], 'Lunas');
+  assert.equal(hasil[1], 'Belum');
 });
 
 check('PI hanya menampilkan "Belum" untuk tahap yang belum tertagih', () => {
@@ -233,7 +251,7 @@ check('penanda /PELUNASAN mengenai tahap terakhir pada skema DP tiga tahap', () 
   });
   const hasil = statuses(pi, [pi]);
   assert.equal(hasil[2], 'Tagihan Ini', 'tahap pelunasan harus terbuka, bukan "Belum"');
-  assert.equal(hasil[1], 'Lunas');
+  assert.equal(hasil[1], 'Tagihan Ini', 'invoice T2 terbit tanpa pembayaran: tertagih, bukan Lunas (H7)');
 });
 
 // F. Aturan tunggal penanda tahap

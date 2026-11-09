@@ -146,7 +146,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
   onMarkNotificationRead
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeChatTab, setActiveChatTab] = useState<'team' | 'ai'>('team');
+  const [activeChatTab, setActiveChatTab] = useState<'team' | 'ai' | 'private'>('team');
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 

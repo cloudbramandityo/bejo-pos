@@ -118,8 +118,10 @@ export interface CartItem {
   productId?: string;
   code: string;
   name: string;
+  productName?: string;
   dimensions: string; // e.g., "30x15" or "1.52x50"
   qty: number;
+  quantity?: number;
   unit: string; // e.g., "x 1" or "x 10 meter"
   unitPrice: number;
   price?: number;
@@ -301,6 +303,7 @@ export interface StockTransactionItem {
   id?: string;
   productId: string;
   productName: string;
+  name?: string;
   category?: string;
   code?: string;
   qty: number;
@@ -509,6 +512,7 @@ export interface MachineItem {
   category: MachineCategory;
   typeDescription: string;
   status: 'READY' | 'UNDER_MAINTENANCE';
+  brand?: string;
   speed?: string;
   headSpec?: string;
   maxWidthMeters?: number;
@@ -642,6 +646,13 @@ export interface SpkOrder {
     timestamp: number;
     formattedTime: string;
     changedBy: string;
+    note?: string;
+  }[];
+  statusHistory?: {
+    status: SpkStatus;
+    timestamp: number;
+    formattedTime?: string;
+    changedBy?: string;
     note?: string;
   }[];
   
@@ -1091,7 +1102,9 @@ export type InvoiceStatus =
   | 'PAID'         // Lunas sepenuhnya
   | 'CANCELLED'    // Dibatalkan
   | 'CONVERTED'    // Proforma yang sudah dikonversi ke Invoice Final
-  | 'EXPIRED';     // Kedaluwarsa (Proforma melewati masa berlaku)
+  | 'EXPIRED'      // Kedaluwarsa (Proforma melewati masa berlaku)
+  | 'PENDING_DP'
+  | 'UNPAID';
 
 export interface InvoiceItem {
   id: string;

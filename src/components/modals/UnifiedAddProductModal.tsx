@@ -585,7 +585,7 @@ export const UnifiedAddProductModal: React.FC<UnifiedAddProductModalProps> = ({
                               : 'text-slate-500'
                           }`}
                         >
-                          {isZeroStock ? 'Stok: 0 (HABIS)' : `Stok: ${formatStockDisplay(product.stock, product.unit)}`}
+                          {isZeroStock ? 'Stok: 0 (HABIS)' : `Stok: ${formatStockDisplay(product.stock, product)}`}
                         </div>
                       </div>
                     </button>
@@ -618,7 +618,7 @@ export const UnifiedAddProductModal: React.FC<UnifiedAddProductModalProps> = ({
                     </div>
                     <h3 className="font-bold text-slate-900 text-sm mt-1">{selectedProduct.name}</h3>
                     <p className="text-[11px] text-slate-500 mt-0.5 font-mono">
-                      Ukuran Baku: {selectedProduct.dimensions || '-'} | Stok Saat Ini: {formatStockDisplay(selectedProduct.stock, selectedProduct.unit)}
+                      Ukuran Baku: {selectedProduct.dimensions || '-'} | Stok Saat Ini: {formatStockDisplay(selectedProduct.stock, selectedProduct)}
                     </p>
                   </div>
                   <div className="text-right shrink-0">

@@ -70,6 +70,8 @@ import {
   resolveAppId,
   toStoredDocId
 } from '../utils/appRecordId';
+import { parseReceiptId } from '../utils/formatters';
+import { saleSignature, receiptKeyOf } from '../utils/salesReceiptReconciliation';
 import {
   INITIAL_CATEGORIES,
   INITIAL_CUSTOMERS,
@@ -414,21 +416,44 @@ function readOutbox(): OutboxEntry[] {
   }
 }
 
-function writeOutbox(entries: OutboxEntry[]): void {
+/**
+ * Simpan antrean ke perangkat. Kuota penuh dicoba dengan memangkas entri
+ * tertua (yang terbaru diselamatkan); bila tetap gagal, hasilnya false dan
+ * pemanggil tidak boleh menyebut tulis ini "sudah diantre".
+ */
+function writeOutbox(entries: OutboxEntry[]): boolean {
+  let persisted = entries;
+  let saved = false;
   try {
-    localStorage.setItem(OUTBOX_STORAGE_KEY, JSON.stringify(entries));
-  } catch (err) {
-    console.error('[PocketBase] Antrean tulis gagal disimpan:', err);
+    localStorage.setItem(OUTBOX_STORAGE_KEY, JSON.stringify(persisted));
+    saved = true;
+  } catch {
+    while (!saved && persisted.length > 0) {
+      persisted = persisted.slice(1);
+      try {
+        localStorage.setItem(OUTBOX_STORAGE_KEY, JSON.stringify(persisted));
+        saved = true;
+      } catch {
+        /* coba lagi dengan satu entri tertua dibuang */
+      }
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('app:quota-exceeded', { detail: { isQuotaExceeded: true } }));
+    }
+    if (!saved) {
+      console.error('[PocketBase] Antrean tulis gagal disimpan sama sekali; perangkat penuh.');
+    }
   }
-  outboxCount = entries.length;
+  outboxCount = saved ? persisted.length : readOutbox().length;
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('bejo_outbox_queue_updated'));
     emitSyncStatus();
   }
+  return saved;
 }
 
 /** Simpan tulis yang gagal; pembaruan terbaru untuk kunci yang sama menimpa yang lama. */
-function enqueueOutbox(entry: Omit<OutboxEntry, 'id' | 'timestamp'>): void {
+function enqueueOutbox(entry: Omit<OutboxEntry, 'id' | 'timestamp'>): boolean {
   const entries = readOutbox();
   const sameTarget = entries.findIndex(
     (e) => e.collection === entry.collection && e.docId === entry.docId && e.action === entry.action
@@ -442,10 +467,17 @@ function enqueueOutbox(entry: Omit<OutboxEntry, 'id' | 'timestamp'>): void {
       timestamp: Date.now(),
     });
   }
-  writeOutbox(entries.slice(-MAX_OUTBOX_ENTRIES));
-  console.warn(
-    `[PocketBase] Tulis ${entry.action} ${entry.collection}/${entry.docId} diantre (outbox ${outboxCount}).`
-  );
+  const saved = writeOutbox(entries.slice(-MAX_OUTBOX_ENTRIES));
+  if (saved) {
+    console.warn(
+      `[PocketBase] Tulis ${entry.action} ${entry.collection}/${entry.docId} diantre (outbox ${outboxCount}).`
+    );
+  } else {
+    console.error(
+      `[PocketBase] Tulis ${entry.action} ${entry.collection}/${entry.docId} TIDAK bisa diantre: penyimpanan perangkat penuh.`
+    );
+  }
+  return saved;
 }
 
 let outboxFlushInFlight: Promise<number> | null = null;
@@ -754,16 +786,17 @@ function withAppId<T>(record: any): T {
   return out as T;
 }
 
-/** Cari record berdasarkan id logis aplikasi. */
+/**
+ * Cari record berdasarkan id logis aplikasi. Gangguan jaringan/sesi dilempar
+ * (bukan dikembalikan sebagai null): pemanggil tidak boleh mengira "lookup
+ * gagal" sebagai "record tidak ada" lalu membuat record kembar — mekanisme
+ * duplikat struk lama. Daftar kosong tetap berarti memang tidak ada.
+ */
 async function findByAppId(collection: string, appId: string): Promise<any | null> {
-  try {
-    const list = await pbService(collection).getList(1, 1, {
-      filter: `${LEGACY_ID_FIELD} = "${appId.replace(/"/g, '')}"`,
-    });
-    return list.items[0] || null;
-  } catch {
-    return null;
-  }
+  const list = await pbService(collection).getList(1, 1, {
+    filter: `${LEGACY_ID_FIELD} = "${appId.replace(/"/g, '')}"`,
+  });
+  return list.items[0] || null;
 }
 
 /**
@@ -848,7 +881,12 @@ async function guardNetworkWrite(
     }
   }
   if (isRetryableWriteError(caught)) {
-    enqueueOutbox({ collection, docId, action, data });
+    const queued = enqueueOutbox({ collection, docId, action, data });
+    if (!queued && caught && typeof caught === 'object') {
+      // Antrean tidak bertahan di perangkat (kuota penuh); layar tidak boleh
+      // menjanjikan "akan terkirim otomatis" untuk tulis yang tidak diantre.
+      caught.outboxPersistFailed = true;
+    }
   }
   throw caught;
 }
@@ -1392,11 +1430,95 @@ export function subscribeTransactions(onData: (transactions: Transaction[]) => v
   );
 }
 
-export async function saveTransactionCloud(tx: Transaction): Promise<void> {
+/** Tanda isi satu penjualan untuk membandingkan struk bernomor sama. */
+function txSignature(tx: Partial<Transaction> | null | undefined): string {
+  return saleSignature({
+    recordId: '',
+    appId: '',
+    legacyId: '',
+    mirrorId: '',
+    hasMirror: true,
+    createdAt: '',
+    updated: '',
+    timestamp: Number(tx?.timestamp ?? 0),
+    total: Number(tx?.total ?? 0),
+    date: String(tx?.date ?? ''),
+    time: String(tx?.time ?? ''),
+    items: tx?.items ?? [],
+  });
+}
+
+/**
+ * Nomor struk bebas berikutnya di bulan yang sama terhadap daftar server.
+ * Dua perangkat offline bisa menghasilkan nomor yang sama; penjualan yang
+ * datang belakangan memakai nomor bebas, bukan menimpa struk perangkat lain.
+ */
+async function nextFreeServerReceiptId(tx: Transaction): Promise<string | null> {
+  const parsed = parseReceiptId(tx.id);
+  if (!parsed) return null;
+  const serverList = await fetchAllRecords('transactions');
+  const taken = new Set<string>();
+  for (const item of serverList) {
+    const key = receiptKeyOf(String(item?.id ?? ''));
+    if (key) taken.add(key);
+  }
+  for (let seq = parsed.seq + 1; seq <= parsed.seq + 100000; seq += 1) {
+    const candidate = `BS${parsed.year}/${parsed.month}/${String(seq).padStart(4, '0')}`;
+    const key = receiptKeyOf(candidate);
+    if (key && !taken.has(key)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Tulis penjualan BARU dengan penjaga tabrakan antar perangkat: bila server
+ * sudah memegang struk bernomor sama berisi penjualan berbeda, penjualan ini
+ * diberi nomor bebas dan dibuat sebagai record baru — record lama tidak
+ * disentuh. Isi sama persis berarti kirim ulang/edit sah dan boleh diperbarui.
+ * Mengembalikan id akhir yang benar-benar tersimpan di server.
+ */
+async function upsertNewSale(tx: Transaction): Promise<string> {
+  const docId = toStoredDocId(tx.id);
+  const existing = await findByAppId('transactions', docId);
+  if (existing) {
+    const mirror = existing?.[DATA_MIRROR_FIELD];
+    const existingContent = mirror && typeof mirror === 'object' ? mirror : existing;
+    if (txSignature(existingContent) !== txSignature(tx)) {
+      const freeId = await nextFreeServerReceiptId(tx);
+      if (!freeId) {
+        throw new Error(
+          `Nomor struk ${tx.id} sudah dipakai penjualan lain di server dan tidak ada nomor bebas tersisa.`
+        );
+      }
+      console.warn(`[PocketBase] Struk ${tx.id} bentrok dengan penjualan lain; memakai nomor bebas ${freeId}.`);
+      const renumbered: Transaction = { ...tx, id: freeId };
+      await upsertRecord('transactions', toStoredDocId(freeId), renumbered as any);
+      return freeId;
+    }
+  }
+  await upsertRecord('transactions', docId, tx as any);
+  return tx.id;
+}
+
+/**
+ * `mode: 'new'` (bawaan) memasang penjaga tabrakan antar perangkat;
+ * `mode: 'existing'` untuk edit/restore yang memang memperbarui record yang
+ * sudah dikenal dengan id yang sama. Mengembalikan id akhir yang tersimpan di server.
+ */
+export async function saveTransactionCloud(
+  tx: Transaction,
+  mode: 'new' | 'existing' = 'new'
+): Promise<string> {
   const safeDocId = toStoredDocId(tx.id);
-  return safeCloudWrite(async () => {
-    await upsertRecord('transactions', safeDocId, tx as any);
+  let finalId = tx.id;
+  await safeCloudWrite(async () => {
+    if (mode === 'new') {
+      finalId = await upsertNewSale(tx);
+    } else {
+      await upsertRecord('transactions', safeDocId, tx as any);
+    }
   }, OperationType.WRITE, `transactions/${safeDocId}`);
+  return finalId;
 }
 
 export async function deleteTransactionCloud(txId: string): Promise<void> {
@@ -1412,7 +1534,7 @@ export async function deleteTransactionCloud(txId: string): Promise<void> {
  * bukan "gagal", dan sebaliknya.
  */
 export function isWriteQueuedForRetry(err: any): boolean {
-  return isRetryableWriteError(err);
+  return isRetryableWriteError(err) && !err?.outboxPersistFailed;
 }
 
 /* -------------------------------------------------------------------------- */

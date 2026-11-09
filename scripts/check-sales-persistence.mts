@@ -231,7 +231,7 @@ check('App menyimpan penjualan lewat placeNewTransaction + ref, bukan updater', 
 });
 
 check('App mengembalikan hasil tulis edit/hapus penjualan', () => {
-  assert.match(app, /writeSaleToServer\(\(\) => saveTransactionCloud\(updatedTx\)\)/);
+  assert.match(app, /writeSaleToServer\(async \(\) => \{\s*await saveTransactionCloud\(updatedTx, 'existing'\);\s*\}\)/);
   assert.match(app, /writeSaleToServer\(\(\) => deleteTransactionCloud\(txId\)\)/);
   assert.match(app, /const handleUpdateTransaction = async \(updatedTx: Transaction\): Promise<SalesWriteOutcome>/);
   assert.match(app, /const handleDeleteTransaction = async \(txId: string\): Promise<SalesWriteOutcome>/);
@@ -481,6 +481,52 @@ check('jalur VPS memakai opsi di deploy/deploy-vps.ps1, bukan skrip deploy baru'
   const idxApply = deploy.indexOf("'--apply')");
   assert.ok(idxPreview > 0 && idxApply > idxPreview, 'pratinjau harus dijalankan sebelum menerapkan');
   assert.doesNotMatch(deploy, /reconcile-sales\.ps1/);
+});
+
+console.log('H. Penjaga audit 2026-11-07: outbox jujur, lookup gagal, tabrakan antar perangkat');
+
+check('outbox: gagal persist tidak boleh diakui sebagai antrean (H2)', () => {
+  assert.match(backend, /function writeOutbox\(entries: OutboxEntry\[\]\): boolean/);
+  assert.match(backend, /function enqueueOutbox\(entry: Omit<OutboxEntry, 'id' \| 'timestamp'>\): boolean/);
+  // kuota penuh: memangkas entri tertua dan melaporkan kejadian kuota
+  assert.match(backend, /persisted = persisted\.slice\(1\)/);
+  assert.match(backend, /app:quota-exceeded/);
+  // guardNetworkWrite menandai kegagalan persist dan status layar mengikutinya
+  assert.match(backend, /caught\.outboxPersistFailed = true/);
+  assert.match(backend, /isRetryableWriteError\(err\) && !err\?\.outboxPersistFailed/);
+  // tidak ada lagi writeOutbox yang menelan gagal lalu mengaku berhasil
+  const writeOutboxBody = backend.slice(
+    backend.indexOf('function writeOutbox('),
+    backend.indexOf('/** Simpan tulis yang gagal;')
+  );
+  assert.doesNotMatch(writeOutboxBody, /catch \(err\) \{\s*console\.error/);
+});
+
+check('findByAppId melempar gangguan, bukan mengembalikan null (H3)', () => {
+  const start = backend.indexOf('async function findByAppId(');
+  const body = backend.slice(start, backend.indexOf('\n}', start));
+  assert.ok(start > 0, 'findByAppId harus ada');
+  assert.doesNotMatch(body, /catch/);
+  assert.match(body, /return list\.items\[0\] \|\| null;/);
+});
+
+check('penjualan baru membandingkan isi sebelum memperbarui record server (H4)', () => {
+  assert.match(backend, /async function upsertNewSale\(tx: Transaction\): Promise<string>/);
+  assert.match(backend, /txSignature\(existingContent\) !== txSignature\(tx\)/);
+  assert.match(backend, /async function nextFreeServerReceiptId\(tx: Transaction\): Promise<string \| null>/);
+  assert.match(backend, /saleSignature\(/);
+  // mode existing untuk edit/restore; penjualan baru lewat penjaga tabrakan
+  assert.match(backend, /mode: 'new' \| 'existing' = 'new'/);
+  assert.match(backend, /finalId = await upsertNewSale\(tx\)/);
+  const backupUtils = read('src/utils/backupUtils.ts');
+  assert.match(backupUtils, /saveTransactionCloud\(value, 'existing'\)/);
+});
+
+check('App memakai nomor akhir dari server untuk cermin dan struk (H4)', () => {
+  assert.match(app, /const finalId = await saveTransactionCloud\(tx\)/);
+  assert.match(app, /finalTx = \{ \.\.\.tx, id: finalId \}/);
+  assert.match(app, /setReceiptTransaction\(finalTx\)/);
+  assert.match(app, /savedId: finalTx\.id/);
 });
 
 console.log(`\nLulus: ${passed} kasus.`);

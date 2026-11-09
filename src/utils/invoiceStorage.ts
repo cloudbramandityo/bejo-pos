@@ -767,6 +767,8 @@ function isStageMarkedPaid(sched?: InvoiceTerminSchedule): boolean {
 /** Dokumen sudah tertutup seluruh tagihannya (status lunas atau sisa nol). */
 function isDocumentSettled(inv: Invoice): boolean {
   if (inv.status === 'PAID') return true;
+  // Draf dan dokumen batal menyimpan balanceDue 0 sebagai placeholder, bukan bukti lunas.
+  if (inv.status === 'DRAFT' || inv.status === 'CANCELLED') return false;
   return typeof inv.balanceDue === 'number' && inv.balanceDue <= 0 && asStageAmount(inv.grandTotal) > 0;
 }
 
@@ -861,7 +863,7 @@ export function resolveStageSuffix(
  * bisa memakai keduanya, dan tahap terakhir skema DP bernama /PELUNASAN apa pun
  * jumlah tahapnya.
  */
-function stageNumberAliases(
+export function stageNumberAliases(
   scheme: InvoicePaymentMethodType | undefined,
   stageIndex: number,
   totalStages: number
@@ -995,7 +997,7 @@ export function getTerminStageDisplayInfo(
           sched.invoiceNumber === docNumber
         );
       });
-      if (childInv && (childInv.status === 'PAID' || (childInv.balanceDue !== undefined && childInv.balanceDue <= 0))) {
+      if (childInv && isDocumentSettled(childInv)) {
         isChildPaid = true;
       }
     }

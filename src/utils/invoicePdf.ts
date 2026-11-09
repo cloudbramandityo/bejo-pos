@@ -212,6 +212,10 @@ export function buildInvoicePdf(
     doc.text(contactLine, margin, leftY);
     leftY += 3.4;
   }
+  if (storeIdentity.website) {
+    doc.text(asText(storeIdentity.website), margin, leftY);
+    leftY += 3.4;
+  }
   if (storeIdentity.npwp) {
     doc.text(`NPWP Toko: ${storeIdentity.npwp}`, margin, leftY);
     leftY += 3.4;

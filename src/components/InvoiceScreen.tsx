@@ -70,6 +70,7 @@ import {
   getTerminStageDisplayInfo,
   getInvoicePaymentHistory,
   resolveStageSuffix,
+  stageNumberAliases,
   getProformaEffectivePaymentInfo
 } from '../utils/invoiceStorage';
 import {
@@ -1181,11 +1182,11 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
           const newChildNums = (item.childInvoiceNumbers || []).filter(num => num !== inv.documentNumber);
 
           const newSchedules = (item.paymentSchedules || []).map((sched, idx) => {
-            const stageSuffix = resolveStageSuffix(item.paymentScheme, idx, (item.paymentSchedules || []).length);
+            const aliases = stageNumberAliases(item.paymentScheme, idx, (item.paymentSchedules || []).length);
             const isMatch = (inv.terminStageId && sched.id === inv.terminStageId) ||
               (inv.terminStageNumber && idx === inv.terminStageNumber - 1) ||
               (sched.invoiceNumber === inv.documentNumber) ||
-              (inv.documentNumber.endsWith(`/${stageSuffix}`));
+              aliases.some(alias => inv.documentNumber.endsWith(alias));
             if (isMatch) {
               return { ...sched, isPaid: false, status: 'Belum', invoiceNumber: undefined };
             }
@@ -1304,8 +1305,8 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
       // bawaan: kalau semuanya sudah pernah ditagih, yang ditawarkan adalah
       // faktur kontrak penuh, bukan mengulang menagih tahap pertama.
       const unbilledIdx = schedules.findIndex((s, idx) => {
-        const suffix = resolveStageSuffix(pi.paymentScheme, idx, schedules.length);
-        const billedBySuffix = pi.childInvoiceNumbers?.some(num => String(num ?? '').endsWith(`/${suffix}`));
+        const aliases = stageNumberAliases(pi.paymentScheme, idx, schedules.length);
+        const billedBySuffix = pi.childInvoiceNumbers?.some(num => aliases.some(alias => String(num ?? '').endsWith(alias)));
         if (billedBySuffix) return false;
         return !s.invoiceNumber;
       });
@@ -1679,10 +1680,10 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
         const parentNewBalance = Math.max(0, item.grandTotal - parentNewPaid);
         const parentNewStatus: InvoiceStatus = parentNewBalance === 0 ? 'PAID' : 'PARTIAL';
         const parentSchedules = (item.paymentSchedules || []).map((ps, psIdx) => {
-          const stageSuffix = resolveStageSuffix(item.paymentScheme, psIdx, (item.paymentSchedules || []).length);
+          const aliases = stageNumberAliases(item.paymentScheme, psIdx, (item.paymentSchedules || []).length);
           const isTargetStage = (selectedInvoice.terminStageId && ps.id === selectedInvoice.terminStageId)
             || (selectedInvoice.terminStageNumber && psIdx === selectedInvoice.terminStageNumber - 1)
-            || (selectedInvoice.documentNumber.endsWith(`/${stageSuffix}`));
+            || aliases.some(alias => selectedInvoice.documentNumber.endsWith(alias));
           if (isTargetStage && isNowFullyPaid) {
             return { ...ps, isPaid: true, status: 'Lunas' };
           }
@@ -1918,14 +1919,16 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
         (item.childInvoiceNumbers && item.childInvoiceNumbers.includes(cancellingInvoice.documentNumber));
 
       if (isParent && item.status !== 'CANCELLED') {
+        const newChildIds = (item.childInvoiceIds || []).filter(id => id !== cancellingInvoice.id);
+        const newChildNums = (item.childInvoiceNumbers || []).filter(num => num !== cancellingInvoice.documentNumber);
         const newSchedules = (item.paymentSchedules || []).map((sched, idx) => {
-          const stageSuffix = resolveStageSuffix(item.paymentScheme, idx, (item.paymentSchedules || []).length);
+          const aliases = stageNumberAliases(item.paymentScheme, idx, (item.paymentSchedules || []).length);
           const isMatch = (cancellingInvoice.terminStageId && sched.id === cancellingInvoice.terminStageId) ||
             (cancellingInvoice.terminStageNumber && idx === cancellingInvoice.terminStageNumber - 1) ||
             (sched.invoiceNumber === cancellingInvoice.documentNumber) ||
-            (cancellingInvoice.documentNumber.endsWith(`/${stageSuffix}`));
+            aliases.some(alias => cancellingInvoice.documentNumber.endsWith(alias));
           if (isMatch) {
-            return { ...sched, isPaid: false, status: 'Belum' };
+            return { ...sched, isPaid: false, status: 'Belum', invoiceNumber: undefined };
           }
           return sched;
         });
@@ -1962,6 +1965,10 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
 
         parentUpdated = {
           ...item,
+          childInvoiceIds: newChildIds,
+          childInvoiceNumbers: newChildNums,
+          convertedInvoiceId: item.convertedInvoiceId === cancellingInvoice.id ? (newChildIds[0] || undefined) : item.convertedInvoiceId,
+          convertedInvoiceNumber: item.convertedInvoiceNumber === cancellingInvoice.documentNumber ? (newChildNums[0] || undefined) : item.convertedInvoiceNumber,
           paymentSchedules: newSchedules,
           amountPaid: updatedPaid,
           balanceDue: updatedBalance,
@@ -3639,6 +3646,9 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                           <p className="text-[9.5px] text-slate-600 font-medium mt-0.5">
                             Telp/WA: {storeIdentity.phone} {storeIdentity.email ? `• ${storeIdentity.email}` : ''}
                           </p>
+                          {storeIdentity.website && (
+                            <p className="text-[9.5px] text-slate-500 mt-0.5">{storeIdentity.website}</p>
+                          )}
                           {storeIdentity.npwp && (
                             <p className="text-[8.5px] text-slate-500 font-semibold">NPWP Toko: {storeIdentity.npwp}</p>
                           )}
@@ -5202,6 +5212,9 @@ export const InvoiceScreen: React.FC<InvoiceScreenProps> = ({
                           <p className="text-[10px] text-slate-600 font-medium mt-0.5">
                             Telp/WA: {storeIdentity.phone} {storeIdentity.email ? `• ${storeIdentity.email}` : ''}
                           </p>
+                          {storeIdentity.website && (
+                            <p className="text-[10px] text-slate-500 mt-0.5">{storeIdentity.website}</p>
+                          )}
                           {storeIdentity.npwp && (
                             <p className="text-[9px] text-slate-500 font-semibold">NPWP Toko: {storeIdentity.npwp}</p>
                           )}

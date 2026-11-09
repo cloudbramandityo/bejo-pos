@@ -12,7 +12,8 @@ import {
   getTerminStageDisplayInfo,
   getInvoicePaymentHistory,
   resolveStageSuffix,
-  getProformaEffectivePaymentInfo
+  getProformaEffectivePaymentInfo,
+  stageNumberAliases
 } from '../src/utils/invoiceStorage';
 import type { Invoice, InvoiceCustomerInfo, InvoicePayment, InvoiceTerminSchedule } from '../src/types';
 
@@ -319,6 +320,90 @@ check('satu sumber penanda tahap dipakai penulis maupun pembaca status', () => {
   assert.match(body, /export function resolveStageSuffix/);
   assert.match(body, /function stageNumberAliases/);
   assert.equal((body.match(/`T\$\{stageIndex \+ 1\}`/g) || []).length, 1, 'angka tahap hanya dirakit satu kali');
+});
+
+// I. Alias nomor tahap: dokumen lama berbentuk /T{n} pada skema DP tetap terbaca
+check('stageNumberAliases membangun daftar dari aturan tunggal tanpa duplikat', () => {
+  assert.deepEqual([0, 1, 2].map(i => stageNumberAliases('TERMIN', i, 3)), [['/T1'], ['/T2'], ['/T3']]);
+  assert.deepEqual(stageNumberAliases('DP', 0, 3), ['/DP', '/T1']);
+  assert.deepEqual(stageNumberAliases('DP', 1, 3), ['/T2']);
+  assert.deepEqual(stageNumberAliases('DP', 2, 3), ['/PELUNASAN', '/T3']);
+  assert.deepEqual(stageNumberAliases('DP', 1, 2), ['/PELUNASAN', '/T2']);
+});
+
+check('PI skema DP dengan nomor child lama /T1../T3 tidak menulis tahap "Belum"', () => {
+  const pi = invoice({
+    id: 'pi-0007',
+    documentNumber: 'PI/BJP/2026/10/0007',
+    documentType: 'PROFORMA',
+    status: 'CONVERTED',
+    paymentScheme: 'DP',
+    paymentSchedules: [stage(0, { name: 'DP' }), stage(1), stage(2, { name: 'Pelunasan' })],
+    childInvoiceNumbers: ['INV/BJP/2026/11/0001/T1', 'INV/BJP/2026/11/0001/T2', 'INV/BJP/2026/11/0001/T3'],
+  });
+  const pool = [pi, ...settledChildren()];
+  assert.deepEqual(statuses(pi, pool), ['Lunas', 'Lunas', 'Lunas']);
+});
+
+// J. Draf/batal dengan balanceDue 0 bukan bukti lunas
+check('invoice penuh berstatus DRAFT dengan sisa 0 placeholder tidak dinyatakan Lunas', () => {
+  const draf = fullSettlement({
+    status: 'DRAFT',
+    amountPaid: 0,
+    balanceDue: 0,
+    payments: [],
+    paymentSchedules: piSchedules(),
+  });
+  assert.deepEqual(statuses(draf), ['Tagihan Ini', 'Tagihan Ini', 'Tagihan Ini']);
+});
+
+check('invoice penuh CANCELLED dengan sisa 0 tidak dinyatakan Lunas', () => {
+  const batal = fullSettlement({
+    status: 'CANCELLED',
+    amountPaid: 0,
+    balanceDue: 0,
+    payments: [],
+    paymentSchedules: piSchedules(),
+  });
+  assert.equal(statuses(batal).includes('Lunas'), false);
+});
+
+check('status PAID tetap Lunas walau field sisa belum ikut diperbarui', () => {
+  const doc = fullSettlement({ paymentSchedules: piSchedules(), balanceDue: CONTRACT_TOTAL });
+  assert.deepEqual(statuses(doc), ['Lunas', 'Lunas', 'Lunas']);
+});
+
+check('PI dengan child DRAFT/CANCELLED sisa 0 tidak menulis tahapnya Lunas', () => {
+  const pi = invoice({
+    id: 'pi-0007',
+    documentNumber: 'PI/BJP/2026/10/0007',
+    documentType: 'PROFORMA',
+    status: 'CONVERTED',
+    paymentScheme: 'TERMIN',
+    paymentSchedules: piSchedules(),
+    childInvoiceNumbers: ['INV/BJP/2026/11/0001/T1'],
+  });
+  const batal = { ...terminInvoice(0, false), status: 'CANCELLED' as const, balanceDue: 0 };
+  const hasil = statuses(pi, [pi, batal]);
+  assert.equal(hasil[0], 'Tagihan Ini');
+  assert.deepEqual(hasil.slice(1), ['Belum', 'Belum']);
+});
+
+// K. Pemindaian sumber untuk keempat celah yang ditutup
+check('pencocokan hapus/konversi/pembayaran/pembatalan di layar lewat stageNumberAliases', () => {
+  const body = screenSrc();
+  assert.equal((body.match(/const aliases = stageNumberAliases\(/g) || []).length, 4, 'empat titik pencocokan harus memakai alias');
+  assert.equal(/endsWith\(`\/\$\{/.test(body), false, 'tidak boleh menyusun akhiran nomor sendiri di layar');
+});
+
+check('hapus dan pembatalan meng-unbill tahap: invoiceNumber jadwal ikut dibersihkan', () => {
+  const body = screenSrc();
+  assert.equal((body.match(/isPaid: false, status: 'Belum', invoiceNumber: undefined/g) || []).length, 2);
+  assert.equal((body.match(/childInvoiceNumbers: newChildNums/g) || []).length, 3, 'tautan child induk ikut dilepas di dua cabang hapus dan satu pembatalan');
+});
+
+check('penilai lunas menolak placeholder balanceDue 0 milik DRAFT/CANCELLED', () => {
+  assert.match(storageSrc(), /inv\.status === 'DRAFT' \|\| inv\.status === 'CANCELLED'\) return false/);
 });
 
 console.log(`\n${passed} kasus status termin & riwayat pembayaran lolos.`);

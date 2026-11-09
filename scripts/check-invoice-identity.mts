@@ -223,6 +223,16 @@ check('kaki cetak tidak mengarang alamat situs bila kolomnya kosong', () => {
   assert.doesNotMatch(screen, /storeIdentity\.website \|\| 'www\./);
 });
 
+check('situs web tercetak di kedua kop A4 dan PDF, bukan hanya footer thermal', () => {
+  const screen = read('src/components/InvoiceScreen.tsx');
+  const kopBlocks = screen.match(/\{storeIdentity\.website && \(\s*<p/g) || [];
+  assert.equal(kopBlocks.length, 2, `kop layar yang mencetak situs web ada ${kopBlocks.length}, seharusnya 2`);
+  assert.match(screen, /\{storeIdentity\.website && <p>\{storeIdentity\.website\}<\/p>\}/, 'footer thermal tetap ada');
+  const pdf = read('src/utils/invoicePdf.ts');
+  assert.match(pdf, /if \(storeIdentity\.website\) \{\s*doc\.text\(asText\(storeIdentity\.website\), margin, leftY\)/);
+  assert.doesNotMatch(pdf, /website \|\| 'www\./);
+});
+
 /* ========================================================================= */
 /* E. Jalur tulis satu-satunya                                               */
 /* ========================================================================= */
